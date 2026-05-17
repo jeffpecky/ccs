@@ -34,6 +34,20 @@ function writeAuthJson(profileDir: string, idTokenPayload: Record<string, unknow
   });
 }
 
+function writeRawAuthJson(profileDir: string, idToken: string): void {
+  fs.writeFileSync(
+    path.join(profileDir, 'auth.json'),
+    JSON.stringify({
+      tokens: {
+        id_token: idToken,
+        access_token: 'access-token-should-not-appear',
+        refresh_token: 'refresh-token-should-not-appear',
+      },
+    }),
+    { mode: 0o600 }
+  );
+}
+
 function writeRegistry(registryPath: string, data: unknown): void {
   const dir = path.dirname(registryPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -175,6 +189,75 @@ describe('getCodexAuthProfilesSummary', () => {
     expect(broken?.email).toBeNull();
     expect(broken?.plan).toBeNull();
     expect(broken?.accountId).toBeNull();
+  });
+
+  it('sets authValid=false when id_token is non-empty but malformed', async () => {
+    const { getCodexAuthProfilesSummary, invalidateCodexAuthProfilesCache } = await importService();
+    invalidateCodexAuthProfilesCache();
+
+    const instancesDir = path.join(ccsDir, 'codex-instances');
+    const brokenDir = path.join(instancesDir, 'broken-jwt');
+    fs.mkdirSync(brokenDir, { recursive: true });
+    writeRawAuthJson(brokenDir, 'not-a-jwt');
+
+    const registryPath = path.join(ccsDir, 'codex-profiles.yaml');
+    fs.writeFileSync(
+      registryPath,
+      `version: "1.0"\ndefault: broken-jwt\nprofiles:\n  broken-jwt:\n    type: codex\n    created: "2026-01-01T00:00:00Z"\n    last_used: null\n`,
+      { mode: 0o600 }
+    );
+
+    const result = await getCodexAuthProfilesSummary();
+    const broken = result.profiles[0];
+    expect(broken?.authValid).toBe(false);
+    expect(broken?.email).toBeNull();
+    expect(broken?.plan).toBeNull();
+    expect(broken?.accountId).toBeNull();
+  });
+
+  it('sets authValid=false when id_token contains invalid base64url characters', async () => {
+    const { getCodexAuthProfilesSummary, invalidateCodexAuthProfilesCache } = await importService();
+    invalidateCodexAuthProfilesCache();
+
+    const instancesDir = path.join(ccsDir, 'codex-instances');
+    const brokenDir = path.join(instancesDir, 'broken-base64url');
+    fs.mkdirSync(brokenDir, { recursive: true });
+    writeRawAuthJson(brokenDir, 'h.e30$.s');
+
+    const registryPath = path.join(ccsDir, 'codex-profiles.yaml');
+    fs.writeFileSync(
+      registryPath,
+      `version: "1.0"\ndefault: broken-base64url\nprofiles:\n  broken-base64url:\n    type: codex\n    created: "2026-01-01T00:00:00Z"\n    last_used: null\n`,
+      { mode: 0o600 }
+    );
+
+    const result = await getCodexAuthProfilesSummary();
+    const broken = result.profiles[0];
+    expect(broken?.authValid).toBe(false);
+  });
+
+  it('sets authValid=true for a valid but sparse JWT payload', async () => {
+    const { getCodexAuthProfilesSummary, invalidateCodexAuthProfilesCache } = await importService();
+    invalidateCodexAuthProfilesCache();
+
+    const instancesDir = path.join(ccsDir, 'codex-instances');
+    const sparseDir = path.join(instancesDir, 'sparse');
+    fs.mkdirSync(sparseDir, { recursive: true });
+    writeRawAuthJson(sparseDir, buildToken({}));
+
+    const registryPath = path.join(ccsDir, 'codex-profiles.yaml');
+    fs.writeFileSync(
+      registryPath,
+      `version: "1.0"\ndefault: sparse\nprofiles:\n  sparse:\n    type: codex\n    created: "2026-01-01T00:00:00Z"\n    last_used: null\n`,
+      { mode: 0o600 }
+    );
+
+    const result = await getCodexAuthProfilesSummary();
+    const sparse = result.profiles[0];
+    expect(sparse?.authValid).toBe(true);
+    expect(sparse?.email).toBeNull();
+    expect(sparse?.plan).toBeNull();
+    expect(sparse?.accountId).toBeNull();
   });
 
   it('sets authValid=false and nulls identity fields when auth.json is missing', async () => {

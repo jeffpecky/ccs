@@ -18,6 +18,7 @@ import { initUI } from '../../utils/ui';
 import { exitWithError } from '../../errors';
 import { ExitCode } from '../../errors/exit-codes';
 import { resolveCodexProfileDir, ensureSharedConfigSymlink, decodeIdToken } from '../index';
+import { hasStructurallyValidIdToken } from '../decode-id-token';
 import { parseArgs, getProfileNameError } from './types';
 import type { CodexCommandContext } from './types';
 
@@ -79,20 +80,15 @@ async function readAuthJsonSafe(authSrcPath: string): Promise<Record<string, unk
         );
       }
 
-      // Validate JWT shape: must have tokens.id_token as a 3-segment JWT
+      // Validate JWT shape: must have tokens.id_token with a parseable JWT payload.
       const tokens = parsed['tokens'] as Record<string, unknown> | undefined;
       if (tokens) {
         const idToken = tokens['id_token'];
         if (typeof idToken === 'string' && idToken.length > 0) {
-          const parts = idToken.split('.');
-          if (parts.length < 3) {
+          if (!hasStructurallyValidIdToken(idToken)) {
             // Torn write mid-JWT — retry
-            throw new Error(`TORN_JWT: id_token has ${parts.length} segments (need 3)`);
+            throw new Error('TORN_JWT: id_token payload is not parseable');
           }
-          // Attempt decode to verify shape is sane
-          const identity = decodeIdToken(idToken);
-          // If all fields empty but token has 3 segments, it might be valid (no email claim)
-          void identity;
         }
       }
 

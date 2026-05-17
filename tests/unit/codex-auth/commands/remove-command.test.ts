@@ -191,4 +191,82 @@ describe('handleRemoveCodex — confirmation', () => {
     expect(promptCalled).toBe(false);
     expect(ctx.registry.hasProfile('skipconfirm')).toBe(false);
   });
+
+  it('preserves profile data when registry removal fails', async () => {
+    const { handleRemoveCodex } = await import(
+      '../../../../src/codex-auth/commands/remove-command'
+    );
+    const ctx = await makeCtx('preserveme');
+    const profileDir = path.join(ccsHome, '.ccs', 'codex-instances', 'preserveme');
+    const authJsonPath = path.join(profileDir, 'auth.json');
+    fs.writeFileSync(authJsonPath, JSON.stringify({ tokens: { id_token: 'h.e30K.s' } }));
+
+    spyOn(ctx.registry, 'removeProfile').mockImplementation(() => {
+      throw new Error('registry write denied');
+    });
+
+    let exitCode = -1;
+    const origExit = process.exit;
+    const origErr = console.error;
+    process.exit = (code?: number) => {
+      exitCode = code ?? 0;
+      throw new Error('exit');
+    };
+    console.error = () => {};
+
+    try {
+      await handleRemoveCodex(ctx, ['preserveme', '--yes']);
+    } catch {
+      /* process.exit */
+    } finally {
+      process.exit = origExit;
+      console.error = origErr;
+    }
+
+    expect(exitCode).toBeGreaterThan(0);
+    expect(fs.existsSync(authJsonPath)).toBe(true);
+    expect(ctx.registry.hasProfile('preserveme')).toBe(true);
+  });
+
+  it('restores profile data and registry when final deletion fails', async () => {
+    const { handleRemoveCodex } = await import(
+      '../../../../src/codex-auth/commands/remove-command'
+    );
+    const ctx = await makeCtx('restoreme');
+    ctx.registry.setDefault('restoreme');
+    const profileDir = path.join(ccsHome, '.ccs', 'codex-instances', 'restoreme');
+    const authJsonPath = path.join(profileDir, 'auth.json');
+    fs.writeFileSync(authJsonPath, JSON.stringify({ tokens: { id_token: 'h.e30K.s' } }));
+
+    const realRmSync = fs.rmSync;
+    spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+      if (typeof target === 'string' && target.includes('.deleting.')) {
+        throw new Error('delete denied');
+      }
+      return realRmSync(target, options);
+    });
+
+    let exitCode = -1;
+    const origExit = process.exit;
+    const origErr = console.error;
+    process.exit = (code?: number) => {
+      exitCode = code ?? 0;
+      throw new Error('exit');
+    };
+    console.error = () => {};
+
+    try {
+      await handleRemoveCodex(ctx, ['restoreme', '--yes']);
+    } catch {
+      /* process.exit */
+    } finally {
+      process.exit = origExit;
+      console.error = origErr;
+    }
+
+    expect(exitCode).toBeGreaterThan(0);
+    expect(fs.existsSync(authJsonPath)).toBe(true);
+    expect(ctx.registry.hasProfile('restoreme')).toBe(true);
+    expect(ctx.registry.getDefault()).toBe('restoreme');
+  });
 });

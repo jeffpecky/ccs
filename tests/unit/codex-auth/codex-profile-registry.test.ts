@@ -1,8 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import * as lockfile from 'proper-lockfile';
+import { spawn } from 'child_process';
 
 let CodexProfileRegistry: new (registryPath?: string) => {
   createProfile(name: string, meta?: Record<string, unknown>): void;
@@ -41,6 +43,7 @@ afterEach(() => {
     process.env.CCS_HOME = ORIGINAL_CCS_HOME;
   }
   fs.rmSync(tempDir, { recursive: true, force: true });
+  mock.restore();
 });
 
 describe('CodexProfileRegistry — empty state', () => {
@@ -212,3 +215,83 @@ describe('CodexProfileRegistry — registry file permissions', () => {
     expect(stat.mode & 0o777).toBe(0o600);
   });
 });
+
+describe('CodexProfileRegistry — write lock', () => {
+  it('serializes read-modify-write mutations through a registry lock', () => {
+    const release = () => {};
+    const lockSpy = spyOn(lockfile, 'lockSync').mockReturnValue(release);
+    const reg = new CodexProfileRegistry(registryPath);
+
+    reg.createProfile('work');
+
+    expect(lockSpy).toHaveBeenCalled();
+    const [lockTarget, options] = lockSpy.mock.calls[0] ?? [];
+    expect(lockTarget).toBe(path.dirname(registryPath));
+    expect(options).toMatchObject({ stale: 10000 });
+  });
+
+  it('waits for a contended registry lock before writing', async () => {
+    const registryDir = path.dirname(registryPath);
+    const readyPath = path.join(tempDir, 'holder-ready');
+    const holderScript = path.join(tempDir, 'hold-registry-lock.cjs');
+    fs.writeFileSync(
+      holderScript,
+      `
+const fs = require('fs');
+const lockfile = require(process.argv[4]);
+const release = lockfile.lockSync(process.argv[2], { stale: 10000 });
+fs.writeFileSync(process.argv[3], String(process.pid));
+setTimeout(() => {
+  release();
+  process.exit(0);
+}, 150);
+setTimeout(() => process.exit(2), 5000);
+process.on('SIGTERM', () => {
+  try { release(); } finally { process.exit(0); }
+});
+`,
+      'utf8'
+    );
+
+    const child = spawn(
+      process.execPath,
+      [
+        holderScript,
+        registryDir,
+        readyPath,
+        path.join(process.cwd(), 'node_modules', 'proper-lockfile'),
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'ignore', 'pipe'],
+      }
+    );
+
+    try {
+      await waitForFile(readyPath);
+
+      const reg = new CodexProfileRegistry(registryPath);
+      reg.createProfile('work');
+
+      expect(reg.hasProfile('work')).toBe(true);
+    } finally {
+      if (!child.killed) child.kill();
+      await waitForChildExit(child);
+    }
+  });
+});
+
+async function waitForFile(filePath: string, timeoutMs = 1000): Promise<void> {
+  const started = Date.now();
+  while (!fs.existsSync(filePath)) {
+    if (Date.now() - started > timeoutMs) {
+      throw new Error(`Timed out waiting for ${filePath}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+async function waitForChildExit(child: ReturnType<typeof spawn>): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+}

@@ -327,6 +327,64 @@ describe('import-default — torn-write retry', () => {
     expect(exitCalled).toBe(true);
     expect(ctx.registry.hasProfile('torntest')).toBe(false);
   });
+
+  it('rejects a malformed 3-segment id_token payload', async () => {
+    const authPath = path.join(legacyCodexHome, 'auth.json');
+    fs.writeFileSync(authPath, JSON.stringify({ tokens: { id_token: 'header.not-json.sig' } }));
+
+    const { handleImportDefaultCodex } = await import(
+      '../../../../src/codex-auth/commands/import-default-command'
+    );
+    const ctx = await makeCtx();
+
+    let exitCalled = false;
+    const origExit = process.exit;
+    process.exit = () => {
+      exitCalled = true;
+      throw new Error('exit');
+    };
+    const restore = silenceConsole();
+    try {
+      await handleImportDefaultCodex(ctx, ['badjwt']);
+    } catch {
+      /* expected */
+    } finally {
+      restore();
+      process.exit = origExit;
+    }
+
+    expect(exitCalled).toBe(true);
+    expect(ctx.registry.hasProfile('badjwt')).toBe(false);
+  });
+
+  it('rejects an id_token payload with invalid base64url characters', async () => {
+    const authPath = path.join(legacyCodexHome, 'auth.json');
+    fs.writeFileSync(authPath, JSON.stringify({ tokens: { id_token: 'h.e30$.s' } }));
+
+    const { handleImportDefaultCodex } = await import(
+      '../../../../src/codex-auth/commands/import-default-command'
+    );
+    const ctx = await makeCtx();
+
+    let exitCalled = false;
+    const origExit = process.exit;
+    process.exit = () => {
+      exitCalled = true;
+      throw new Error('exit');
+    };
+    const restore = silenceConsole();
+    try {
+      await handleImportDefaultCodex(ctx, ['bad-base64url']);
+    } catch {
+      /* expected */
+    } finally {
+      restore();
+      process.exit = origExit;
+    }
+
+    expect(exitCalled).toBe(true);
+    expect(ctx.registry.hasProfile('bad-base64url')).toBe(false);
+  });
 });
 
 describe('import-default — Codex running detection', () => {

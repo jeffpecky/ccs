@@ -34,6 +34,12 @@ async function makeCtx() {
   return { registry: reg, version: '0.0.0-test' };
 }
 
+function buildToken(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return `${header}.${body}.fakesig`;
+}
+
 /** Suppress console output during test. */
 function silenceConsole(): () => void {
   const origLog = console.log;
@@ -305,5 +311,55 @@ describe('handleCreateCodex — auto-spawn login (D11)', () => {
     const profileDir = path.join(ccsHome, '.ccs', 'codex-instances', 'faillogin');
     expect(fs.existsSync(profileDir)).toBe(true);
     expect(ctx.registry.hasProfile('faillogin')).toBe(true);
+  });
+
+  it('persists last_used and account_id when login token has account_id only', async () => {
+    const detectorMod = await import('../../../../src/targets/codex-detector');
+    spyOn(detectorMod, 'detectCodexCli').mockReturnValue('/usr/bin/codex');
+
+    spyOn(childProcess, 'spawn').mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (_cmd: string, _args: string[], opts: any) => {
+        const dir = (opts?.env?.CODEX_HOME as string) ?? '';
+        if (dir) {
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(
+            path.join(dir, 'auth.json'),
+            JSON.stringify({
+              tokens: {
+                id_token: buildToken({
+                  'https://api.openai.com/auth': {
+                    chatgpt_account_id: 'acct-account-only',
+                  },
+                }),
+              },
+            })
+          );
+        }
+        const ee = {
+          on: (evt: string, cb: (n: number) => void) => {
+            if (evt === 'exit') setImmediate(() => cb(0));
+            return ee;
+          },
+        };
+        return ee as ReturnType<typeof childProcess.spawn>;
+      }
+    );
+
+    const { handleCreateCodex } = await import(
+      '../../../../src/codex-auth/commands/create-command'
+    );
+    const ctx = await makeCtx();
+
+    const restore = silenceConsole();
+    try {
+      await handleCreateCodex(ctx, ['accountonly']);
+    } finally {
+      restore();
+    }
+
+    const meta = ctx.registry.getProfile('accountonly');
+    expect(meta.last_used).toBeTruthy();
+    expect(meta.account_id).toBe('acct-account-only');
   });
 });

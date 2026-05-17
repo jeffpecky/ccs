@@ -155,14 +155,12 @@ async function _spawnLogin(
       const authJsonPath = path.join(profileDir, 'auth.json');
       if (code === 0 && fs.existsSync(authJsonPath)) {
         const identity = decodeAccountIdentity(authJsonPath);
-        if (identity.email || identity.plan_type) {
-          ctx.registry.updateProfile(profileName, {
-            last_used: new Date().toISOString(),
-            email: identity.email,
-            plan_type: identity.plan_type ?? null,
-            account_id: identity.account_id,
-          });
-        }
+        ctx.registry.updateProfile(profileName, {
+          last_used: new Date().toISOString(),
+          email: identity.email,
+          plan_type: identity.plan_type ?? null,
+          account_id: identity.account_id,
+        });
         const emailStr = identity.email ? ` as ${identity.email}` : '';
         const planStr = identity.plan_type ? ` (plan: ${identity.plan_type})` : '';
         console.log(ok(`Logged in${emailStr}${planStr}`));

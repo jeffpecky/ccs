@@ -5,6 +5,7 @@ import * as path from 'path';
 
 // Lazy import so tests can run before implementation
 let decodeIdToken: (idToken: string) => { email?: string; plan_type?: string; account_id?: string };
+let hasStructurallyValidIdToken: (idToken: string) => boolean;
 
 // Fixture: real-shape JWT with nested claims
 // Payload (base64url): {"email":"user@example.com","https://api.openai.com/auth":{"chatgpt_plan_type":"pro","chatgpt_account_id":"4b0448c0-e4a2-4cc0-a70d-77065d613553"}}
@@ -62,6 +63,7 @@ function buildToken(payload: Record<string, unknown>): string {
 beforeEach(async () => {
   const mod = await import('../../../src/codex-auth/decode-id-token');
   decodeIdToken = mod.decodeIdToken;
+  hasStructurallyValidIdToken = mod.hasStructurallyValidIdToken;
 });
 
 describe('decodeIdToken', () => {
@@ -120,5 +122,15 @@ describe('decodeIdToken', () => {
   it('does not throw on empty string input', () => {
     expect(() => decodeIdToken('')).not.toThrow();
     expect(decodeIdToken('')).toEqual({});
+  });
+
+  it('reports valid sparse JWT payloads as structurally valid', () => {
+    expect(hasStructurallyValidIdToken(buildToken({}))).toBe(true);
+  });
+
+  it('rejects JWT segments with invalid base64url characters', () => {
+    const [header, payload, signature] = buildToken({}).split('.');
+    expect(hasStructurallyValidIdToken(`${header}.${payload}$.${signature}`)).toBe(false);
+    expect(hasStructurallyValidIdToken(`${header}=.${payload}.${signature}`)).toBe(false);
   });
 });

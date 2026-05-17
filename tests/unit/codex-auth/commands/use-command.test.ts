@@ -143,12 +143,12 @@ describe('handleUseCodex — shell syntax', () => {
     expect(stdout).toContain('$env:CCS_CODEX_PROFILE');
   });
 
-  it('cmd: set KEY=value (no quotes)', async () => {
+  it('cmd: quoted set assignment syntax', async () => {
     const { handleUseCodex } = await import('../../../../src/codex-auth/commands/use-command');
     const ctx = await makeCtxWithProfile('work');
     const { stdout } = await captureStreams(() => handleUseCodex(ctx, ['work', '--shell', 'cmd']));
-    expect(stdout).toContain('set CODEX_HOME=');
-    expect(stdout).toContain('set CCS_CODEX_PROFILE=work');
+    expect(stdout).toContain('set "CODEX_HOME=');
+    expect(stdout).toContain('set "CCS_CODEX_PROFILE=work"');
   });
 
   it('invalid --shell value → stderr error, empty stdout', async () => {

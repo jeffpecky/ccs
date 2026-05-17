@@ -1,23 +1,41 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import * as lockfile from 'proper-lockfile';
 import { createLogger } from '../services/logging';
 import { getCodexAuthRegistryPath } from './codex-profile-paths';
 import { CODEX_PROFILE_SCHEMA_VERSION } from './types';
 import type { CodexProfileData, CodexProfileMetadata } from './types';
 
 const logger = createLogger('codex-auth:registry');
+const REGISTRY_LOCK_STALE_MS = 10000;
+const REGISTRY_LOCK_RETRIES = 40;
+const REGISTRY_LOCK_RETRY_DELAY_MS = 50;
 
 function emptyRegistry(): CodexProfileData {
   return { version: CODEX_PROFILE_SCHEMA_VERSION, default: null, profiles: {} };
 }
 
+function sleepSync(ms: number): void {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      // Fall back for runtimes without Atomics.wait.
+    }
+  }
+}
+
+function isLockContentionError(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException | undefined)?.code === 'ELOCKED';
+}
+
 /**
  * Registry for codex auth profiles stored at ~/.ccs/codex-profiles.yaml.
  *
- * All writes are atomic (tmp file + POSIX rename). Concurrent writers are
- * safe: last-writer-wins for the default pointer; profile entries never
- * partially corrupt because rename(2) is atomic.
+ * Writes are guarded by a registry-directory lock around the read-modify-write
+ * cycle, then persisted atomically with tmp file + POSIX rename.
  *
  * Constructor accepts an optional registryPath for test isolation.
  */
@@ -79,6 +97,44 @@ export class CodexProfileRegistry {
     }
   }
 
+  private _withRegistryWriteLock<T>(callback: () => T): T {
+    const dir = path.dirname(this.registryPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    }
+
+    let release: (() => void) | undefined;
+    let lastLockError: unknown;
+
+    for (let attempt = 0; attempt <= REGISTRY_LOCK_RETRIES; attempt++) {
+      try {
+        release = lockfile.lockSync(dir, { stale: REGISTRY_LOCK_STALE_MS }) as () => void;
+        break;
+      } catch (err) {
+        if (!isLockContentionError(err) || attempt === REGISTRY_LOCK_RETRIES) {
+          throw err;
+        }
+        lastLockError = err;
+        sleepSync(REGISTRY_LOCK_RETRY_DELAY_MS);
+      }
+    }
+
+    if (!release) {
+      const msg = lastLockError instanceof Error ? lastLockError.message : 'unknown lock error';
+      throw new Error(`Failed to acquire codex profile registry lock: ${msg}`);
+    }
+
+    try {
+      return callback();
+    } finally {
+      try {
+        release();
+      } catch {
+        // Best-effort release.
+      }
+    }
+  }
+
   // Best-effort cleanup of orphan tmp files older than 1 hour (H3 mitigation).
   private _cleanOrphanTmpFiles(): void {
     const dir = path.dirname(this.registryPath);
@@ -106,18 +162,20 @@ export class CodexProfileRegistry {
   // ── CRUD ────────────────────────────────────────────────────────────────
 
   createProfile(name: string, meta: Partial<CodexProfileMetadata> = {}): void {
-    const data = this._read();
-    if (data.profiles[name]) {
-      throw new Error(`Profile already exists: ${name}`);
-    }
-    data.profiles[name] = {
-      type: 'codex',
-      created: new Date().toISOString(),
-      last_used: null,
-      ...meta,
-    } as CodexProfileMetadata;
-    this._write(data);
-    logger.stage('route', 'codex-auth.profile.created', 'Codex profile created', { name });
+    this._withRegistryWriteLock(() => {
+      const data = this._read();
+      if (data.profiles[name]) {
+        throw new Error(`Profile already exists: ${name}`);
+      }
+      data.profiles[name] = {
+        type: 'codex',
+        created: new Date().toISOString(),
+        last_used: null,
+        ...meta,
+      } as CodexProfileMetadata;
+      this._write(data);
+      logger.stage('route', 'codex-auth.profile.created', 'Codex profile created', { name });
+    });
   }
 
   getProfile(name: string): CodexProfileMetadata {
@@ -130,26 +188,30 @@ export class CodexProfileRegistry {
   }
 
   updateProfile(name: string, partial: Partial<CodexProfileMetadata>): void {
-    const data = this._read();
-    if (!data.profiles[name]) {
-      throw new Error(`Profile not found: ${name}`);
-    }
-    data.profiles[name] = { ...data.profiles[name], ...partial } as CodexProfileMetadata;
-    this._write(data);
+    this._withRegistryWriteLock(() => {
+      const data = this._read();
+      if (!data.profiles[name]) {
+        throw new Error(`Profile not found: ${name}`);
+      }
+      data.profiles[name] = { ...data.profiles[name], ...partial } as CodexProfileMetadata;
+      this._write(data);
+    });
   }
 
   removeProfile(name: string): void {
-    const data = this._read();
-    if (!data.profiles[name]) {
-      throw new Error(`Profile not found: ${name}`);
-    }
-    delete data.profiles[name];
-    if (data.default === name) {
-      const remaining = Object.keys(data.profiles);
-      data.default = remaining.length > 0 ? remaining[0] : null;
-    }
-    this._write(data);
-    logger.stage('cleanup', 'codex-auth.profile.deleted', 'Codex profile removed', { name });
+    this._withRegistryWriteLock(() => {
+      const data = this._read();
+      if (!data.profiles[name]) {
+        throw new Error(`Profile not found: ${name}`);
+      }
+      delete data.profiles[name];
+      if (data.default === name) {
+        const remaining = Object.keys(data.profiles);
+        data.default = remaining.length > 0 ? remaining[0] : null;
+      }
+      this._write(data);
+      logger.stage('cleanup', 'codex-auth.profile.deleted', 'Codex profile removed', { name });
+    });
   }
 
   listProfiles(): string[] {
@@ -167,18 +229,22 @@ export class CodexProfileRegistry {
   }
 
   setDefault(name: string): void {
-    const data = this._read();
-    if (!data.profiles[name]) {
-      throw new Error(`Profile not found: ${name}`);
-    }
-    data.default = name;
-    this._write(data);
+    this._withRegistryWriteLock(() => {
+      const data = this._read();
+      if (!data.profiles[name]) {
+        throw new Error(`Profile not found: ${name}`);
+      }
+      data.default = name;
+      this._write(data);
+    });
   }
 
   clearDefault(): void {
-    const data = this._read();
-    data.default = null;
-    this._write(data);
+    this._withRegistryWriteLock(() => {
+      const data = this._read();
+      data.default = null;
+      this._write(data);
+    });
   }
 
   touchProfile(name: string): void {

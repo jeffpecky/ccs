@@ -20,6 +20,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { createLogger } from '../services/logging';
 import { decodeAccountIdentity } from './codex-account-identity';
+import { hasStructurallyValidIdToken } from './decode-id-token';
 import { getCodexAuthRegistryPath, getCodexInstancesDir } from './codex-profile-paths';
 import type { CodexProfileData } from './types';
 
@@ -99,14 +100,16 @@ function buildProfileEntry(name: string): CodexAuthProfileEntry {
     if (fs.existsSync(authJsonPath)) {
       // decodeAccountIdentity never throws; returns {} on any error
       const identity = decodeAccountIdentity(authJsonPath);
-      authValid = Object.keys(identity).length > 0 || _hasValidStructure(authJsonPath);
+      authValid = Object.keys(identity).length > 0 || _hasStructurallyValidIdToken(authJsonPath);
       email = identity.email ?? null;
       plan = identity.plan_type ?? null;
       accountId = identity.account_id ?? null;
-      logger.debug(
-        'codex-auth.dashboard.decoded',
-        `Decoded auth for profile=${name} email=${email ?? '(none)'}`
-      );
+      logger.debug('codex-auth.dashboard.decoded', 'Decoded auth profile summary', {
+        profileName: name,
+        hasEmail: email !== null,
+        hasPlan: plan !== null,
+        hasAccountId: accountId !== null,
+      });
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -129,15 +132,16 @@ function buildProfileEntry(name: string): CodexAuthProfileEntry {
 }
 
 /**
- * Check whether auth.json has the expected structure (tokens.id_token present),
- * even if decoding yielded no display fields (e.g. no email in JWT).
+ * Check whether auth.json has a parseable JWT payload, even if it has no
+ * display fields. A non-empty but malformed token is not valid auth.
  * This sets authValid=true for valid-but-sparse tokens.
  */
-function _hasValidStructure(authJsonPath: string): boolean {
+function _hasStructurallyValidIdToken(authJsonPath: string): boolean {
   try {
     const raw = fs.readFileSync(authJsonPath, 'utf8');
     const parsed = JSON.parse(raw) as { tokens?: { id_token?: string } };
-    return typeof parsed?.tokens?.id_token === 'string' && parsed.tokens.id_token.length > 0;
+    const idToken = parsed?.tokens?.id_token;
+    return typeof idToken === 'string' && hasStructurallyValidIdToken(idToken);
   } catch {
     return false;
   }

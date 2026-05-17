@@ -16,6 +16,7 @@ import { resolveCodexProfileDir } from '../codex-profile-paths';
 import { decodeAccountIdentity } from '../codex-account-identity';
 import { parseArgs, rejectUnsupportedOptions, getProfileNameError } from './types';
 import type { CodexCommandContext } from './types';
+import type { CodexProfileMetadata } from '../types';
 
 export async function handleRemoveCodex(ctx: CodexCommandContext, args: string[]): Promise<void> {
   await initUI();
@@ -76,6 +77,7 @@ export async function handleRemoveCodex(ctx: CodexCommandContext, args: string[]
 
   // Load cached email for impact summary
   const meta = registry.getProfile(profileName);
+  const originalDefault = registry.getDefault();
   let emailStr = meta.email ?? null;
   if (!emailStr && authExists) {
     const identity = decodeAccountIdentity(authJsonPath);
@@ -108,9 +110,12 @@ export async function handleRemoveCodex(ctx: CodexCommandContext, args: string[]
     }
   }
 
-  // Remove dir then registry entry
+  const stagedDeleteDir = `${profileDir}.deleting.${process.pid}.${Math.random()
+    .toString(36)
+    .slice(2)}`;
+
   try {
-    fs.rmSync(profileDir, { recursive: true, force: true });
+    fs.renameSync(profileDir, stagedDeleteDir);
   } catch (err) {
     const e = err as NodeJS.ErrnoException;
     if (e.code === 'EACCES') {
@@ -120,6 +125,74 @@ export async function handleRemoveCodex(ctx: CodexCommandContext, args: string[]
     throw err;
   }
 
-  registry.removeProfile(profileName);
+  try {
+    registry.removeProfile(profileName);
+  } catch (err) {
+    const restored = _restoreProfileDir(stagedDeleteDir, profileDir);
+    const preservedPath = restored ? profileDir : stagedDeleteDir;
+    const msg = err instanceof Error ? err.message : String(err);
+    exitWithError(
+      `Profile registry update failed; profile data was preserved at ${preservedPath}.\n  ${msg}`,
+      ExitCode.GENERAL_ERROR
+    );
+    return;
+  }
+
+  try {
+    fs.rmSync(stagedDeleteDir, { recursive: true, force: true });
+  } catch (err) {
+    const restoredDir = _restoreProfileDir(stagedDeleteDir, profileDir);
+    const restoredRegistry = _restoreRegistryEntry(registry, profileName, meta, originalDefault);
+    const preservedPath = restoredDir ? profileDir : stagedDeleteDir;
+    const msg = err instanceof Error ? err.message : String(err);
+    const registryNote = restoredRegistry
+      ? 'Profile registry entry was restored.'
+      : 'Profile registry entry could not be restored automatically.';
+    exitWithError(
+      `Profile data delete failed; profile data was preserved at ${preservedPath}. ${registryNote}\n  ${msg}`,
+      ExitCode.GENERAL_ERROR
+    );
+    return;
+  }
+
   console.log(ok(`Profile removed: ${profileName}`));
+}
+
+function _restoreRegistryEntry(
+  registry: CodexCommandContext['registry'],
+  profileName: string,
+  meta: CodexProfileMetadata,
+  originalDefault: string | null
+): boolean {
+  try {
+    if (registry.hasProfile(profileName)) {
+      registry.updateProfile(profileName, meta);
+    } else {
+      registry.createProfile(profileName, meta);
+    }
+    if (originalDefault === profileName) {
+      registry.setDefault(profileName);
+    }
+    return true;
+  } catch {
+    process.stderr.write(
+      `[!] Profile data delete failed and automatic registry restore failed for "${profileName}".\n`
+    );
+    return false;
+  }
+}
+
+function _restoreProfileDir(stagedDeleteDir: string, profileDir: string): boolean {
+  try {
+    if (fs.existsSync(stagedDeleteDir) && !fs.existsSync(profileDir)) {
+      fs.renameSync(stagedDeleteDir, profileDir);
+      return true;
+    }
+    return fs.existsSync(profileDir);
+  } catch {
+    process.stderr.write(
+      `[!] Registry update failed and automatic restore failed. Profile data remains at ${stagedDeleteDir}.\n`
+    );
+    return false;
+  }
 }

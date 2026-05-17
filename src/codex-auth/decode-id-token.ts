@@ -5,6 +5,7 @@ import type { CodexAccountIdentity } from './types';
 // live under this key, NOT at top level.
 const OPENAI_AUTH_CLAIM = 'https://api.openai.com/auth';
 const OPENAI_PROFILE_CLAIM = 'https://api.openai.com/profile';
+const BASE64URL_SEGMENT_RE = /^[A-Za-z0-9_-]+$/;
 
 interface OpenAIAuthClaim {
   chatgpt_plan_type?: string;
@@ -29,6 +30,14 @@ function base64urlDecode(str: string): string {
   return Buffer.from(padded, 'base64').toString('utf8');
 }
 
+function isBase64UrlSegment(str: string): boolean {
+  return str.length > 0 && BASE64URL_SEGMENT_RE.test(str);
+}
+
+function decodeJsonSegment(str: string): unknown {
+  return JSON.parse(base64urlDecode(str));
+}
+
 /**
  * Decode the payload of a JWT id_token without signature verification.
  * Returns only the display-safe fields: email, plan_type, account_id.
@@ -39,13 +48,8 @@ function base64urlDecode(str: string): string {
  */
 export function decodeIdToken(idToken: string): CodexAccountIdentity {
   try {
-    const parts = idToken.split('.');
-    if (parts.length < 3) {
-      return {};
-    }
-
-    const rawPayload = base64urlDecode(parts[1]);
-    const payload = JSON.parse(rawPayload) as JwtPayload;
+    const payload = decodeJwtPayload(idToken);
+    if (!payload) return {};
 
     const authClaim = payload[OPENAI_AUTH_CLAIM];
     const profileClaim = payload[OPENAI_PROFILE_CLAIM];
@@ -67,5 +71,34 @@ export function decodeIdToken(idToken: string): CodexAccountIdentity {
     return result;
   } catch {
     return {};
+  }
+}
+
+export function hasStructurallyValidIdToken(idToken: string): boolean {
+  return decodeJwtPayload(idToken) !== null;
+}
+
+function decodeJwtPayload(idToken: string): JwtPayload | null {
+  try {
+    const parts = idToken.split('.');
+    if (parts.length !== 3) {
+      return null;
+    }
+    if (!parts.every((part) => isBase64UrlSegment(part))) {
+      return null;
+    }
+
+    const header = decodeJsonSegment(parts[0] ?? '');
+    if (!header || typeof header !== 'object' || Array.isArray(header)) {
+      return null;
+    }
+
+    const payload = decodeJsonSegment(parts[1] ?? '');
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return null;
+    }
+    return payload as JwtPayload;
+  } catch {
+    return null;
   }
 }

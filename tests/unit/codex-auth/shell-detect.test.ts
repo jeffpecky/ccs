@@ -95,9 +95,21 @@ describe('formatExport — pwsh', () => {
 });
 
 describe('formatExport — cmd', () => {
-  it('uses set KEY=VALUE syntax without quotes', () => {
+  it('uses quoted set assignment syntax', () => {
     expect(formatExport('cmd', 'CODEX_HOME', 'C:\\Users\\foo\\.ccs\\codex-instances\\work')).toBe(
-      'set CODEX_HOME=C:\\Users\\foo\\.ccs\\codex-instances\\work'
+      'set "CODEX_HOME=C:\\Users\\foo\\.ccs\\codex-instances\\work"'
+    );
+  });
+
+  it('keeps cmd metacharacters inside the quoted set assignment', () => {
+    expect(formatExport('cmd', 'CODEX_HOME', 'C:\\Users\\Kai & Co\\x|y<z>')).toBe(
+      'set "CODEX_HOME=C:\\Users\\Kai & Co\\x|y<z>"'
+    );
+  });
+
+  it('escapes cmd expansion-sensitive characters', () => {
+    expect(formatExport('cmd', 'CODEX_HOME', 'C:\\Users\\100% ^ "quoted"')).toBe(
+      'set "CODEX_HOME=C:\\Users\\100%% ^^ ^"quoted^""'
     );
   });
 });

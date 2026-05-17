@@ -41,6 +41,14 @@ function pwshDoubleQuote(value: string): string {
 }
 
 /**
+ * Quote a cmd.exe SET assignment. `set "KEY=value"` keeps command separators
+ * like &, |, <, and > inside the assignment instead of executing them.
+ */
+function cmdSetQuote(value: string): string {
+  return value.replace(/\^/g, '^^').replace(/%/g, '%%').replace(/"/g, '^"');
+}
+
+/**
  * Format a single env var export statement for the target shell.
  * Used by use-command to emit eval-safe lines.
  */
@@ -51,10 +59,7 @@ export function formatExport(shell: Shell, key: string, value: string): string {
     case 'pwsh':
       return `$env:${key} = ${pwshDoubleQuote(value)}`;
     case 'cmd':
-      // cmd.exe: no quoting — values are used verbatim.
-      // NOTE: cmd.exe cannot eval output from a node process natively.
-      // Users should prefer PowerShell. See --help for details.
-      return `set ${key}=${value}`;
+      return `set "${key}=${cmdSetQuote(value)}"`;
     default:
       // bash / zsh
       return `export ${key}=${posixSingleQuote(value)}`;
