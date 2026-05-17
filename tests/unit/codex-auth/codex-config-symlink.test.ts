@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -19,6 +19,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  mock.restore();
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
@@ -103,5 +104,30 @@ describe('ensureSharedConfigSymlink', () => {
 
     expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
     expect(fs.readlinkSync(linkPath)).toBe(sharedConfigPath);
+  });
+
+  it('copies shared config when symlink creation fails', () => {
+    fs.writeFileSync(sharedConfigPath, 'model = "gpt-5.5"\n', { mode: 0o600 });
+    const linkPath = path.join(profileDir, 'config.toml');
+    const symlinkSpy = spyOn(fs, 'symlinkSync').mockImplementation(() => {
+      throw Object.assign(new Error('simulated symlink failure'), { code: 'EPERM' });
+    });
+    const stderrChunks: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: string | Uint8Array): boolean => {
+      stderrChunks.push(typeof chunk === 'string' ? chunk : chunk.toString());
+      return true;
+    };
+
+    try {
+      ensureSharedConfigSymlink(profileDir, sharedConfigPath);
+    } finally {
+      process.stderr.write = origWrite;
+      symlinkSpy.mockRestore();
+    }
+
+    expect(fs.lstatSync(linkPath).isFile()).toBe(true);
+    expect(fs.readFileSync(linkPath, 'utf8')).toBe('model = "gpt-5.5"\n');
+    expect(stderrChunks.join('')).toContain('symlink unavailable');
   });
 });

@@ -105,7 +105,7 @@ export function parseArgs(args: string[]): CodexAuthArgs {
 
 export function rejectUnsupportedOptions(parsed: CodexAuthArgs, usage: string): void {
   if (parsed.unknownFlags && parsed.unknownFlags.length > 0) {
-    console.log(`Usage: ${color(usage, 'command')}`);
+    process.stderr.write(`Usage: ${color(usage, 'command')}\n`);
     exitWithError('Unknown options', ExitCode.GENERAL_ERROR);
   }
 }

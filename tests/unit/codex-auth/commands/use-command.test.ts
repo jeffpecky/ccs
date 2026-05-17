@@ -48,6 +48,8 @@ async function captureStreams(
   const stderrChunks: string[] = [];
   const origOut = process.stdout.write.bind(process.stdout);
   const origErr = process.stderr.write.bind(process.stderr);
+  const origConsoleLog = console.log;
+  const origConsoleError = console.error;
   process.stdout.write = (chunk: string | Uint8Array) => {
     stdoutChunks.push(String(chunk));
     return true;
@@ -56,11 +58,19 @@ async function captureStreams(
     stderrChunks.push(String(chunk));
     return true;
   };
+  console.log = (...args: unknown[]) => {
+    stdoutChunks.push(`${args.map(String).join(' ')}\n`);
+  };
+  console.error = (...args: unknown[]) => {
+    stderrChunks.push(`${args.map(String).join(' ')}\n`);
+  };
   try {
     await fn();
   } finally {
     process.stdout.write = origOut;
     process.stderr.write = origErr;
+    console.log = origConsoleLog;
+    console.error = origConsoleError;
   }
   return { stdout: stdoutChunks.join(''), stderr: stderrChunks.join('') };
 }
@@ -175,6 +185,33 @@ describe('handleUseCodex — shell syntax', () => {
     expect(stdout).toBe('');
     expect(exitCode).toBeGreaterThan(0);
     expect(stderr).toContain('Unsupported');
+  });
+
+  it('unknown option → stderr usage, empty stdout', async () => {
+    const { handleUseCodex } = await import('../../../../src/codex-auth/commands/use-command');
+    const ctx = await makeCtxWithProfile('work');
+
+    let exitCode = -1;
+    const origExit = process.exit;
+    process.exit = (code?: number) => {
+      exitCode = code ?? 0;
+      throw new Error('exit');
+    };
+
+    const { stdout, stderr } = await captureStreams(async () => {
+      try {
+        await handleUseCodex(ctx, ['work', '--bad-flag']);
+      } catch {
+        /* process.exit */
+      }
+    }).finally(() => {
+      process.exit = origExit;
+    });
+
+    expect(stdout).toBe('');
+    expect(exitCode).toBeGreaterThan(0);
+    expect(stderr).toContain('Usage:');
+    expect(stderr).toContain('Unknown options');
   });
 });
 

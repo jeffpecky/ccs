@@ -6,8 +6,9 @@ import { getSharedCodexConfigPath } from './codex-profile-paths';
 const logger = createLogger('codex-auth:symlink');
 
 /**
- * Ensure <profileDir>/config.toml is a symlink pointing to the shared
- * ~/.codex/config.toml. Self-healing: recreates stale or missing symlinks.
+ * Ensure <profileDir>/config.toml points at the shared ~/.codex/config.toml.
+ * Self-healing: recreates stale or missing symlinks. If symlink creation is
+ * unavailable, copies the shared config so the profile still has settings.
  *
  * @param profileDir  - The per-profile directory (will be created if missing).
  * @param sharedConfigPath - Override for the shared target path (used in tests
@@ -65,9 +66,27 @@ export function ensureSharedConfigSymlink(profileDir: string, sharedConfigPath?:
     }
   }
 
-  fs.symlinkSync(targetPath, linkPath);
-  logger.stage('dispatch', 'codex.symlink.created', 'Created shared config symlink', {
+  try {
+    fs.symlinkSync(targetPath, linkPath);
+    logger.stage('dispatch', 'codex.symlink.created', 'Created shared config symlink', {
+      link: linkPath,
+      target: targetPath,
+    });
+  } catch (err) {
+    copySharedConfigFallback(targetPath, linkPath, err);
+  }
+}
+
+function copySharedConfigFallback(targetPath: string, linkPath: string, err: unknown): void {
+  fs.copyFileSync(targetPath, linkPath);
+  fs.chmodSync(linkPath, 0o600);
+  process.stderr.write(
+    `[!] codex-auth: symlink unavailable; copied shared config.toml to ${linkPath}. ` +
+      `Config edits won't propagate automatically.\n`
+  );
+  logger.warn('codex-auth.symlink-copy-fallback', 'Copied shared config after symlink failure', {
     link: linkPath,
     target: targetPath,
+    error: err instanceof Error ? err.message : String(err),
   });
 }
