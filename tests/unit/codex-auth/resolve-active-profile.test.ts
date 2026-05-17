@@ -1,0 +1,201 @@
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import * as yaml from 'js-yaml';
+
+let resolveActiveProfile: (
+  env?: NodeJS.ProcessEnv
+) => { name: string; dir: string; source: 'env' | 'default' } | null;
+
+const ORIGINAL_CCS_HOME = process.env.CCS_HOME;
+
+let tempDir: string;
+let ccsHome: string;
+let registryPath: string;
+let instancesDir: string;
+
+beforeEach(async () => {
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resolve-profile-test-'));
+  ccsHome = path.join(tempDir, 'ccs');
+  fs.mkdirSync(path.join(ccsHome, '.ccs'), { recursive: true, mode: 0o700 });
+  process.env.CCS_HOME = ccsHome;
+
+  registryPath = path.join(ccsHome, '.ccs', 'codex-profiles.yaml');
+  instancesDir = path.join(ccsHome, '.ccs', 'codex-instances');
+
+  // Re-import after setting CCS_HOME so module picks up updated dir
+  const mod = await import('../../../src/codex-auth/resolve-active-profile');
+  resolveActiveProfile = mod.resolveActiveProfile;
+});
+
+afterEach(() => {
+  if (ORIGINAL_CCS_HOME === undefined) {
+    delete process.env.CCS_HOME;
+  } else {
+    process.env.CCS_HOME = ORIGINAL_CCS_HOME;
+  }
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+// Helper to write a registry YAML fixture
+function writeRegistry(data: object): void {
+  fs.mkdirSync(path.dirname(registryPath), { recursive: true });
+  fs.writeFileSync(registryPath, yaml.dump(data, { indent: 2 }), { mode: 0o600 });
+}
+
+function makeProfileDir(name: string): string {
+  const dir = path.join(instancesDir, name);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
+describe('resolveActiveProfile', () => {
+  it('returns null silently when registry file does not exist', () => {
+    // No registry written
+    const result = resolveActiveProfile({});
+    expect(result).toBeNull();
+  });
+
+  it('returns null and warns to stderr when registry YAML is corrupt', () => {
+    fs.mkdirSync(path.dirname(registryPath), { recursive: true });
+    fs.writeFileSync(registryPath, '{ invalid yaml: [[[', { mode: 0o600 });
+
+    const stderrMessages: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    const spy = spyOn(process.stderr, 'write').mockImplementation(
+      (msg: string | Uint8Array, ...rest: unknown[]) => {
+        stderrMessages.push(typeof msg === 'string' ? msg : String(msg));
+        return origWrite(msg as string, ...(rest as Parameters<typeof origWrite>).slice(1));
+      }
+    );
+
+    const result = resolveActiveProfile({});
+
+    spy.mockRestore();
+
+    expect(result).toBeNull();
+    expect(stderrMessages.some((m) => m.includes('codex-auth'))).toBe(true);
+  });
+
+  it('returns source=env when CCS_CODEX_PROFILE matches a registry entry', () => {
+    const profileDir = makeProfileDir('work');
+    writeRegistry({
+      version: '1.0',
+      default: null,
+      profiles: {
+        work: { type: 'codex', created: '2026-01-01T00:00:00.000Z', last_used: null },
+      },
+    });
+
+    const result = resolveActiveProfile({ CCS_CODEX_PROFILE: 'work' });
+
+    expect(result).not.toBeNull();
+    expect(result?.name).toBe('work');
+    expect(result?.source).toBe('env');
+    expect(result?.dir).toBe(profileDir);
+  });
+
+  it('returns source=default when no env var and registry has a default profile', () => {
+    const profileDir = makeProfileDir('personal');
+    writeRegistry({
+      version: '1.0',
+      default: 'personal',
+      profiles: {
+        personal: { type: 'codex', created: '2026-01-01T00:00:00.000Z', last_used: null },
+      },
+    });
+
+    const result = resolveActiveProfile({});
+
+    expect(result).not.toBeNull();
+    expect(result?.name).toBe('personal');
+    expect(result?.source).toBe('default');
+    expect(result?.dir).toBe(profileDir);
+  });
+
+  it('env > default precedence: CCS_CODEX_PROFILE overrides registry default', () => {
+    makeProfileDir('work');
+    makeProfileDir('personal');
+    writeRegistry({
+      version: '1.0',
+      default: 'personal',
+      profiles: {
+        work: { type: 'codex', created: '2026-01-01T00:00:00.000Z', last_used: null },
+        personal: { type: 'codex', created: '2026-01-01T00:00:00.000Z', last_used: null },
+      },
+    });
+
+    const result = resolveActiveProfile({ CCS_CODEX_PROFILE: 'work' });
+
+    expect(result?.name).toBe('work');
+    expect(result?.source).toBe('env');
+  });
+
+  it('returns null and warns when CCS_CODEX_PROFILE names a profile not in registry', () => {
+    writeRegistry({
+      version: '1.0',
+      default: null,
+      profiles: {},
+    });
+
+    const stderrMessages: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    const spy = spyOn(process.stderr, 'write').mockImplementation(
+      (msg: string | Uint8Array, ...rest: unknown[]) => {
+        stderrMessages.push(typeof msg === 'string' ? msg : String(msg));
+        return origWrite(msg as string, ...(rest as Parameters<typeof origWrite>).slice(1));
+      }
+    );
+
+    const result = resolveActiveProfile({ CCS_CODEX_PROFILE: 'ghost' });
+
+    spy.mockRestore();
+
+    expect(result).toBeNull();
+    expect(stderrMessages.some((m) => m.includes('ghost'))).toBe(true);
+  });
+
+  it('treats empty/whitespace-only CCS_CODEX_PROFILE as unset, falls back to default', () => {
+    makeProfileDir('default-profile');
+    writeRegistry({
+      version: '1.0',
+      default: 'default-profile',
+      profiles: {
+        'default-profile': {
+          type: 'codex',
+          created: '2026-01-01T00:00:00.000Z',
+          last_used: null,
+        },
+      },
+    });
+
+    const resultEmpty = resolveActiveProfile({ CCS_CODEX_PROFILE: '' });
+    expect(resultEmpty?.name).toBe('default-profile');
+    expect(resultEmpty?.source).toBe('default');
+
+    const resultWhitespace = resolveActiveProfile({ CCS_CODEX_PROFILE: '   ' });
+    expect(resultWhitespace?.name).toBe('default-profile');
+    expect(resultWhitespace?.source).toBe('default');
+  });
+
+  it('resolves the profile dir to an absolute path', () => {
+    makeProfileDir('absolute-test');
+    writeRegistry({
+      version: '1.0',
+      default: 'absolute-test',
+      profiles: {
+        'absolute-test': {
+          type: 'codex',
+          created: '2026-01-01T00:00:00.000Z',
+          last_used: null,
+        },
+      },
+    });
+
+    const result = resolveActiveProfile({});
+
+    expect(result?.dir).toBe(path.resolve(result?.dir ?? ''));
+    expect(path.isAbsolute(result?.dir ?? '')).toBe(true);
+  });
+});
