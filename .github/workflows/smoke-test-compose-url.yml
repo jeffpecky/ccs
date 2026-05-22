@@ -31,6 +31,8 @@ jobs:
 
       - name: Download compose from canonical URL
         run: |
+          # Keep this as a plain fetch. curl --retry only covers transport-like
+          # failures by default and can overstate HTTP 5xx resilience.
           curl -fsSL https://ccs.kaitran.ca/docker-compose.yaml -o /tmp/ccs-compose.yaml
           echo "--- downloaded compose ---"
           cat /tmp/ccs-compose.yaml

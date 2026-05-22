@@ -376,6 +376,8 @@ jobs:
 
       - name: Probe dashboard port 3000
         run: |
+          # Single-shot probe by design: healthcheck and network-contract already
+          # handle readiness waits, and curl --retry would not retry HTTP errors.
           HTTP_CODE=$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 http://127.0.0.1:13000/ || echo "000")
           if [[ "${HTTP_CODE}" == "000" ]]; then
             echo "[X] Could not reach dashboard on :3000 (connection failed)"
@@ -385,6 +387,8 @@ jobs:
 
       - name: Probe CLIProxy port 8317
         run: |
+          # Single-shot probe by design: healthcheck and network-contract already
+          # handle readiness waits, and curl --retry would not retry HTTP errors.
           HTTP_CODE=$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 http://127.0.0.1:18317/ || echo "000")
           if [[ "${HTTP_CODE}" == "000" ]]; then
             echo "[X] Could not reach CLIProxy on :8317 (connection failed)"
