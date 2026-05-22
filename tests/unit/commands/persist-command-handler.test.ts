@@ -498,6 +498,88 @@ describe('persist command Claude extension parity', () => {
     expect(renderedLogs).not.toContain('Native Codex target:');
   });
 
+  it('reports written permission defaultMode without exposing the mode value', async () => {
+    await writeUnifiedConfig();
+
+    const settingsPath = path.join(tempRoot, '.claude', 'settings.json');
+    await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true });
+    await fs.promises.writeFile(
+      settingsPath,
+      JSON.stringify(
+        {
+          env: {
+            KEEP_ME: 'still-here',
+          },
+        },
+        null,
+        2
+      ) + '\n',
+      'utf8'
+    );
+
+    const originalConsoleLog = console.log;
+    const capturedLogs: string[] = [];
+    console.log = (...args: unknown[]) => {
+      capturedLogs.push(args.map((arg) => String(arg)).join(' '));
+    };
+
+    try {
+      await withScopedHome(() =>
+        handlePersistCommand(['glm', '--yes', '--permission-mode', 'acceptEdits'])
+      );
+    } finally {
+      console.log = originalConsoleLog;
+    }
+
+    const renderedLogs = capturedLogs.join('\n');
+    expect(renderedLogs).toContain('Written/rewritten managed settings: permissions.defaultMode');
+    expect(renderedLogs).not.toContain('Already current settings: permissions.defaultMode');
+    expect(renderedLogs).not.toContain('permissions.defaultMode: acceptEdits');
+  });
+
+  it('reports already-current permission defaultMode without exposing the mode value', async () => {
+    await writeUnifiedConfig();
+
+    const settingsPath = path.join(tempRoot, '.claude', 'settings.json');
+    await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true });
+    await fs.promises.writeFile(
+      settingsPath,
+      JSON.stringify(
+        {
+          env: {
+            KEEP_ME: 'still-here',
+          },
+          permissions: {
+            defaultMode: 'acceptEdits',
+            allow: ['Bash(ls:*)'],
+          },
+        },
+        null,
+        2
+      ) + '\n',
+      'utf8'
+    );
+
+    const originalConsoleLog = console.log;
+    const capturedLogs: string[] = [];
+    console.log = (...args: unknown[]) => {
+      capturedLogs.push(args.map((arg) => String(arg)).join(' '));
+    };
+
+    try {
+      await withScopedHome(() =>
+        handlePersistCommand(['glm', '--yes', '--permission-mode', 'acceptEdits'])
+      );
+    } finally {
+      console.log = originalConsoleLog;
+    }
+
+    const renderedLogs = capturedLogs.join('\n');
+    expect(renderedLogs).toContain('Written/rewritten managed settings: none');
+    expect(renderedLogs).toContain('Already current settings: permissions.defaultMode');
+    expect(renderedLogs).not.toContain('permissions.defaultMode: acceptEdits');
+  });
+
   it('does not print native Codex target guidance for non-Codex profile persistence', async () => {
     await writeUnifiedConfig();
 

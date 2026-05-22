@@ -42,6 +42,8 @@ interface PersistReceipt {
   clearedCodexTranslatorUrlKeys: string[];
   writtenKeys: string[];
   unchangedWrittenKeys: string[];
+  writtenSettings: string[];
+  unchangedSettings: string[];
   codexTranslatorUrlPaths: string[];
 }
 
@@ -553,8 +555,10 @@ function findCodexTranslatorUrlPaths(value: unknown, path = ''): string[] {
 
 function buildPersistReceipt(
   existingEnv: Record<string, string>,
+  existingSettings: Record<string, unknown>,
   mergedSettings: Record<string, unknown>,
-  resolved: ResolvedEnv
+  resolved: ResolvedEnv,
+  resolvedPermissionMode?: PermissionMode
 ): PersistReceipt {
   const mergedEnv =
     typeof mergedSettings.env === 'object' &&
@@ -577,12 +581,28 @@ function buildPersistReceipt(
     .filter(([key, value]) => existingEnv[key] === value)
     .map(([key]) => key)
     .sort((left, right) => left.localeCompare(right));
+  const existingPermissions =
+    typeof existingSettings.permissions === 'object' &&
+    existingSettings.permissions !== null &&
+    !Array.isArray(existingSettings.permissions)
+      ? (existingSettings.permissions as Record<string, unknown>)
+      : {};
+  const writtenSettings =
+    resolvedPermissionMode && existingPermissions.defaultMode !== resolvedPermissionMode
+      ? ['permissions.defaultMode']
+      : [];
+  const unchangedSettings =
+    resolvedPermissionMode && existingPermissions.defaultMode === resolvedPermissionMode
+      ? ['permissions.defaultMode']
+      : [];
 
   return {
     clearedKeys,
     clearedCodexTranslatorUrlKeys,
     writtenKeys,
     unchangedWrittenKeys,
+    writtenSettings,
+    unchangedSettings,
     codexTranslatorUrlPaths: findCodexTranslatorUrlPaths(mergedSettings),
   };
 }
@@ -606,6 +626,12 @@ function printPersistReceipt(receipt: PersistReceipt): void {
   console.log(`  Written/rewritten managed keys: ${formatKeyList(receipt.writtenKeys)}`);
   if (receipt.unchangedWrittenKeys.length > 0) {
     console.log(`  Already current keys: ${formatKeyList(receipt.unchangedWrittenKeys)}`);
+  }
+  if (receipt.writtenSettings.length > 0 || receipt.unchangedSettings.length > 0) {
+    console.log(`  Written/rewritten managed settings: ${formatKeyList(receipt.writtenSettings)}`);
+    if (receipt.unchangedSettings.length > 0) {
+      console.log(`  Already current settings: ${formatKeyList(receipt.unchangedSettings)}`);
+    }
   }
 
   const hadCodexTranslatorCleanup = receipt.clearedCodexTranslatorUrlKeys.length > 0;
@@ -1044,7 +1070,13 @@ export async function handlePersistCommand(args: string[]): Promise<void> {
 
       await writeClaudeSettings(mergedSettings);
       const persistedSettings = await readClaudeSettings();
-      const receipt = buildPersistReceipt(existingEnv, persistedSettings, resolved);
+      const receipt = buildPersistReceipt(
+        existingEnv,
+        existingSettings,
+        persistedSettings,
+        resolved,
+        resolvedPermissionMode
+      );
 
       console.log('');
       console.log(
