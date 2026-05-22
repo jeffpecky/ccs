@@ -819,6 +819,33 @@ process.exit(0);
     expect(codexConfig).not.toContain('gpt-5.5-high-fast');
   });
 
+  it('normalizes ccsxp native Codex model flag effort aliases before cliproxy requests', () => {
+    if (process.platform === 'win32') return;
+
+    const result = runCcsxpAlias(['-m', 'gpt-5.5-high', 'fix failing tests'], {
+      ...process.env,
+      CI: '1',
+      NO_COLOR: '1',
+      HOME: tmpHome,
+      CCS_HOME: tmpHome,
+      CCS_CODEX_PATH: fakeCodexPath,
+      CCS_TEST_CODEX_ARGS_OUT: codexArgsLogPath,
+      CCS_TEST_CODEX_ENV_OUT: codexEnvLogPath,
+    });
+
+    expect(result.status).toBe(0);
+    const codexCalls = readLoggedCodexCalls(codexArgsLogPath);
+    expect(codexCalls.at(-1)).toEqual([
+      '-c',
+      'model_reasoning_effort="high"',
+      '--config',
+      'model_provider="cliproxy"',
+      '-m',
+      'gpt-5.5',
+      'fix failing tests',
+    ]);
+  });
+
   it('normalizes ccsxp native low Codex tuning aliases in config.toml', () => {
     if (process.platform === 'win32') return;
 
