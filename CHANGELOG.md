@@ -1,3 +1,9 @@
+## [8.1.3](https://github.com/kaitranntt/ccs/compare/v8.1.2...v8.1.3) (2026-05-29)
+
+### Hotfixes
+
+* add integrated Docker healthcheck ([0e3383d](https://github.com/kaitranntt/ccs/commit/0e3383d31da6c8c882760a86890c0dd915af50db)), closes [#1400](https://github.com/kaitranntt/ccs/issues/1400)
+
 ## [8.1.2](https://github.com/kaitranntt/ccs/compare/v8.1.1...v8.1.2) (2026-05-29)
 
 ### Hotfixes
