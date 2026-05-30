@@ -53,4 +53,32 @@ describe('cleanup command', () => {
       logSpy.mockRestore();
     }
   });
+
+  it('does not follow a symlinked CCS archive directory during cleanup', async () => {
+    if (process.platform === 'win32') return;
+
+    const ccsLogsDir = getNativeLogsDir();
+    const archiveDir = getLogArchiveDir();
+    const victimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-cleanup-victim-'));
+
+    fs.mkdirSync(ccsLogsDir, { recursive: true });
+    fs.writeFileSync(path.join(victimDir, 'keepme.log'), 'do not delete');
+    fs.symlinkSync(victimDir, archiveDir, 'dir');
+
+    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      await handleCleanupCommand(['--force']);
+
+      const output = logSpy.mock.calls
+        .flatMap((call) => call.map((value) => String(value)))
+        .join('\n');
+
+      expect(output).toContain('No CCS or CLIProxy logs found.');
+      expect(fs.existsSync(path.join(victimDir, 'keepme.log'))).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+      fs.rmSync(victimDir, { recursive: true, force: true });
+    }
+  });
 });

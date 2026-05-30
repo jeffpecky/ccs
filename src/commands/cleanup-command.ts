@@ -36,12 +36,21 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
 }
 
+/** Return entries for a real directory, rejecting symlinked directory targets. */
+function readRealDirectory(dirPath: string): string[] {
+  try {
+    const stats = fs.lstatSync(dirPath);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) return [];
+    return fs.readdirSync(dirPath);
+  } catch {
+    return [];
+  }
+}
+
 /** Calculate total size of regular top-level files in a directory */
 function getDirSize(dirPath: string): number {
-  if (!fs.existsSync(dirPath)) return 0;
-
   let totalSize = 0;
-  const entries = fs.readdirSync(dirPath);
+  const entries = readRealDirectory(dirPath);
 
   for (const entry of entries) {
     const filePath = path.join(dirPath, entry);
@@ -60,9 +69,8 @@ function getDirSize(dirPath: string): number {
 
 /** Count files in a directory */
 function countFiles(dirPath: string): number {
-  if (!fs.existsSync(dirPath)) return 0;
   let count = 0;
-  const entries = fs.readdirSync(dirPath);
+  const entries = readRealDirectory(dirPath);
 
   for (const entry of entries) {
     const filePath = path.join(dirPath, entry);
@@ -78,13 +86,11 @@ function countFiles(dirPath: string): number {
   return count;
 }
 
-/** Delete all regular files in a directory (skips symlinks for safety) */
+/** Delete all regular files in a real directory (skips symlinks for safety) */
 function cleanDirectory(dirPath: string): { deleted: number; freedBytes: number } {
-  if (!fs.existsSync(dirPath)) return { deleted: 0, freedBytes: 0 };
-
   let deleted = 0;
   let freedBytes = 0;
-  const files = fs.readdirSync(dirPath);
+  const files = readRealDirectory(dirPath);
 
   for (const file of files) {
     const filePath = path.join(dirPath, file);
@@ -116,11 +122,9 @@ interface ErrorLogInfo {
 
 /** Get error log files with metadata */
 function getErrorLogFiles(logsDir: string): ErrorLogInfo[] {
-  if (!fs.existsSync(logsDir)) return [];
-
   const now = Date.now();
   const files: ErrorLogInfo[] = [];
-  const entries = fs.readdirSync(logsDir);
+  const entries = readRealDirectory(logsDir);
 
   for (const entry of entries) {
     // Only process error-*.log files
