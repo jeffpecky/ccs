@@ -22,8 +22,6 @@ export interface CliproxyUsageHistoryDetail {
   model: string;
   provider?: string;
   timestamp: string;
-  source: string;
-  authIndex: string;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -68,8 +66,6 @@ function createHistoryDetail(
     model,
     provider: pricingProvider,
     timestamp: detail.timestamp,
-    source: detail.source,
-    authIndex: String(detail.auth_index),
     inputTokens: detail.tokens?.input_tokens ?? 0,
     outputTokens: detail.tokens?.output_tokens ?? 0,
     cacheReadTokens: detail.tokens?.cached_tokens ?? 0,
@@ -128,13 +124,25 @@ export function extractCliproxyUsageHistoryDetails(
   return results;
 }
 
+function sanitizeHistoryDetail(detail: CliproxyUsageHistoryDetail): CliproxyUsageHistoryDetail {
+  return {
+    model: detail.model,
+    ...(detail.provider && { provider: detail.provider }),
+    timestamp: detail.timestamp,
+    inputTokens: detail.inputTokens,
+    outputTokens: detail.outputTokens,
+    cacheReadTokens: detail.cacheReadTokens,
+    requestCount: detail.requestCount,
+    cost: detail.cost,
+    failed: detail.failed,
+  };
+}
+
 function createHistorySignature(detail: CliproxyUsageHistoryDetail): string {
   return [
     detail.model,
     detail.provider ?? '',
     detail.timestamp,
-    detail.source,
-    detail.authIndex,
     detail.inputTokens,
     detail.outputTokens,
     detail.cacheReadTokens,
@@ -182,7 +190,7 @@ export function mergeCliproxyUsageHistoryDetails(
   const merged: CliproxyUsageHistoryDetail[] = [];
   for (const { detail, count } of existingCounts.values()) {
     for (let index = 0; index < count; index++) {
-      merged.push({ ...detail });
+      merged.push(sanitizeHistoryDetail(detail));
     }
   }
 

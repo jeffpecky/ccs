@@ -50,6 +50,8 @@ const HISTORY_RETENTION_DAYS = Math.max(
 );
 const HISTORY_RETENTION_MS = HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const MAX_WRITE_ATTEMPTS = 3;
+const PRIVATE_DIR_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
 
 /** Sync interval in ms, configurable via CCS_CLIPROXY_SYNC_INTERVAL env var (default: 5 min) */
 const SYNC_INTERVAL_MS = Math.max(
@@ -68,11 +70,19 @@ function getLatestSnapshotPath(): string {
   return path.join(getCliproxyCacheDir(), 'latest.json');
 }
 
+function ensurePrivateDirectory(dir: string): void {
+  fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
+  fs.chmodSync(dir, PRIVATE_DIR_MODE);
+}
+
 function ensureCliproxyCacheDir(): void {
-  const dir = getCliproxyCacheDir();
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  const ccsDir = getCcsDir();
+  const cacheDir = path.join(ccsDir, 'cache');
+  const cliproxyCacheDir = path.join(cacheDir, 'cliproxy-usage');
+
+  ensurePrivateDirectory(ccsDir);
+  ensurePrivateDirectory(cacheDir);
+  ensurePrivateDirectory(cliproxyCacheDir);
 }
 
 function getSnapshotTimestamp(): number {
@@ -112,8 +122,6 @@ function buildLegacyHistoryDetails(
       details.push({
         model: breakdown.modelName,
         timestamp: buildHourlyTimestamp(hour.hour),
-        source: hour.source,
-        authIndex: 'legacy-hourly',
         inputTokens: breakdown.inputTokens,
         outputTokens: breakdown.outputTokens,
         cacheReadTokens: breakdown.cacheReadTokens,
@@ -135,8 +143,6 @@ function buildLegacyHistoryDetails(
       details.push({
         model: breakdown.modelName,
         timestamp: buildDailyTimestamp(day.date),
-        source: day.source,
-        authIndex: 'legacy-daily',
         inputTokens: breakdown.inputTokens,
         outputTokens: breakdown.outputTokens,
         cacheReadTokens: breakdown.cacheReadTokens,
@@ -255,7 +261,11 @@ async function writeSnapshotWithMerge(
     const snapshot = buildSnapshot(baseSnapshot?.details ?? [], incomingDetails);
     const tempFile = `${snapshotPath}.${process.pid}.${snapshot.timestamp}.tmp`;
 
-    fs.writeFileSync(tempFile, JSON.stringify(snapshot), 'utf-8');
+    fs.writeFileSync(tempFile, JSON.stringify(snapshot), {
+      encoding: 'utf-8',
+      mode: PRIVATE_FILE_MODE,
+    });
+    fs.chmodSync(tempFile, PRIVATE_FILE_MODE);
 
     const latestSnapshot = readSnapshot(false);
     const latestTimestamp = latestSnapshot?.timestamp ?? -Infinity;
@@ -265,6 +275,7 @@ async function writeSnapshotWithMerge(
     }
 
     fs.renameSync(tempFile, snapshotPath);
+    fs.chmodSync(snapshotPath, PRIVATE_FILE_MODE);
     console.log(ok('CLIProxy usage snapshot updated'));
     return;
   }

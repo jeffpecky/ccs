@@ -109,6 +109,21 @@ describe('cliproxy usage syncer', () => {
     const snapshotPath = path.join(ccsDir, 'cache', 'cliproxy-usage', 'latest.json');
     expect(fs.existsSync(snapshotPath)).toBe(true);
 
+    const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8')) as {
+      details: Array<Record<string, unknown>>;
+    };
+    expect(snapshot.details[0]).not.toHaveProperty('source');
+    expect(snapshot.details[0]).not.toHaveProperty('authIndex');
+
+    if (process.platform !== 'win32') {
+      const cacheDir = path.join(ccsDir, 'cache');
+      const cliproxyCacheDir = path.dirname(snapshotPath);
+      expect(fs.statSync(ccsDir).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(cacheDir).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(cliproxyCacheDir).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(snapshotPath).mode & 0o777).toBe(0o600);
+    }
+
     const cached = await runWithScopedConfigDir(ccsDir, async () => {
       return await loadCachedCliproxyData();
     });
