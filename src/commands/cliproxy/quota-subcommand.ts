@@ -1056,8 +1056,13 @@ export async function handlePauseAccount(args: string[]): Promise<void> {
   }
 
   if (account.paused) {
+    const refreshed = pauseAccount(provider, account.id);
+    const refreshedAccount = refreshed ? findAccountByQuery(provider, account.id) : account;
     console.log(warn(`Account already paused: ${formatCliAccountLabel(account)}`));
-    console.log(info(`Paused at: ${account.pausedAt || 'unknown'}`));
+    if (refreshed) {
+      console.log(info('Manual pause refreshed; account will stay out of quota rotation'));
+    }
+    console.log(info(`Paused at: ${refreshedAccount?.pausedAt || account.pausedAt || 'unknown'}`));
     return;
   }
 

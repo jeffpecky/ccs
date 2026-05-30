@@ -660,6 +660,10 @@ export function pauseAccount(provider: CLIProxyProvider, accountId: string): boo
 
     const accountMeta = providerAccounts.accounts[accountId];
     if (accountMeta.paused) {
+      // Treat an explicit pause request for an already paused account as a fresh
+      // manual decision. This changes the pause metadata so quota cooldown
+      // restore cannot later mistake the pause for its original auto-pause.
+      accountMeta.pausedAt = new Date().toISOString();
       return true;
     }
 
