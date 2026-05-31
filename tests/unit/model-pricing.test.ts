@@ -202,6 +202,16 @@ describe('model-pricing', () => {
       expect(opus47fast.outputPerMillion).toBe(150.0);
     });
 
+    it('should apply fast-tier pricing together with date-suffix stripping', () => {
+      // stripDateSuffix (base lookup) and applyServiceTier run independently;
+      // confirm they compose for a date-stamped id requesting the fast tier.
+      const opus48fastDated = getModelPricing('claude-opus-4-8-20260530', { serviceTier: 'fast' });
+      expect(opus48fastDated.inputPerMillion).toBe(10.0);
+      expect(opus48fastDated.outputPerMillion).toBe(50.0);
+      expect(opus48fastDated.cacheCreationPerMillion).toBe(12.5);
+      expect(opus48fastDated.cacheReadPerMillion).toBe(1.0);
+    });
+
     it('should fall back to standard rates when serviceTier is unknown', () => {
       // Unknown tier names must not throw; revert to base pricing transparently.
       const opus48 = getModelPricing('claude-opus-4-8', { serviceTier: 'enterprise-mythos' });

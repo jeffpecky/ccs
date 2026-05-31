@@ -50,6 +50,26 @@ export interface PricingLookupOptions extends ModelsDevPricingLookupOptions {
   serviceTier?: string;
 }
 
+// Anthropic prompt-caching multipliers, expressed relative to the base input
+// rate (see https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching).
+// Keeping them as named constants avoids drift when deriving per-tier cache rates.
+const CACHE_5M_WRITE_MULTIPLIER = 1.25;
+const CACHE_READ_MULTIPLIER = 0.1;
+
+/**
+ * Build a full rate set from input/output rates, deriving cache rates from the
+ * documented Anthropic multipliers so fast-tier entries stay in sync with the
+ * base-rate math instead of carrying hand-computed cache numbers.
+ */
+function buildRates(inputPerMillion: number, outputPerMillion: number): PricingRates {
+  return {
+    inputPerMillion,
+    outputPerMillion,
+    cacheCreationPerMillion: inputPerMillion * CACHE_5M_WRITE_MULTIPLIER,
+    cacheReadPerMillion: inputPerMillion * CACHE_READ_MULTIPLIER,
+  };
+}
+
 // ============================================================================
 // USER-EDITABLE PRICING TABLE
 // Update rates below (per million tokens in USD)
@@ -247,12 +267,7 @@ const PRICING_REGISTRY: Record<string, ModelPricing> = {
     cacheCreationPerMillion: 6.25,
     cacheReadPerMillion: 0.5,
     serviceTiers: {
-      fast: {
-        inputPerMillion: 30.0,
-        outputPerMillion: 150.0,
-        cacheCreationPerMillion: 37.5,
-        cacheReadPerMillion: 3.0,
-      },
+      fast: buildRates(30.0, 150.0),
     },
   },
   'claude-opus-4-6-thinking': {
@@ -268,12 +283,7 @@ const PRICING_REGISTRY: Record<string, ModelPricing> = {
     cacheCreationPerMillion: 6.25,
     cacheReadPerMillion: 0.5,
     serviceTiers: {
-      fast: {
-        inputPerMillion: 30.0,
-        outputPerMillion: 150.0,
-        cacheCreationPerMillion: 37.5, // 30 * 1.25 (5m cache write multiplier)
-        cacheReadPerMillion: 3.0, // 30 * 0.1 (cache read multiplier)
-      },
+      fast: buildRates(30.0, 150.0),
     },
   },
   // Claude 4.8 Opus ($5/$25) — fast mode ($10/$50, 2x premium per Anthropic docs)
@@ -283,12 +293,7 @@ const PRICING_REGISTRY: Record<string, ModelPricing> = {
     cacheCreationPerMillion: 6.25,
     cacheReadPerMillion: 0.5,
     serviceTiers: {
-      fast: {
-        inputPerMillion: 10.0,
-        outputPerMillion: 50.0,
-        cacheCreationPerMillion: 12.5, // 10 * 1.25 (5m cache write multiplier)
-        cacheReadPerMillion: 1.0, // 10 * 0.1 (cache read multiplier)
-      },
+      fast: buildRates(10.0, 50.0),
     },
   },
   'claude-opus-4-7-thinking': {
@@ -944,6 +949,13 @@ function hasProviderContext(model: string, options: PricingLookupOptions): boole
  * Apply per-service-tier rates if the resolved model declares them and the
  * caller requested a matching tier. Unknown tiers transparently fall through
  * to the base rates so existing callers stay unaffected.
+ *
+ * TODO(opus-fast-mode): No production caller currently passes `serviceTier`.
+ * Anthropic's `service_tier` is not yet captured on CliproxyRequestDetail, so
+ * usage transformers (cliproxy-usage-transformer.ts, data-aggregator.ts) bill
+ * fast-mode requests at the standard rate — i.e. fast Opus is under-reported by
+ * the tier premium ($10/$50 vs $5/$25). Wire `serviceTier` through once the
+ * usage pipeline records it. The schema below is ready for that integration.
  */
 function applyServiceTier(pricing: ModelPricing, tier: string | undefined): ModelPricing {
   if (!tier) return pricing;
