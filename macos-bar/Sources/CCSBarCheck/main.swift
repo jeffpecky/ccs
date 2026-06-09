@@ -785,6 +785,145 @@ do {
     "disabled quota rule never fires")
 }
 
+// MARK: Native subscription rows (Claude Code / Codex)
+//
+// The backend folds first-party subscription quota into /api/bar/summary as
+// ordinary BarSummaryRow values (provider "claude-code" / "codex"). They must
+// decode, drive the Tier-1 gauge + alert engine with ZERO new engine code, and
+// group/label distinctly from CLIProxy pool accounts.
+
+// (N1) Decode the exact native-row payload the collector emits.
+let nativeJSON = """
+[
+  {
+    "account_id": "claude-code", "provider": "claude-code", "displayName": "Claude Code",
+    "tier": "max", "paused": false, "quota_percentage": 15, "quotaStatus": "ok",
+    "next_reset": "2026-06-09T20:00:00.000Z", "is_default": false, "last_activity_at": null,
+    "today_cost": null, "health": "ok", "cached": true, "fetchedAt": "2026-06-09T13:00:00.000Z",
+    "needsReauth": false
+  },
+  {
+    "account_id": "codex", "provider": "codex", "displayName": "Codex",
+    "tier": "pro", "paused": false, "quota_percentage": 52, "quotaStatus": "ok",
+    "next_reset": "2026-06-09T19:00:00.000Z", "is_default": false, "last_activity_at": null,
+    "today_cost": null, "health": "ok", "cached": false, "fetchedAt": "2026-06-09T13:00:00.000Z",
+    "needsReauth": false
+  }
+]
+"""
+do {
+  let rows = try JSONDecoder().decode([BarSummaryRow].self, from: Data(nativeJSON.utf8))
+  check(rows.count == 2, "native: decodes claude-code + codex rows")
+  check(rows[0].provider == "claude-code", "native: claude-code provider decodes")
+  check(rows[0].id == "claude-code:claude-code", "native: claude-code stable id")
+  check(rows[0].tier == "max", "native: claude-code tier decodes (max)")
+  check(rows[0].quotaStatus == "ok", "native: claude-code quotaStatus ok")
+  check(rows[0].todayCost == nil, "native: today_cost null decodes to nil (honest, not fake $0)")
+  check(rows[1].provider == "codex", "native: codex provider decodes")
+  check(rows[1].tier == "pro", "native: codex tier decodes (pro)")
+}
+
+// (N2) Native rows drive the Tier-1 gauge with no new code: an "ok" claude-code
+//      row at 15% lands in the orange band with a 0.15 fill.
+do {
+  let claude = BarSummaryRow(
+    accountId: "claude-code", provider: "claude-code", displayName: "Claude Code",
+    tier: "max", quotaPercentage: 15, quotaStatus: "ok",
+    nextReset: "2026-06-09T20:00:00Z")
+  check(
+    BarQuotaGauge.band(percentage: claude.quotaPercentage, status: claude.quotaStatus) == .orange,
+    "native: claude-code 15% -> orange gauge band")
+  check(
+    BarQuotaGauge.fillFraction(percentage: claude.quotaPercentage, status: claude.quotaStatus)
+      == 0.15,
+    "native: claude-code 15% -> 0.15 gauge fill")
+}
+
+// (N3) Native rows feed the alert engine with no new code: a claude-code row at 8%
+//      with levels [20,10,0] fires quotaRemainingBelow scoped to its id.
+do {
+  let rows = [
+    BarSummaryRow(
+      accountId: "claude-code", provider: "claude-code", displayName: "Claude Code",
+      tier: "max", quotaPercentage: 8, quotaStatus: "ok",
+      nextReset: "2026-06-09T20:00:00Z")
+  ]
+  let ev = BarAlertEngine.evaluate(
+    rows: rows, analytics: nil, prefs: BarAlertPrefs(quotaLevels: [20, 10, 0]),
+    priorFiredKeys: [], now: engineNow, calendar: utc)
+  let quota = ev.toDeliver.filter { $0.kind == .quotaRemainingBelow }
+  check(quota.count == 1, "native: claude-code low quota fires exactly one alert")
+  check(
+    quota.first?.id.contains("|claude-code:claude-code|") == true,
+    "native: quota alert scoped to claude-code:claude-code")
+  check(quota.first?.body.contains("Claude Code") == true, "native: alert names 'Claude Code'")
+}
+
+// (N4) Native reauth: a claude-code row that needs reauth fires reauthNeeded
+//      (the 401-from-usage-endpoint path on the backend).
+do {
+  let rows = [
+    BarSummaryRow(
+      accountId: "claude-code", provider: "claude-code", displayName: "Claude Code",
+      quotaStatus: "error", health: "error", needsReauth: true)
+  ]
+  let ev = BarAlertEngine.evaluate(
+    rows: rows, analytics: nil, prefs: BarAlertPrefs(), priorFiredKeys: [], now: engineNow,
+    calendar: utc)
+  check(
+    ev.toDeliver.contains { $0.kind == .reauthNeeded },
+    "native: claude-code needsReauth fires reauthNeeded alert")
+}
+
+// (N5) Friendly provider labels + subscription classification.
+check(
+  BarFormatting.providerLabel("claude-code") == "Claude Code",
+  "native: providerLabel maps claude-code -> 'Claude Code'")
+check(
+  BarFormatting.providerLabel("codex") == "Codex", "native: providerLabel maps codex -> 'Codex'")
+check(BarFormatting.providerLabel("agy") == "agy", "native: providerLabel passes CLIProxy keys through")
+check(
+  BarFormatting.isNativeSubscription(provider: "claude-code"),
+  "native: claude-code is a native subscription")
+check(
+  BarFormatting.isNativeSubscription(provider: "codex"), "native: codex is a native subscription")
+check(
+  !BarFormatting.isNativeSubscription(provider: "agy"),
+  "native: agy (CLIProxy pool) is NOT a native subscription")
+
+// (N6) Grouping: a mixed list splits into native subscriptions (top) and pool
+//      accounts, preserving backend order within each group.
+do {
+  let mixed = [
+    BarSummaryRow(accountId: "pool-a", provider: "agy", quotaPercentage: 80, quotaStatus: "ok"),
+    BarSummaryRow(
+      accountId: "claude-code", provider: "claude-code", quotaPercentage: 40, quotaStatus: "ok"),
+    BarSummaryRow(accountId: "pool-b", provider: "ghcp", quotaStatus: "unsupported"),
+    BarSummaryRow(accountId: "codex", provider: "codex", quotaPercentage: 52, quotaStatus: "ok"),
+  ]
+  let parts = BarFormatting.partitionSubscriptions(mixed)
+  check(parts.subscriptions.count == 2, "native: partition pulls 2 subscriptions")
+  check(parts.pool.count == 2, "native: partition leaves 2 pool accounts")
+  check(
+    parts.subscriptions.map { $0.provider } == ["claude-code", "codex"],
+    "native: subscriptions keep backend order (claude-code, codex)")
+  check(
+    parts.pool.map { $0.provider } == ["agy", "ghcp"],
+    "native: pool keeps backend order (agy, ghcp)")
+}
+
+// (N7) Pool-only list does NOT get split (single "Accounts" header path): both
+//      groups non-empty is the only trigger for the two-section render.
+do {
+  let poolOnly = [
+    BarSummaryRow(accountId: "a", provider: "agy", quotaPercentage: 70, quotaStatus: "ok"),
+    BarSummaryRow(accountId: "b", provider: "ghcp", quotaStatus: "unsupported"),
+  ]
+  let parts = BarFormatting.partitionSubscriptions(poolOnly)
+  check(parts.subscriptions.isEmpty, "native: pool-only list has no subscriptions to split out")
+  check(parts.pool.count == 2, "native: pool-only list keeps all rows in pool group")
+}
+
 // cleanup
 try? FileManager.default.removeItem(atPath: tmp)
 

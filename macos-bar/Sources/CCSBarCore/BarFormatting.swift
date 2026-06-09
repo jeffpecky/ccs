@@ -161,6 +161,43 @@ public enum BarFormatting {
     return "Last active \(fmt.string(from: date))"
   }
 
+  /// True when a row is a native first-party subscription (the user's own Claude
+  /// Code or Codex plan) rather than a CLIProxy-managed OAuth pool account. Drives
+  /// the "Subscriptions" grouping + badge so a user reads "this is MY plan quota",
+  /// not one of the rotating pool credentials.
+  public static func isNativeSubscription(provider: String) -> Bool {
+    provider == "claude-code" || provider == "codex"
+  }
+
+  /// Friendly product label for a provider key. Native subscription keys read as
+  /// products ("Claude Code", "Codex"); any other provider passes through verbatim
+  /// (so "agy"/"ghcp"/"kiro" keep their established short chip text).
+  public static func providerLabel(_ provider: String) -> String {
+    switch provider {
+    case "claude-code": return "Claude Code"
+    case "codex": return "Codex"
+    default: return provider
+    }
+  }
+
+  /// Partition rows into (native subscriptions, CLIProxy pool accounts) while
+  /// preserving the backend's order within each group. Used by the dropdown to
+  /// render subscriptions above the pool. Pure so it is testable in Core.
+  public static func partitionSubscriptions(
+    _ rows: [BarSummaryRow]
+  ) -> (subscriptions: [BarSummaryRow], pool: [BarSummaryRow]) {
+    var subs: [BarSummaryRow] = []
+    var pool: [BarSummaryRow] = []
+    for row in rows {
+      if isNativeSubscription(provider: row.provider) {
+        subs.append(row)
+      } else {
+        pool.append(row)
+      }
+    }
+    return (subs, pool)
+  }
+
   /// Parse an ISO-8601 timestamp (with or without fractional seconds).
   static func isoDate(_ iso: String) -> Date? {
     let withFraction = ISO8601DateFormatter()

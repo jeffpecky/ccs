@@ -25,4 +25,8 @@ struct Sparkline: View {
 /// Shared visual tokens for the menu. The accent matches the CCS logo orange.
 enum BarTheme {
   static let accent = Color(red: 0.886, green: 0.451, blue: 0.137) // ~#E2732A
+  /// Distinct tint for native first-party subscription rows (Claude Code / Codex)
+  /// so the user's own plan reads apart from CLIProxy pool accounts. A cool indigo
+  /// contrasts with the warm orange accent used for everything else.
+  static let subscription = Color(red: 0.357, green: 0.388, blue: 0.851) // ~#5B63D9
 }

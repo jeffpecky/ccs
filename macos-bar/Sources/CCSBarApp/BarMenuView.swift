@@ -41,21 +41,7 @@ struct BarMenuView: View {
               }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-              SectionLabel("Accounts")
-              if let error = viewModel.lastError {
-                ErrorBanner(message: error)
-              }
-              if viewModel.rows.isEmpty {
-                Text("No accounts configured")
-                  .font(.caption)
-                  .foregroundStyle(.secondary)
-              } else {
-                ForEach(viewModel.rows) { row in
-                  BarRowView(row: row, viewModel: viewModel)
-                }
-              }
-            }
+            accountsSection
           }
           .padding(12)
         }
@@ -73,6 +59,41 @@ struct BarMenuView: View {
     .onAppear { viewModel.onOpen() }
     .sheet(isPresented: $showingPrefs) {
       BarPreferencesView(viewModel: viewModel, prefs: prefs)
+    }
+  }
+
+  /// Accounts list. Native first-party subscriptions (Claude Code / Codex) render
+  /// in a top "Subscriptions" group so the user's own plan quota reads apart from
+  /// the rotating CLIProxy "Pool accounts". The split is suppressed when there are
+  /// no subscriptions (or no pool), so the established single "Accounts" header is
+  /// kept for the common CLIProxy-only setup.
+  @ViewBuilder private var accountsSection: some View {
+    let parts = BarFormatting.partitionSubscriptions(viewModel.rows)
+    VStack(alignment: .leading, spacing: 6) {
+      if let error = viewModel.lastError {
+        ErrorBanner(message: error)
+      }
+      if viewModel.rows.isEmpty {
+        SectionLabel("Accounts")
+        Text("No accounts configured")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      } else if parts.subscriptions.isEmpty || parts.pool.isEmpty {
+        // Only one kind present: keep the single established header.
+        SectionLabel("Accounts")
+        ForEach(viewModel.rows) { row in
+          BarRowView(row: row, viewModel: viewModel)
+        }
+      } else {
+        SectionLabel("Subscriptions")
+        ForEach(parts.subscriptions) { row in
+          BarRowView(row: row, viewModel: viewModel)
+        }
+        SectionLabel("Pool accounts")
+        ForEach(parts.pool) { row in
+          BarRowView(row: row, viewModel: viewModel)
+        }
+      }
     }
   }
 
@@ -164,6 +185,12 @@ struct BarRowView: View {
   let row: BarSummaryRow
   @ObservedObject var viewModel: BarViewModel
 
+  /// A native first-party subscription (Claude Code / Codex) — drives the
+  /// distinct "subscription" badge + indigo provider chip.
+  private var isNativeSubscription: Bool {
+    BarFormatting.isNativeSubscription(provider: row.provider)
+  }
+
   var body: some View {
     HStack(alignment: .top, spacing: 9) {
       Circle()
@@ -186,9 +213,14 @@ struct BarRowView: View {
           if row.needsReauth {
             Chip("reauth", tint: .red)
           }
+          if isNativeSubscription {
+            Chip("subscription", tint: BarTheme.subscription)
+          }
         }
         HStack(spacing: 6) {
-          Chip(row.provider, tint: BarTheme.accent)
+          Chip(
+            BarFormatting.providerLabel(row.provider),
+            tint: isNativeSubscription ? BarTheme.subscription : BarTheme.accent)
           if let tier = row.tier { Chip(tier, tint: .secondary) }
           QuotaGaugeView(
             percentage: row.quotaPercentage,
