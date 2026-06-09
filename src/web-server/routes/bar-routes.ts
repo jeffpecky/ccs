@@ -104,6 +104,13 @@ export interface BarRouterDeps {
    * audit shells out via a synchronous execSync that must never run here.
    */
   runHealthChecks?: () => Promise<HealthReport>;
+  /**
+   * Native subscription quota rows (Claude Code + Codex). Defaults to an empty
+   * async so older tests that build deps without it keep passing. The native
+   * collector owns its own long-TTL cache + safety controls, so this is cheap
+   * to call per request.
+   */
+  getNativeAccountRows?: () => Promise<BarSummaryRow[]>;
 }
 
 // ============================================================================
@@ -121,6 +128,13 @@ const PER_ACCOUNT_TIMEOUT_MS = 5_000;
 
 /** Bound for the cost side-load so a slow snapshot read can't dominate the response. */
 const SIDELOAD_TIMEOUT_MS = 1_500;
+
+/**
+ * Bound for the native-subscription side-load. A slow or failed native fetch
+ * resolves to [] so the response paints CLIProxy rows only — never errors, never
+ * blocks. Native rows have their own 10-min cache, so the common path is instant.
+ */
+const NATIVE_SIDELOAD_TIMEOUT_MS = 1_500;
 
 /** Timestamp of the last successful force-fresh pull (epoch ms, 0 = never) */
 let lastForceFreshAt = 0;
@@ -475,7 +489,14 @@ export function createBarRouter(deps: BarRouterDeps): Router {
       });
 
       const rows = await Promise.race([gather, deadline]);
-      res.json(rows);
+
+      // Native subscription rows (Claude Code + Codex) are side-loaded AFTER the
+      // CLIProxy rows resolve, bounded so a slow/failed native fetch degrades to
+      // [] rather than blocking or erroring the response.
+      const getNative = deps.getNativeAccountRows ?? (async () => [] as BarSummaryRow[]);
+      const nativeRows = (await withTimeout(getNative(), NATIVE_SIDELOAD_TIMEOUT_MS)) ?? [];
+
+      res.json([...rows, ...nativeRows]);
     } catch (err) {
       console.error('[bar-routes] /summary error:', (err as Error).message);
       res.status(500).json({ error: 'Internal server error' });
@@ -523,6 +544,7 @@ import { fetchAccountQuota } from '../../cliproxy/quota/quota-fetcher';
 import { getTodayCostByAccount } from '../usage/data-aggregator';
 import { loadCliproxySnapshotDetails } from '../usage/cliproxy-snapshot-reader';
 import { getCachedDailyData, getCachedHourlyData } from '../usage/aggregator';
+import { getNativeAccountRows } from '../usage/native-quota-collector';
 
 /** Production bar router — wired to real dependencies */
 const barRouter: Router = createBarRouter({
@@ -535,6 +557,7 @@ const barRouter: Router = createBarRouter({
   loadCliproxyDetails: loadCliproxySnapshotDetails,
   loadDailyUsage: () => getCachedDailyData(),
   loadHourlyUsage: () => getCachedHourlyData(),
+  getNativeAccountRows: () => getNativeAccountRows(),
 });
 
 export default barRouter;

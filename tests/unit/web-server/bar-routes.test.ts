@@ -986,3 +986,106 @@ describe('today_cost: duplicate-email accounts get null (finding #11)', () => {
     expect(body[0].today_cost).toBeCloseTo(3.75);
   });
 });
+
+// ============================================================================
+// Native subscription rows side-load into /summary
+// ============================================================================
+
+describe('/summary native subscription rows', () => {
+  function nativeRow(provider: 'claude-code' | 'codex'): BarSummaryRow {
+    return {
+      account_id: provider,
+      provider,
+      displayName: provider === 'codex' ? 'Codex' : 'Claude Code',
+      tier: provider === 'codex' ? 'pro' : 'max',
+      paused: false,
+      quota_percentage: 42,
+      quotaStatus: 'ok',
+      next_reset: '2026-06-09T20:00:00.000Z',
+      is_default: false,
+      last_activity_at: null,
+      today_cost: null,
+      health: 'ok',
+      cached: false,
+      fetchedAt: '2026-06-09T14:00:00.000Z',
+      needsReauth: false,
+    };
+  }
+
+  async function buildRouter(getNativeAccountRows: () => Promise<BarSummaryRow[]>) {
+    const { createBarRouter, resetForceFreshDebounce: resetDebounce } = await import(
+      '../../../src/web-server/routes/bar-routes'
+    );
+
+    const app = express();
+    app.use(express.json());
+
+    const cliproxyAccount = makeAccountInfo({ id: 'pool@example.com', provider: 'agy' });
+
+    const router = createBarRouter({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getAllAccountsSummary: () => ({ agy: [cliproxyAccount] }) as any,
+      getCachedQuota: () => null,
+      setCachedQuota: () => {},
+      invalidateQuotaCache: () => {},
+      fetchAccountQuota: async () => makeQuotaResult(),
+      getTodayCostByAccount: () => ({}),
+      loadCliproxyDetails: async () => [],
+      loadDailyUsage: async () => [],
+      loadHourlyUsage: async () => [],
+      runHealthChecks: async () => makeHealthReport(),
+      getNativeAccountRows,
+    });
+
+    app.use('/api/bar', router);
+    const srv = await new Promise<Server>((resolve, reject) => {
+      const instance = app.listen(0, '127.0.0.1');
+      instance.once('error', reject);
+      instance.once('listening', () => resolve(instance));
+    });
+    const addr = srv.address();
+    if (!addr || typeof addr === 'string') throw new Error('No server address');
+    resetDebounce();
+    return { srv, url: `http://127.0.0.1:${(addr as { port: number }).port}` };
+  }
+
+  it('appends native rows after the CLIProxy rows', async () => {
+    const { srv, url } = await buildRouter(async () => [
+      nativeRow('claude-code'),
+      nativeRow('codex'),
+    ]);
+    const { body } = await getJson<BarSummaryRow[]>(url, '/api/bar/summary');
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+
+    expect(body.length).toBe(3);
+    expect(body[0].provider).toBe('agy'); // CLIProxy row first
+    expect(body[1].provider).toBe('claude-code');
+    expect(body[2].provider).toBe('codex');
+  });
+
+  it('degrades to CLIProxy-only rows when the native fetch never resolves (bounded side-load)', async () => {
+    const { srv, url } = await buildRouter(() => new Promise<BarSummaryRow[]>(() => {}));
+    const start = Date.now();
+    const { status, body } = await getJson<BarSummaryRow[]>(url, '/api/bar/summary');
+    const elapsed = Date.now() - start;
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+
+    expect(status).toBe(200);
+    expect(body.length).toBe(1);
+    expect(body[0].provider).toBe('agy');
+    // Must not block longer than the native side-load budget (+ small slack).
+    expect(elapsed).toBeLessThan(2_500);
+  });
+
+  it('returns CLIProxy-only rows (never 500) when the native fetch rejects', async () => {
+    const { srv, url } = await buildRouter(async () => {
+      throw new Error('native blew up');
+    });
+    const { status, body } = await getJson<BarSummaryRow[]>(url, '/api/bar/summary');
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+
+    expect(status).toBe(200);
+    expect(body.length).toBe(1);
+    expect(body[0].provider).toBe('agy');
+  });
+});
