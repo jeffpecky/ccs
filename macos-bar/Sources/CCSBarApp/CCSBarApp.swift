@@ -43,8 +43,15 @@ struct ThemedRoot<Content: View>: View {
   @ViewBuilder var content: Content
 
   var body: some View {
+    // Order matters: .preferredColorScheme first updates the SwiftUI \.colorScheme
+    // environment for descendants (so the token resolver + Color.primary/.secondary
+    // pick up the chosen scheme), THEN the .background WindowAppearanceForcer sets
+    // the actual host NSWindow.appearance so system materials + semantic-color
+    // inversions flip at the AppKit layer too — not just the custom RGB tokens.
+    // The two are complementary: env tokens + real window appearance. KEEP both.
     ResolvedThemeHost(content: content)
       .preferredColorScheme(appearance.forced)
+      .background(WindowAppearanceForcer(appearance: appearance))
   }
 }
 

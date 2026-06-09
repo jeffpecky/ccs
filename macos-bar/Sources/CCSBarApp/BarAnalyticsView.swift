@@ -36,7 +36,7 @@ struct BarAnalyticsView: View {
 
   /// By-surface + top-models detail, tightened and subordinate.
   @ViewBuilder private var breakdown: some View {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: 8) {
       // Surface breakdown: "how much Claude Code vs Codex" — only shown when
       // the backend supplies at least one surface entry. Top 5 keeps it compact.
       if !analytics.bySurface.isEmpty {
@@ -67,7 +67,7 @@ struct BarAnalyticsView: View {
   /// The collapsed informational spend strip: a "SPEND" label, one muted caption
   /// line, and a thin inline 30-day sparkline when there is real spend.
   private var spendStrip: some View {
-    VStack(alignment: .leading, spacing: 3) {
+    VStack(alignment: .leading, spacing: 5) {
       SectionLabel("Spend")
       if analytics.hasRecentData {
         Text(spendCaption)
@@ -75,7 +75,7 @@ struct BarAnalyticsView: View {
           .foregroundStyle(.secondary)
         if !sparklineIsEmpty {
           Sparkline(values: analytics.byDay.map(\.cost), accent: theme.accent)
-            .frame(height: 16)
+            .frame(height: 18)
         }
       } else {
         Text(idleCaption)
@@ -134,10 +134,10 @@ private struct SurfaceBar: View {
               .foregroundStyle(.secondary)
           }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
       }
     }
-    .frame(height: 22)
+    .frame(height: 26)
   }
 }
 
@@ -164,10 +164,10 @@ private struct ModelBar: View {
             .font(.system(.caption, design: .monospaced))
             .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
       }
     }
-    .frame(height: 22)
+    .frame(height: 26)
   }
 }
 
@@ -177,7 +177,7 @@ struct SectionLabel: View {
   init(_ text: String) { self.text = text }
   var body: some View {
     Text(text.uppercased())
-      .font(.system(size: 10, weight: .bold))
+      .font(.system(size: 11, weight: .bold))
       .foregroundStyle(.secondary)
       .padding(.top, 1)
   }

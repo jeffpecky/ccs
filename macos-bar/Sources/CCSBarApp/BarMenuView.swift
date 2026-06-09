@@ -7,12 +7,15 @@ import CCSBarCore
 /// footer controls.
 struct BarMenuView: View {
   @ObservedObject var viewModel: BarViewModel
-  /// Drives the preferences sheet from the footer gear.
-  @State private var showingPrefs = false
-  @State private var confirmingQuit = false
-  /// The prefs adapter the sheet edits; shares the standard suite with the
-  /// view model so a write-through is visible on the next poll.
-  private let prefs = BarPreferences()
+  /// Resolved theme injected by ThemedRoot — used to tint the armed Quit control
+  /// with the themed red ramp so it matches the dropdown on both plates.
+  @Environment(\.barTheme) private var theme
+  /// Two-step inline quit confirm. First footer-Quit click arms it (icon swaps
+  /// hollow->filled, tints red); second click terminates. Reset on every popover
+  /// open via .onAppear so a stale armed state never carries across sessions —
+  /// no modal, no .confirmationDialog (those steal focus and dismiss the popover,
+  /// the exact fragility of BUG 1).
+  @State private var quitArmed = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -30,12 +33,12 @@ struct BarMenuView: View {
         // for the common 1-4 subscription setup; the scroll only engages for
         // genuine pool/model overflow.
         ScrollView {
-          VStack(alignment: .leading, spacing: 8) {
+          VStack(alignment: .leading, spacing: 12) {
             // (1) ALERTS first — urgent quota crossings surface above everything.
             // Spend-cap alerts are opt-in OFF by default, so by default only
             // quota/reauth/cooldown conditions appear here.
             if !viewModel.activeAlerts.isEmpty {
-              VStack(alignment: .leading, spacing: 6) {
+              VStack(alignment: .leading, spacing: 8) {
                 SectionLabel("Alerts")
                 ForEach(viewModel.activeAlerts) { alert in
                   AlertRow(alert: alert)
@@ -66,22 +69,24 @@ struct BarMenuView: View {
             // scroller at runtime (belt-and-suspenders with .scrollIndicators).
             ScrollerHider().frame(width: 0, height: 0)
           }
-          .padding(12)
+          .padding(14)
         }
         .scrollIndicators(.never)
-        // 580 fits the full reordered layout (subscription cards + spend strip +
-        // pool rows + surface/models) without wasted whitespace for a typical
-        // 1-4 account setup. Scroll engages gracefully only on real overflow.
-        .frame(maxHeight: 580)
+        // 620 fits the full reordered layout (subscription cards + spend strip +
+        // pool rows + surface/models) plus the added vertical breathing room
+        // before scroll engages, for a typical 1-4 account setup. Scroll engages
+        // gracefully only on real overflow.
+        .frame(maxHeight: 620)
       }
 
       Divider()
       footer
     }
-    .frame(width: 340)
-    .onAppear { viewModel.onOpen() }
-    .sheet(isPresented: $showingPrefs) {
-      BarPreferencesView(viewModel: viewModel, prefs: prefs)
+    .frame(width: 380)
+    .onAppear {
+      viewModel.onOpen()
+      // Disarm quit on every popover open so a stale armed state never persists.
+      quitArmed = false
     }
   }
 
@@ -93,7 +98,7 @@ struct BarMenuView: View {
   /// present, preserving the single "Accounts" header for a CLIProxy-only setup.
   @ViewBuilder private var accountsSection: some View {
     let parts = BarFormatting.partitionSubscriptions(viewModel.rows)
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: 8) {
       if let error = viewModel.lastError {
         ErrorBanner(message: error)
       }
@@ -124,7 +129,7 @@ struct BarMenuView: View {
   @ViewBuilder private var poolSection: some View {
     let parts = BarFormatting.partitionSubscriptions(viewModel.rows)
     if !parts.subscriptions.isEmpty && !parts.pool.isEmpty {
-      VStack(alignment: .leading, spacing: 6) {
+      VStack(alignment: .leading, spacing: 8) {
         SectionLabel("Pool accounts")
         ForEach(parts.pool) { row in
           BarRowView(row: row, viewModel: viewModel)
@@ -199,7 +204,7 @@ struct BarMenuView: View {
   }
 
   private var footer: some View {
-    HStack(spacing: 10) {
+    HStack(spacing: 12) {
       Button {
         openDashboard()
       } label: {
@@ -215,7 +220,11 @@ struct BarMenuView: View {
       }
       .help("Toggle the menu-bar icon between color and monochrome (does not change the bar theme)")
       Button {
-        showingPrefs = true
+        // Open Settings as a standalone AppKit NSWindow (NOT a .sheet on this
+        // popover). A sheet hosted in a .window-style MenuBarExtra popover pulls
+        // focus off the popover and auto-dismisses the whole bar (BUG 1). The
+        // window opens beside the popover and leaves it untouched.
+        SettingsWindowController.shared.show(viewModel: viewModel)
       } label: {
         Label("Settings", systemImage: "gearshape")
       }
@@ -227,25 +236,38 @@ struct BarMenuView: View {
         Image(systemName: "arrow.clockwise")
       }
       .help("Refresh")
-      // Quit confirms first — a stray click here previously closed the whole
-      // app (removing the menu-bar item) with no easy way back.
-      Button {
-        confirmingQuit = true
-      } label: {
-        Image(systemName: "power")
-      }
-      .help("Quit CCS Bar")
-      .confirmationDialog("Quit CCS Bar?", isPresented: $confirmingQuit) {
-        Button("Quit", role: .destructive) { NSApplication.shared.terminate(nil) }
-        Button("Cancel", role: .cancel) {}
-      } message: {
-        Text("This closes the menu-bar app. Reopen it from Applications.")
-      }
+      // Quit confirms via a two-step INLINE arm/confirm — no modal, no sheet, no
+      // .confirmationDialog. Those all steal focus and auto-dismiss the popover
+      // (the exact fragility of BUG 1). A stray single click can no longer kill
+      // the app: the first click only arms; the popover stays open and responsive.
+      quitButton
     }
     .buttonStyle(.borderless)
     .font(.caption)
     .padding(.horizontal, 14)
-    .padding(.vertical, 9)
+    .padding(.vertical, 11)
+  }
+
+  /// Two visual states in one footer slot. Disarmed: hollow power icon that arms
+  /// on click. Armed: filled power icon tinted themed red that terminates on
+  /// click. Reopening the popover disarms it (.onAppear on the root VStack).
+  @ViewBuilder private var quitButton: some View {
+    if !quitArmed {
+      Button {
+        quitArmed = true
+      } label: {
+        Image(systemName: "power")
+      }
+      .help("Quit CCS Bar (click again to confirm)")
+    } else {
+      Button {
+        NSApplication.shared.terminate(nil)
+      } label: {
+        Image(systemName: "power.circle.fill")
+      }
+      .help("Click to confirm quit")
+      .foregroundStyle(theme.bandRed)
+    }
   }
 
   private func openDashboard() {
@@ -273,14 +295,14 @@ struct BarRowView: View {
   }
 
   var body: some View {
-    HStack(alignment: .top, spacing: 9) {
+    HStack(alignment: .top, spacing: 10) {
       Circle()
         .fill(healthColor)
         .frame(width: 8, height: 8)
         .padding(.top, 5)
 
-      VStack(alignment: .leading, spacing: 3) {
-        HStack(spacing: 6) {
+      VStack(alignment: .leading, spacing: 5) {
+        HStack(spacing: 7) {
           Text(row.displayName ?? row.accountId)
             .font(.system(.body, design: .default).weight(.medium))
             .lineLimit(1)
@@ -327,8 +349,8 @@ struct BarRowView: View {
         }
       }
     }
-    .padding(.vertical, 6)
-    .padding(.horizontal, 8)
+    .padding(.vertical, 8)
+    .padding(.horizontal, 10)
     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
   }
 
@@ -433,7 +455,7 @@ struct QuotaGaugeView: View {
           .frame(width: max(2, geo.size.width * fill))
       }
     }
-    .frame(width: 44, height: 5)
+    .frame(width: 54, height: 6)
   }
 
   private func color(for band: BarQuotaGauge.Band) -> Color {
@@ -543,7 +565,7 @@ struct Chip: View {
   }
   var body: some View {
     Text(text)
-      .font(.system(size: 9.5, weight: .semibold))
+      .font(.system(size: 10, weight: .semibold))
       .padding(.horizontal, 5)
       .padding(.vertical, 1.5)
       .background(tint.opacity(0.22), in: Capsule())

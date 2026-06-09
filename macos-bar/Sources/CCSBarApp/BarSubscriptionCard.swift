@@ -33,7 +33,7 @@ struct BarSubscriptionCard: View {
         staleFootnote
       }
     }
-    .padding(.vertical, 9)
+    .padding(.vertical, 11)
     .padding(.horizontal, 10)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
@@ -46,7 +46,7 @@ struct BarSubscriptionCard: View {
   /// Health dot + product name + reauth chip + tier chip. No pause toggle —
   /// subscriptions are not routable pool accounts.
   private var titleRow: some View {
-    HStack(spacing: 6) {
+    HStack(spacing: 8) {
       Circle()
         .fill(healthColor)
         .frame(width: 8, height: 8)
@@ -71,7 +71,7 @@ struct BarSubscriptionCard: View {
     let ordered = orderedWindows
     let bindingKey = binding?.key
 
-    return VStack(alignment: .leading, spacing: 3) {
+    return VStack(alignment: .leading, spacing: 5) {
       ForEach(ordered) { w in
         windowBarRow(w, isBinding: w.key == bindingKey)
       }
@@ -118,7 +118,7 @@ struct BarSubscriptionCard: View {
             ? .system(.caption2, design: .monospaced).weight(.semibold)
             : .system(.caption2, design: .monospaced))
         .foregroundStyle(isBinding ? .primary : .secondary)
-        .frame(width: 28, alignment: .leading)
+        .frame(width: 32, alignment: .leading)
 
       // Horizontal fill bar — wider than the old secondary thinBar so fine
       // gradations are visible. Remaining fraction fills from the left so a
@@ -127,9 +127,9 @@ struct BarSubscriptionCard: View {
         Capsule().fill(Color.primary.opacity(isBinding ? 0.14 : 0.09))
         Capsule()
           .fill(barColor)
-          .frame(width: max(2, 88 * fill))
+          .frame(width: max(2, 110 * fill))
       }
-      .frame(width: 88, height: isBinding ? 6 : 4)
+      .frame(width: 110, height: isBinding ? 7 : 5)
 
       Spacer(minLength: 5)
 
@@ -137,7 +137,7 @@ struct BarSubscriptionCard: View {
       Text("\(Int(w.remainingPercent.rounded()))%")
         .font(.system(.caption2, design: .monospaced))
         .foregroundStyle(isBinding ? barColor : .secondary)
-        .frame(width: 28, alignment: .trailing)
+        .frame(width: 32, alignment: .trailing)
 
       Spacer(minLength: 5)
 
@@ -188,7 +188,7 @@ struct BarSubscriptionCard: View {
           .foregroundStyle(isBinding ? .secondary : .tertiary)
       }
     }
-    .frame(width: 42, alignment: .trailing)
+    .frame(width: 48, alignment: .trailing)
   }
 
   /// Extract the "~Th Mm" part from paceClause for the at-risk inline warning.

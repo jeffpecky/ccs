@@ -8,7 +8,6 @@ import CCSBarCore
 struct BarPreferencesView: View {
   @ObservedObject var viewModel: BarViewModel
   let prefs: BarPreferences
-  @Environment(\.dismiss) private var dismiss
   @Environment(\.barTheme) private var theme
 
   // Local editable mirror of the persisted prefs. Loaded on appear; each change
@@ -34,7 +33,10 @@ struct BarPreferencesView: View {
       Divider()
       footer
     }
-    .frame(width: 360, height: 460)
+    // Fill the hosting window responsively (it is a real resizable NSWindow now,
+    // not a fixed 360x460 sheet) so there are no dead margins and resizing works.
+    .frame(minWidth: 420, idealWidth: 460, maxWidth: .infinity,
+           minHeight: 520, idealHeight: 600, maxHeight: .infinity)
     .onAppear(perform: hydrate)
   }
 
@@ -156,7 +158,7 @@ struct BarPreferencesView: View {
   private var footer: some View {
     HStack {
       Spacer()
-      Button("Done") { commitLevels(); dismiss() }
+      Button("Done") { commitLevels(); SettingsWindowController.shared.close() }
         .keyboardShortcut(.defaultAction)
     }
     .padding(.horizontal, 14)
