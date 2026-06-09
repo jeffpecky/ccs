@@ -392,6 +392,17 @@ do {
   check(a.monthToDate.cost != a.last30d.cost, "monthToDate is distinct from rolling last30d")
 }
 
+// MARK: compactDuration three-tier formatting
+
+check(BarQuotaGauge.compactDuration(minutes: 35) == "35m", "compactDuration <1h -> minutes only")
+check(BarQuotaGauge.compactDuration(minutes: 60) == "1h 0m", "compactDuration 1h exactly")
+check(BarQuotaGauge.compactDuration(minutes: 195) == "3h 15m", "compactDuration hours+minutes")
+// 44h 38m = 2678 min → 1d 20h (44%24=20, 44/24=1)
+check(BarQuotaGauge.compactDuration(minutes: 2678) == "1d 20h", "compactDuration 44h38m -> '1d 20h'")
+// 110h 27m = 6627 min → 4d 14h (110/24=4, 110%24=14)
+check(BarQuotaGauge.compactDuration(minutes: 6627) == "4d 14h", "compactDuration 110h27m -> '4d 14h'")
+check(BarQuotaGauge.compactDuration(minutes: 1440) == "1d 0h", "compactDuration exactly 24h -> '1d 0h'")
+
 // MARK: BarQuotaGauge band + fillFraction + countdown
 
 check(BarQuotaGauge.band(percentage: 82, status: "ok") == .green, "band >50 -> green")
@@ -426,6 +437,17 @@ do {
   check(
     BarQuotaGauge.resetCountdown(nextReset: iso12, now: now) == "resets in 12m",
     "resetCountdown formats minutes-only")
+  // Days tier: >=24h -> "Nd Nh" — 44h 38m -> "1d 20h", 110h 27m -> "4d 14h".
+  let in44h38m = now.addingTimeInterval(44 * 3600 + 38 * 60)
+  let iso44h38m = ISO8601DateFormatter().string(from: in44h38m)
+  check(
+    BarQuotaGauge.resetCountdown(nextReset: iso44h38m, now: now) == "resets in 1d 20h",
+    "resetCountdown >=24h -> days tier '1d 20h'")
+  let in110h27m = now.addingTimeInterval(110 * 3600 + 27 * 60)
+  let iso110h27m = ISO8601DateFormatter().string(from: in110h27m)
+  check(
+    BarQuotaGauge.resetCountdown(nextReset: iso110h27m, now: now) == "resets in 4d 14h",
+    "resetCountdown large duration '4d 14h'")
   let past = now.addingTimeInterval(-60)
   let isoPast = ISO8601DateFormatter().string(from: past)
   check(
@@ -1106,14 +1128,25 @@ do {
 
 do {
   let now = Date(timeIntervalSince1970: 1_700_000_000)
-  let resetIn150 = ISO8601DateFormatter().string(from: now.addingTimeInterval(150 * 60))
 
-  // Finite projection -> "~Hh Mm left at this pace".
+  // At-risk scenario: window=300min, reset in 200min → elapsed=100min.
+  // usedPercent=75 → burn = (100-75)*100/75 ≈ 33 min. 33 < 200 → at-risk → shows pace.
+  let resetIn200 = ISO8601DateFormatter().string(from: now.addingTimeInterval(200 * 60))
   let finite = BarQuotaGauge.paceClause(
-    usedPercent: 50, remainingPercent: 50, resetAt: resetIn150, windowMinutes: 300, now: now)
-  check(finite == "~2h 30m left at this pace", "pace: finite -> '~2h 30m left at this pace'")
+    usedPercent: 75, remainingPercent: 25, resetAt: resetIn200, windowMinutes: 300, now: now)
+  check(finite?.hasPrefix("~") == true && finite?.hasSuffix("left at this pace") == true,
+    "pace: at-risk (burn < reset) -> shows pace clause")
+
+  // NOT at-risk: burn > minutesToReset — pace must be nil (the core fix).
+  // window=300min, reset in 50min → elapsed=250min. usedPercent=50 →
+  // burn = (100-50)*250/50 = 250 min. 250 > 50 → NOT at risk → nil.
+  let resetIn50 = ISO8601DateFormatter().string(from: now.addingTimeInterval(50 * 60))
+  let notAtRisk = BarQuotaGauge.paceClause(
+    usedPercent: 50, remainingPercent: 50, resetAt: resetIn50, windowMinutes: 300, now: now)
+  check(notAtRisk == nil, "pace: burn > reset (not at risk) -> nil (omit — core bug fix)")
 
   // Lots of headroom -> "plenty at this pace".
+  let resetIn150 = ISO8601DateFormatter().string(from: now.addingTimeInterval(150 * 60))
   let plenty = BarQuotaGauge.paceClause(
     usedPercent: 10, remainingPercent: 90, resetAt: resetIn150, windowMinutes: 300, now: now)
   check(plenty == "plenty at this pace", "pace: >=85% remaining -> 'plenty at this pace'")
@@ -1131,7 +1164,8 @@ do {
     "pace: 0% remaining -> 'limit reached, resets in ...'")
 
   // < 5 min floor -> limit-reached path, never a scary "~0m".
-  // usedPercent 99 over 150min elapsed -> ~1.5 min remaining (<5).
+  // window=300min, reset in 150min → elapsed=150min. usedPercent=99 →
+  // burn = (100-99)*150/99 ≈ 1.5 min → floor hit → "limit reached".
   let nearFloor = BarQuotaGauge.paceClause(
     usedPercent: 99, remainingPercent: 1, resetAt: resetIn150, windowMinutes: 300, now: now)
   check(
@@ -1148,6 +1182,48 @@ do {
   let past = BarQuotaGauge.paceClause(
     usedPercent: 50, remainingPercent: 50, resetAt: pastReset, windowMinutes: 300, now: now)
   check(past == nil, "pace: past resetAt -> nil pace")
+}
+
+// MARK: atRisk boolean
+
+do {
+  let now = Date(timeIntervalSince1970: 1_700_000_000)
+
+  // At-risk: burn(33m) < minutesToReset(200m) → true.
+  let resetIn200 = ISO8601DateFormatter().string(from: now.addingTimeInterval(200 * 60))
+  let isAtRisk = BarQuotaGauge.atRisk(
+    usedPercent: 75, remainingPercent: 25, resetAt: resetIn200, windowMinutes: 300, now: now)
+  check(isAtRisk == true, "atRisk: burn < reset -> true")
+
+  // NOT at-risk: burn(250m) > minutesToReset(50m) → false.
+  let resetIn50 = ISO8601DateFormatter().string(from: now.addingTimeInterval(50 * 60))
+  let notAtRisk = BarQuotaGauge.atRisk(
+    usedPercent: 50, remainingPercent: 50, resetAt: resetIn50, windowMinutes: 300, now: now)
+  check(notAtRisk == false, "atRisk: burn > reset -> false")
+
+  // Exhausted (remaining=0) → false (handled by limit-reached path, not atRisk).
+  let resetIn150 = ISO8601DateFormatter().string(from: now.addingTimeInterval(150 * 60))
+  check(
+    BarQuotaGauge.atRisk(
+      usedPercent: 100, remainingPercent: 0, resetAt: resetIn150, windowMinutes: 300, now: now)
+      == false,
+    "atRisk: exhausted -> false")
+
+  // Unknown window → false.
+  check(
+    BarQuotaGauge.atRisk(
+      usedPercent: 75, remainingPercent: 25, resetAt: nil, windowMinutes: nil, now: now)
+      == false,
+    "atRisk: unknown window -> false")
+
+  // Large weekly burn in screenshot scenario: weekly window resets in ~9h 2m (542 min),
+  // usedPercent=59 over elapsed=(10080-542)=9538 min → burn ≈ (41*9538)/59 ≈ 6626 min.
+  // 6626 > 542 → NOT at risk (this was the nonsensical "~110h left" shown to user).
+  let resetIn542m = ISO8601DateFormatter().string(from: now.addingTimeInterval(542 * 60))
+  let weeklyNotAtRisk = BarQuotaGauge.atRisk(
+    usedPercent: 59, remainingPercent: 41, resetAt: resetIn542m, windowMinutes: 10080, now: now)
+  check(weeklyNotAtRisk == false,
+    "atRisk: weekly window resetting in 9h, burn projecting 100+h -> false (screenshot fix)")
 }
 
 // MARK: headroomLeader

@@ -17,20 +17,20 @@ enum BarCardFormatting {
     return plain.date(from: iso)
   }
 
-  /// Compact reset form for the Opus/Sonnet split + secondary lines:
-  ///   <24h  → "2h 18m"
-  ///   <7d   → weekday, e.g. "Fri"
-  ///   >=7d  → "Jun 14"
+  /// Compact reset form for the per-window bar chips and split lines:
+  ///   <24h  → compact duration via BarQuotaGauge.compactDuration (e.g. "3h 15m", "22m")
+  ///   <7d   → weekday abbreviation (e.g. "Fri")
+  ///   >=7d  → calendar date (e.g. "Jun 14")
   /// Returns nil for a missing/unparseable timestamp (caller omits the clause).
   static func shortReset(iso: String?, now: Date) -> String? {
     guard let iso, let date = isoDate(iso) else { return nil }
     let secs = date.timeIntervalSince(now)
     if secs <= 0 { return "due" }
     if secs < 24 * 3600 {
-      let total = Int(secs / 60)
-      let h = total / 60
-      let m = total % 60
-      return h > 0 ? "\(h)h \(m)m" : "\(m)m"
+      // Delegate to Core's authoritative compactDuration so both layers are
+      // consistent and the days-tier is automatically handled if ever needed.
+      let totalMinutes = Int(secs / 60)
+      return BarQuotaGauge.compactDuration(minutes: totalMinutes)
     }
     let fmt = DateFormatter()
     fmt.locale = Locale(identifier: "en_US_POSIX")

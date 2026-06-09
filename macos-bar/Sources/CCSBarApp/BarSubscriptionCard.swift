@@ -1,44 +1,35 @@
 import SwiftUI
 import CCSBarCore
 
-/// Dedicated, detailed card for a native first-party subscription (Claude Code /
-/// Codex). Replaces the cramped generic `BarRowView` for native rows so the
-/// user's own plan quota reads as the cockpit hero: a single-column vertical
-/// stack, one fact per line, no 2-column flex wrap.
+/// Dedicated card for a first-party subscription (Claude Code / Codex).
 ///
-/// Why this exists separately from `BarRowView`: the generic row double-labelled
-/// the product, showed a confusing "no data" cost cell, and carried pause/solo +
-/// tier-lock controls that make no sense for a non-routable flat-rate
-/// subscription. Stripping those four elements and stacking the windows
-/// vertically is the de-cramping fix. All binding/burn math is pulled fresh at
-/// render from `BarQuotaGauge` (pure Core) so the pace clause reflects `now`.
+/// Design goal: bar-first, glanceable in under a second. Each quota window is
+/// rendered as an aligned row:
+///   <label>  [████████░░░░]  41%   9h 2m
+///
+/// The binding window (the one the subscription runs out of first) is
+/// highlighted and is the only place where the at-risk pace warning appears.
+/// Verbose prose lines ("week window · resets in ...") are removed entirely.
 struct BarSubscriptionCard: View {
   let row: BarSummaryRow
-  /// Injected so the pace/countdown math is deterministic; defaults to the live
-  /// clock in production and is pinned in previews.
+  /// Injected clock — defaults to live Date() in production, pinned in previews
+  /// and tests so countdown math is deterministic.
   var now: Date = Date()
 
-  /// Windows decoded from the row; empty for error/reauth rows (no hero gauge).
   private var windows: [QuotaWindowDetail] { row.quotaWindows ?? [] }
 
-  /// The window the subscription runs out of first (lowest remaining). Drives the
-  /// hero gauge; nil when there is no quota data (error/reauth row).
   private var binding: QuotaWindowDetail? {
     BarQuotaGauge.selectBindingWindow(windows)
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 7) {
+    VStack(alignment: .leading, spacing: 6) {
       titleRow
-      if let binding {
-        heroBlock(binding)
-        if let secondary = secondaryWindow(excluding: binding) {
-          secondaryLine(secondary)
-        }
-        opusSonnetLines
-        staleFootnote
-      } else {
+      if windows.isEmpty {
         emptyState
+      } else {
+        windowBarList
+        staleFootnote
       }
     }
     .padding(.vertical, 9)
@@ -49,11 +40,10 @@ struct BarSubscriptionCard: View {
       in: RoundedRectangle(cornerRadius: 9))
   }
 
-  // MARK: Title
+  // MARK: Title row
 
-  /// Product name + tier chip. No provider-chip echo, no "subscription" badge
-  /// (the section header carries that), no pause toggle, no overflow menu —
-  /// those four removals are the de-cramping fix.
+  /// Health dot + product name + reauth chip + tier chip. No pause toggle —
+  /// subscriptions are not routable pool accounts.
   private var titleRow: some View {
     HStack(spacing: 6) {
       Circle()
@@ -72,148 +62,174 @@ struct BarSubscriptionCard: View {
     }
   }
 
-  // MARK: Hero (binding window)
+  // MARK: Window bar list
 
-  private func heroBlock(_ w: QuotaWindowDetail) -> some View {
+  /// All quota windows rendered as aligned bar rows, binding window highlighted.
+  private var windowBarList: some View {
+    // Ordered display: core windows first (5h, week), then Opus/Sonnet.
+    let ordered = orderedWindows
+    let bindingKey = binding?.key
+
+    return VStack(alignment: .leading, spacing: 3) {
+      ForEach(ordered) { w in
+        windowBarRow(w, isBinding: w.key == bindingKey)
+      }
+    }
+  }
+
+  /// Stable display order: five_hour → seven_day → seven_day_opus → seven_day_sonnet.
+  private var orderedWindows: [QuotaWindowDetail] {
+    windows.sorted { a, b in
+      keyRank(a.key) < keyRank(b.key)
+    }
+  }
+
+  private func keyRank(_ key: String) -> Int {
+    switch key {
+    case "five_hour": return 0
+    case "seven_day": return 1
+    case "seven_day_opus": return 2
+    case "seven_day_sonnet": return 3
+    default: return 4
+    }
+  }
+
+  /// One bar row: short label | bar | remaining% | reset chip | [atRisk warning].
+  ///
+  /// Layout uses fixed column widths so bars across rows align vertically,
+  /// making headroom comparisons instant.
+  private func windowBarRow(_ w: QuotaWindowDetail, isBinding: Bool) -> some View {
     let band = BarQuotaGauge.band(percentage: w.remainingPercent, status: "ok")
     let fill = BarQuotaGauge.fillFraction(percentage: w.remainingPercent, status: "ok") ?? 0
-    return VStack(alignment: .leading, spacing: 5) {
-      HStack(alignment: .center, spacing: 8) {
-        heroGauge(fill: fill, color: color(for: band))
-        Text("\(Int(w.remainingPercent.rounded()))% left")
-          .font(.system(.callout, design: .rounded).weight(.semibold))
-          .foregroundStyle(color(for: band))
-      }
-      Text(heroFacts(w))
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-  }
+    let barColor = color(for: band)
+    let isAtRisk = isBinding && BarQuotaGauge.atRisk(
+      usedPercent: w.usedPercent,
+      remainingPercent: w.remainingPercent,
+      resetAt: w.resetAt,
+      windowMinutes: w.windowMinutes,
+      now: now)
 
-  /// Full-width hero gauge bar, filled by the remaining fraction and tinted by
-  /// the severity band (reuses Core band/fill math).
-  private func heroGauge(fill: Double, color: Color) -> some View {
-    GeometryReader { geo in
+    return HStack(spacing: 0) {
+      // Short label: max 5 chars to keep alignment tight.
+      Text(shortLabel(for: w))
+        .font(
+          isBinding
+            ? .system(.caption2, design: .monospaced).weight(.semibold)
+            : .system(.caption2, design: .monospaced))
+        .foregroundStyle(isBinding ? .primary : .secondary)
+        .frame(width: 28, alignment: .leading)
+
+      // Horizontal fill bar — wider than the old secondary thinBar so fine
+      // gradations are visible. Remaining fraction fills from the left so a
+      // full bar = healthy, an empty bar = exhausted.
       ZStack(alignment: .leading) {
-        Capsule().fill(Color.primary.opacity(0.12))
+        Capsule().fill(Color.primary.opacity(isBinding ? 0.14 : 0.09))
         Capsule()
-          .fill(color)
-          .frame(width: max(3, geo.size.width * fill))
+          .fill(barColor)
+          .frame(width: max(2, 88 * fill))
+      }
+      .frame(width: 88, height: isBinding ? 6 : 4)
+
+      Spacer(minLength: 5)
+
+      // Remaining percentage — monospaced so digits are column-stable.
+      Text("\(Int(w.remainingPercent.rounded()))%")
+        .font(.system(.caption2, design: .monospaced))
+        .foregroundStyle(isBinding ? barColor : .secondary)
+        .frame(width: 28, alignment: .trailing)
+
+      Spacer(minLength: 5)
+
+      // Compact reset chip — terse duration or calendar date.
+      resetChip(for: w, isBinding: isBinding)
+
+      // At-risk warning: shown only on the binding window when pace says we
+      // will exhaust before the reset. Kept compact (⚠ + duration) so the
+      // row does not blow out to a second line.
+      if isAtRisk, let pace = paceWarningText(for: w) {
+        Text(pace)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(.orange)
+          .lineLimit(1)
+          .padding(.leading, 5)
       }
     }
-    .frame(height: 7)
-    .frame(maxWidth: .infinity)
   }
 
-  /// One wrapped facts line: "<label> window · resets <countdown> · <pace>".
-  /// When pace is nil the line ends after the reset countdown; when the limit is
-  /// reached the pace clause replaces the bare countdown.
-  private func heroFacts(_ w: QuotaWindowDetail) -> String {
-    let pace = BarQuotaGauge.paceClause(
+  /// Terse window label for the bar list, at most 4-5 chars:
+  ///   five_hour          → "5h"
+  ///   seven_day          → "wk"
+  ///   seven_day_opus     → "Son" (sic — this is the Opus sub-budget inside the week)
+  ///   seven_day_sonnet   → "Son"
+  ///
+  /// Fall back to the backend-supplied label truncated to 5 chars so unknown
+  /// future keys still render acceptably.
+  private func shortLabel(for w: QuotaWindowDetail) -> String {
+    switch w.key {
+    case "five_hour": return "5h"
+    case "seven_day": return "wk"
+    case "seven_day_opus": return "Opus"
+    case "seven_day_sonnet": return "Son"
+    default:
+      let s = w.label
+      return s.count <= 5 ? s : String(s.prefix(4)) + "…"
+    }
+  }
+
+  /// Compact reset chip: muted small text showing how long until the window
+  /// refreshes. Uses BarCardFormatting.shortReset which delegates to Core's
+  /// compactDuration for <24h durations (days-tier included).
+  private func resetChip(for w: QuotaWindowDetail, isBinding: Bool) -> some View {
+    Group {
+      if let t = BarCardFormatting.shortReset(iso: w.resetAt, now: now) {
+        Text(t)
+          .font(.system(.caption2, design: .monospaced))
+          .foregroundStyle(isBinding ? .secondary : .tertiary)
+      }
+    }
+    .frame(width: 42, alignment: .trailing)
+  }
+
+  /// Extract the "~Th Mm" part from paceClause for the at-risk inline warning.
+  /// Returns nil when paceClause returns nil or the limit-reached path fires
+  /// (those are handled by the bar color, not an extra label).
+  private func paceWarningText(for w: QuotaWindowDetail) -> String? {
+    guard let clause = BarQuotaGauge.paceClause(
       usedPercent: w.usedPercent,
       remainingPercent: w.remainingPercent,
       resetAt: w.resetAt,
       windowMinutes: w.windowMinutes,
       status: row.quotaStatus,
-      now: now)
-    // The limit-reached pace clause already carries "resets in ...", so it
-    // stands in for the countdown rather than appending to it.
-    if let pace, pace.hasPrefix("limit reached") {
-      return "\(w.label) window · \(pace)"
-    }
-    var parts = ["\(w.label) window"]
-    if let countdown = BarQuotaGauge.resetCountdown(nextReset: w.resetAt, now: now) {
-      parts.append(countdown)
-    }
-    if let pace { parts.append(pace) }
-    return parts.joined(separator: " · ")
+      now: now),
+      clause.hasPrefix("~")
+    else { return nil }
+    // Strip "left at this pace" suffix to keep the inline chip terse.
+    // "~2h 30m left at this pace" → "⚠ ~2h 30m"
+    let core = clause
+      .replacingOccurrences(of: " left at this pace", with: "")
+    return "⚠ \(core)"
   }
 
-  // MARK: Secondary window
+  // MARK: Stale footnote (Codex older-session data)
 
-  /// The other core window (the non-binding of five_hour / seven_day) shown as a
-  /// thin inline bar plus a compact remaining + reset line. Opus/Sonnet are NOT
-  /// secondary candidates — they have their own split lines.
-  private func secondaryWindow(excluding binding: QuotaWindowDetail) -> QuotaWindowDetail? {
-    let core = windows.filter { $0.key == "five_hour" || $0.key == "seven_day" }
-    return core.first { $0.key != binding.key }
-  }
-
-  private func secondaryLine(_ w: QuotaWindowDetail) -> some View {
-    let band = BarQuotaGauge.band(percentage: w.remainingPercent, status: "ok")
-    let fill = BarQuotaGauge.fillFraction(percentage: w.remainingPercent, status: "ok") ?? 0
-    return HStack(spacing: 6) {
-      thinBar(fill: fill, color: color(for: band))
-      Text("\(w.label)  \(Int(w.remainingPercent.rounded()))%")
-        .font(.system(.caption2, design: .monospaced))
-        .foregroundStyle(.secondary)
-      if let countdown = BarQuotaGauge.resetCountdown(nextReset: w.resetAt, now: now) {
-        Text("· \(countdown)")
-          .font(.caption2)
-          .foregroundStyle(.tertiary)
-          .lineLimit(1)
-      }
-      Spacer(minLength: 0)
-    }
-  }
-
-  // MARK: Opus / Sonnet split (Claude Max only)
-
-  /// Indented Opus/Sonnet weekly sub-lines, present only when the row carries the
-  /// seven_day_opus / seven_day_sonnet windows (Claude Max). Omitted gracefully
-  /// for Pro / Codex.
-  @ViewBuilder private var opusSonnetLines: some View {
-    let opus = windows.first { $0.key == "seven_day_opus" }
-    let sonnet = windows.first { $0.key == "seven_day_sonnet" }
-    if opus != nil || sonnet != nil {
-      VStack(alignment: .leading, spacing: 2) {
-        if let opus { splitLine(title: "Opus", w: opus) }
-        if let sonnet { splitLine(title: "Sonnet", w: sonnet) }
-      }
-    }
-  }
-
-  private func splitLine(title: String, w: QuotaWindowDetail) -> some View {
-    HStack(spacing: 4) {
-      Text("└ \(title)")
-        .font(.caption2)
-        .foregroundStyle(.tertiary)
-      Text("\(Int(w.remainingPercent.rounded()))%")
-        .font(.system(.caption2, design: .monospaced))
-        .foregroundStyle(.secondary)
-      if let short = BarCardFormatting.shortReset(iso: w.resetAt, now: now) {
-        Text("· resets \(short)")
-          .font(.caption2)
-          .foregroundStyle(.tertiary)
-          .lineLimit(1)
-      }
-      Spacer(minLength: 0)
-    }
-  }
-
-  // MARK: Stale footnote (Codex only)
-
-  /// Muted "as of <HH:mm> (older session)" caption when the Codex reading came
-  /// from an older session. The gauge/percent still render normally — the data is
-  /// real, only its freshness is qualified. Never fakes a "live" badge.
+  /// "as of HH:mm (older session)" caption when the Codex reading came from an
+  /// older session. The bar still renders — the data is real, just not live.
   @ViewBuilder private var staleFootnote: some View {
     if let stale = row.staleAsOf, let clock = BarCardFormatting.clockTime(iso: stale) {
       HStack(spacing: 4) {
         Image(systemName: "clock.arrow.circlepath")
           .font(.system(size: 9))
           .foregroundStyle(.tertiary)
-        Text("as of \(clock) (older session)")
+        Text("as of \(clock), older session")
           .font(.caption2)
           .foregroundStyle(.tertiary)
       }
     }
   }
 
-  // MARK: Empty / error
+  // MARK: Empty / error state
 
-  /// No quota windows (reauth / error row): no hero gauge, just the honest
-  /// tri-state quota label. Never shows a "no data" cost cell.
+  /// No quota windows (reauth / error row): plain status text, no bar.
   private var emptyState: some View {
     Text(
       row.needsReauth
@@ -224,15 +240,7 @@ struct BarSubscriptionCard: View {
     .foregroundStyle(.secondary)
   }
 
-  // MARK: Shared visuals
-
-  private func thinBar(fill: Double, color: Color) -> some View {
-    ZStack(alignment: .leading) {
-      Capsule().fill(Color.primary.opacity(0.10))
-      Capsule().fill(color).frame(width: max(2, 40 * fill))
-    }
-    .frame(width: 40, height: 4)
-  }
+  // MARK: Shared helpers
 
   private var healthColor: Color {
     switch row.health {

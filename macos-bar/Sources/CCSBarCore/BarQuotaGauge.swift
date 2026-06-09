@@ -36,19 +36,17 @@ public enum BarQuotaGauge {
     return min(1, max(0, pct / 100))
   }
 
-  /// Human countdown to the next quota reset, e.g. "resets in 3h 12m",
-  /// "resets in 12m", or "resets soon" when the reset time is at/in the past.
-  /// Returns nil for a nil or unparseable timestamp. `now` is injected so the
-  /// formatting is deterministic and unit-testable.
+  /// Human countdown to the next quota reset, e.g. "resets in 1d 21h",
+  /// "resets in 3h 12m", "resets in 12m", or "resets soon" when the reset
+  /// time is at/in the past. Returns nil for nil/unparseable timestamps.
+  /// `now` is injected so the formatting is deterministic and unit-testable.
   public static func resetCountdown(nextReset: String?, now: Date) -> String? {
     guard let nextReset, let reset = BarFormatting.isoDate(nextReset) else { return nil }
     let secs = reset.timeIntervalSince(now)
     if secs <= 0 { return "resets soon" }
     let totalMinutes = Int(secs / 60)
-    let hours = totalMinutes / 60
-    let minutes = totalMinutes % 60
-    if hours > 0 { return "resets in \(hours)h \(minutes)m" }
-    return "resets in \(minutes)m"
+    // Three-tier: days (>=24h) → hours+minutes (1h-24h) → minutes-only (<1h).
+    return "resets in \(compactDuration(minutes: totalMinutes))"
   }
 
   // MARK: Burn-rate projection (single-window, no history)
@@ -113,6 +111,37 @@ public enum BarQuotaGauge {
     }
   }
 
+  /// Whether a window is GENUINELY at risk of exhaustion before it resets.
+  ///
+  /// Returns true only when the projected exhaustion time (burn rate × remaining
+  /// headroom) is LESS than the time remaining until the next reset — i.e. the
+  /// user will hit the wall before the window refreshes. When the projection is
+  /// larger than the reset countdown the warning is meaningless (the quota will
+  /// reset before running out), so atRisk returns false and no scary number is
+  /// shown. Inputs mirror `paceClause`; `now` is injected for testability.
+  public static func atRisk(
+    usedPercent: Double,
+    remainingPercent: Double,
+    resetAt: String?,
+    windowMinutes: Int?,
+    status: String = "ok",
+    now: Date
+  ) -> Bool {
+    guard status != "rejected", remainingPercent > 0 else { return false }
+    guard let resetDateStr = resetAt,
+          let resetDate = BarFormatting.isoDate(resetDateStr)
+    else { return false }
+    let minutesToReset = resetDate.timeIntervalSince(now) / 60
+    guard minutesToReset > 0 else { return false }
+    guard let burn = burnMinutesRemaining(
+      usedPercent: usedPercent, resetAt: resetDate, windowMinutes: windowMinutes, now: now)
+    else { return false }
+    // burn == 0 means already exhausted — that is handled by the exhausted path, not atRisk.
+    guard burn > 0 else { return false }
+    // Only at-risk when we will exhaust BEFORE the window resets.
+    return Double(burn) < minutesToReset
+  }
+
   /// Trailing pace clause for a window's hero/footer line, or nil to OMIT it.
   ///
   /// Phrasing rules (in order):
@@ -120,11 +149,12 @@ public enum BarQuotaGauge {
   ///     resets in <countdown>". This REPLACES the bare reset countdown.
   ///   - lots of headroom (remaining >= 85) or near-zero usage (burn == nil) →
   ///     "plenty at this pace".
-  ///   - a finite projection m >= 5 → "~<Hh Mm> left at this pace".
-  ///   - m < 5 → routed to the limit-reached path (never a scary "~0m").
+  ///   - at-risk (projected exhaustion BEFORE reset): a finite projection m >= 5
+  ///     → "~<Hh Mm> left at this pace". m < 5 → limit-reached path.
+  ///   - NOT at-risk (burn > minutesToReset): the projection is beyond the reset,
+  ///     so showing the number is misleading — return nil (omit entirely).
   ///   - unknown window (windowMinutes/resetAt nil, elapsed <= 0) → nil (omit).
-  ///   - resetAt already in the past (clock skew / stale) → nil pace; the
-  ///     countdown elsewhere shows "reset due".
+  ///   - resetAt already in the past (clock skew / stale) → nil pace.
   public static func paceClause(
     usedPercent: Double,
     remainingPercent: Double,
@@ -165,14 +195,32 @@ public enum BarQuotaGauge {
       }
       return "limit reached"
     }
+
+    // Core at-risk gate: only show the projection when exhaustion is BEFORE the
+    // reset. If burn >= minutesToReset the quota will outlast the window and the
+    // number would be larger than the reset countdown — meaningless and confusing.
+    let minutesToReset = resetDate.map { $0.timeIntervalSince(now) / 60 } ?? 0
+    guard Double(m) < minutesToReset else { return nil }
+
     return "~\(compactDuration(minutes: m)) left at this pace"
   }
 
-  /// Compact "Hh Mm" / "Mm" duration for pace phrasing (e.g. "2h 5m", "35m").
-  static func compactDuration(minutes: Int) -> String {
-    let h = minutes / 60
+  /// Compact terse duration with a three-tier scale:
+  ///   >= 24h  → "Nd Nh"  (e.g. 1590m → "1d 2h", 2678m → "1d 21h")
+  ///   1h–24h  → "Hh Mm"  (e.g. 195m  → "3h 15m")
+  ///   < 1h    → "Mm"     (e.g. 35m   → "35m")
+  ///
+  /// Named `compactDuration` and `public` so it is reusable from App-side
+  /// formatting (BarCardFormatting) without duplicating the logic.
+  public static func compactDuration(minutes: Int) -> String {
+    let totalHours = minutes / 60
     let m = minutes % 60
-    if h > 0 { return "\(h)h \(m)m" }
+    if totalHours >= 24 {
+      let d = totalHours / 24
+      let h = totalHours % 24
+      return "\(d)d \(h)h"
+    }
+    if totalHours > 0 { return "\(totalHours)h \(m)m" }
     return "\(m)m"
   }
 
