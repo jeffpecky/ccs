@@ -1347,6 +1347,38 @@ do {
   defaults.removePersistentDomain(forName: suiteName)
 }
 
+// MARK: SpendChartStyle — enum stability + store round-trip
+
+// Default is .bars (the pre-existing render mode; no visual regression on upgrade).
+check(SpendChartStyle.bars.rawValue == "bars", "SpendChartStyle .bars rawValue stable")
+check(SpendChartStyle.line.rawValue == "line", "SpendChartStyle .line rawValue stable")
+check(SpendChartStyle(rawValue: "bars") == .bars, "SpendChartStyle round-trip bars")
+check(SpendChartStyle(rawValue: "line") == .line, "SpendChartStyle round-trip line")
+check(SpendChartStyle(rawValue: "unknown") == nil, "SpendChartStyle unknown rawValue -> nil")
+check(SpendChartStyle.allCases.count == 2, "SpendChartStyle has exactly 2 cases")
+
+// Store round-trip: save .line -> load() == .line; absent key defaults to .bars.
+do {
+  let suiteName = "ccs-bar-check-chart-\(ProcessInfo.processInfo.globallyUniqueString)"
+  let defaults = UserDefaults(suiteName: suiteName)!
+  // Absent key -> .bars (the default).
+  let raw = defaults.string(forKey: SpendChartStyleStore.defaultsKey)
+    ?? SpendChartStyle.bars.rawValue
+  check(SpendChartStyle(rawValue: raw) == .bars,
+    "SpendChartStyleStore defaults to .bars on absent key")
+  // Save .line -> load .line.
+  defaults.set(SpendChartStyle.line.rawValue, forKey: SpendChartStyleStore.defaultsKey)
+  let back = SpendChartStyle(rawValue:
+    defaults.string(forKey: SpendChartStyleStore.defaultsKey) ?? "")
+  check(back == .line, "SpendChartStyleStore round-trips save(.line) -> .line")
+  // Garbage -> nil (coalesces to .bars on live load).
+  defaults.set("nonsense", forKey: SpendChartStyleStore.defaultsKey)
+  let g = SpendChartStyle(rawValue:
+    defaults.string(forKey: SpendChartStyleStore.defaultsKey) ?? "")
+  check(g == nil, "SpendChartStyleStore garbage raw -> nil (coalesces to .bars)")
+  defaults.removePersistentDomain(forName: suiteName)
+}
+
 // cleanup
 try? FileManager.default.removeItem(atPath: tmp)
 

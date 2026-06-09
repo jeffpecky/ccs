@@ -50,9 +50,12 @@ struct BarMenuView: View {
             accountsSection
 
             // (3) SPEND — demoted to a thin informational strip below the cockpit.
+            // spendChartStyle is threaded from the viewModel so a live change in
+            // Settings immediately updates the chart without a refresh.
             if let analytics = viewModel.analytics {
               Divider()
-              BarAnalyticsView(analytics: analytics, section: .spend)
+              BarAnalyticsView(analytics: analytics, section: .spend,
+                               spendChartStyle: viewModel.spendChartStyle)
             }
 
             // (4) POOL ACCOUNTS — compact generic rows, subordinate.
@@ -72,17 +75,18 @@ struct BarMenuView: View {
           .padding(14)
         }
         .scrollIndicators(.never)
-        // 620 fits the full reordered layout (subscription cards + spend strip +
-        // pool rows + surface/models) plus the added vertical breathing room
-        // before scroll engages, for a typical 1-4 account setup. Scroll engages
-        // gracefully only on real overflow.
-        .frame(maxHeight: 620)
+        // 700 gives more vertical breathing room before scroll engages — useful
+        // for 3-4 subscription cards each carrying multiple quota windows.
+        // Scroll still engages gracefully on genuine overflow.
+        .frame(maxHeight: 700)
       }
 
       Divider()
       footer
     }
-    .frame(width: 380)
+    // 360 is narrower than the old 380, keeping the popover compact while still
+    // fitting the bar-list fixed column widths (label 32 + bar 110 + pct 32 + chip 48).
+    .frame(width: 360)
     .onAppear {
       viewModel.onOpen()
       // Disarm quit on every popover open so a stale armed state never persists.

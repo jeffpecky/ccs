@@ -24,7 +24,9 @@ struct BarSubscriptionCard: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
+    // spacing: 4 (down from 6) and vertical padding: 8 (down from 11) keep the
+    // card compact so 2-3 cards fit in the dropdown without triggering scroll.
+    VStack(alignment: .leading, spacing: 4) {
       titleRow
       if windows.isEmpty {
         emptyState
@@ -33,7 +35,7 @@ struct BarSubscriptionCard: View {
         staleFootnote
       }
     }
-    .padding(.vertical, 11)
+    .padding(.vertical, 8)
     .padding(.horizontal, 10)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
@@ -71,7 +73,9 @@ struct BarSubscriptionCard: View {
     let ordered = orderedWindows
     let bindingKey = binding?.key
 
-    return VStack(alignment: .leading, spacing: 5) {
+    // spacing: 4 (down from 5) — rows are already compact; tighter gap fits more
+    // without hurting legibility.
+    return VStack(alignment: .leading, spacing: 4) {
       ForEach(ordered) { w in
         windowBarRow(w, isBinding: w.key == bindingKey)
       }

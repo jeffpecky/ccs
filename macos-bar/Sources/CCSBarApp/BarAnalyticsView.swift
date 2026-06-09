@@ -19,6 +19,9 @@ struct BarAnalyticsView: View {
   /// top-models detail placed below the pool accounts.
   enum Section { case spend, breakdown }
   var section: Section = .spend
+  /// Controls whether the spend sparkline renders as bars or a line graph.
+  /// Passed in by BarMenuView so it reflects the user's persisted choice live.
+  var spendChartStyle: SpendChartStyle = .bars
 
   private var lastActive: String? {
     BarFormatting.lastActiveLabel(
@@ -74,8 +77,10 @@ struct BarAnalyticsView: View {
           .font(.caption2)
           .foregroundStyle(.secondary)
         if !sparklineIsEmpty {
-          Sparkline(values: analytics.byDay.map(\.cost), accent: theme.accent)
-            .frame(height: 18)
+          // height: 30 (up from 18) so daily spend gradations are clearly readable.
+          Sparkline(values: analytics.byDay.map(\.cost), accent: theme.accent,
+                    style: spendChartStyle)
+            .frame(height: 30)
         }
       } else {
         Text(idleCaption)

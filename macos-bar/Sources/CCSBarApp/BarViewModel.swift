@@ -25,6 +25,11 @@ final class BarViewModel: ObservableObject {
   /// Which figure leads the always-on title. Persisted; a change re-derives
   /// `statusTitle` live because it is @Published.
   @Published var glanceMode: BarGlanceMode
+  /// Render style for the spend sparkline (bars or line). Persisted via
+  /// SpendChartStyleStore; didSet mirrors the BarAppearance/iconStyle pattern.
+  @Published var spendChartStyle: SpendChartStyle {
+    didSet { SpendChartStyleStore.save(spendChartStyle) }
+  }
   /// The alerts the most recent evaluation wanted delivered, surfaced in the
   /// dropdown so users who deny notifications still see the conditions.
   @Published var activeAlerts: [BarNotification] = []
@@ -51,6 +56,7 @@ final class BarViewModel: ObservableObject {
     self.iconStyle = MenuBarIcon.loadStyle()
     self.appearance = BarAppearanceStore.load()
     self.glanceMode = prefs.load().glanceMode
+    self.spendChartStyle = SpendChartStyleStore.load()
     reconnect()
   }
 

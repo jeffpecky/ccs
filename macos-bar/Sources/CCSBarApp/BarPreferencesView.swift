@@ -51,16 +51,22 @@ struct BarPreferencesView: View {
     .padding(.vertical, 10)
   }
 
-  /// Theme picker — placed first because it affects the whole dropdown, so it is
-  /// the most prominent setting. Bound directly to `$viewModel.appearance` (NOT
-  /// the alert-pref draft): appearance is global chrome, its `didSet` persists,
-  /// and @Published drives the live re-render — no writeThrough() needed.
+  /// Theme + chart style. Appearance affects the whole dropdown; chart style is
+  /// scoped to the spend sparkline. Both are bound directly to viewModel properties
+  /// whose `didSet` persist — no writeThrough() needed here.
   private var appearanceSection: some View {
     Section("Appearance") {
       Picker("Menu bar theme", selection: $viewModel.appearance) {
         Text("System").tag(BarAppearance.system)
         Text("Light").tag(BarAppearance.light)
         Text("Dark").tag(BarAppearance.dark)
+      }
+      .pickerStyle(.segmented)
+      // Changing this live-updates the spend chart in the open dropdown because
+      // viewModel.spendChartStyle is @Published and SpendChartStyleStore persists it.
+      Picker("Spend graph", selection: $viewModel.spendChartStyle) {
+        Text("Bars").tag(SpendChartStyle.bars)
+        Text("Line").tag(SpendChartStyle.line)
       }
       .pickerStyle(.segmented)
     }
