@@ -21,13 +21,16 @@
  *   a dedicated temp dir set to CCS_HOME before each test.  This gives full
  *   control without touching the facade mock surface.
  *
- * Note on isolation: Bun runs each test FILE in its own worker process, so
- * process.env.CCS_HOME is NOT shared across test files.  The previous 2-test
- * failure ("clearing tier_lock (null)" and "no tier_lock") was caused by
- * within-file state leakage: an earlier test wrote {agy:'ultra',claude:'pro'}
- * to disk, and invalidateConfigCache() only cleared the facade's memoisation
- * cache — loadOrCreateUnifiedConfig still read the stale disk state.  The fix
- * is to explicitly re-write the config file in every test that needs null-lock.
+ * Note on isolation: Bun workers are REUSED across test files within a single
+ * bun test invocation (Bun 1.3.x, up to --max-concurrency files per worker).
+ * mock.module() is GLOBAL and STICKY for the lifetime of a worker — it does NOT
+ * reset between files, and mock.restore() does NOT unwind mock.module() calls.
+ * To prevent leaking a wrong PROVIDERS_WITHOUT_EMAIL value to later files (e.g.
+ * cliproxy-auth-routes.test.ts), we use the REAL value ['kiro','ghcp'] in every
+ * mock factory below.  The tier_lock tests never assert on PROVIDERS_WITHOUT_EMAIL
+ * directly, so this has no effect on their correctness.
+ * The afterAll re-registers the mock with the correct value as a belt-and-suspenders
+ * guard against any beforeEach re-registration that runs after the last test.
  */
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
@@ -60,14 +63,16 @@ let _mockPausedIds: Set<string> = new Set();
 // ============================================================================
 
 mock.module('../../../src/cliproxy/accounts/account-manager', () => ({
-  PROVIDERS_WITHOUT_EMAIL: [],
+  // Use the real value so this mock does not corrupt PROVIDERS_WITHOUT_EMAIL for
+  // later test files loaded in the same Bun worker (mock.module is sticky/global).
+  PROVIDERS_WITHOUT_EMAIL: ['kiro', 'ghcp'],
   getAccountsRegistryPath: () => '',
   getPausedDir: () => '',
   getAccountTokenPath: () => '',
   extractAccountIdFromTokenFile: () => '',
   deriveNoEmailProviderAccountId: () => '',
   generateNickname: () => '',
-  validateNickname: () => true,
+  validateNickname: () => null,
   hasAccountNameConflict: () => false,
   findAccountNameMatch: () => null,
   tokenFileExists: () => false,
@@ -181,17 +186,19 @@ describe('quota-manager findHealthyAccount — tier_lock', () => {
     _mockAccounts = [ULTRA_ACCOUNT, PRO_ACCOUNT, PRO_ACCOUNT_2];
     _mockPausedIds = new Set();
 
-    // Re-register mocks in beforeEach to survive any mock.restore() calls
-    // from other test suites running in this Bun process.
+    // Re-register mocks in beforeEach to ensure mutable closures (_mockAccounts,
+    // _mockPausedIds) are captured fresh for each test.
     mock.module('../../../src/cliproxy/accounts/account-manager', () => ({
-      PROVIDERS_WITHOUT_EMAIL: [],
+      // Real value — must NOT be [] to avoid leaking a broken PROVIDERS_WITHOUT_EMAIL
+      // to later test files in the same Bun worker process.
+      PROVIDERS_WITHOUT_EMAIL: ['kiro', 'ghcp'],
       getAccountsRegistryPath: () => '',
       getPausedDir: () => '',
       getAccountTokenPath: () => '',
       extractAccountIdFromTokenFile: () => '',
       deriveNoEmailProviderAccountId: () => '',
       generateNickname: () => '',
-      validateNickname: () => true,
+      validateNickname: () => null,
       hasAccountNameConflict: () => false,
       findAccountNameMatch: () => null,
       tokenFileExists: () => false,
@@ -226,7 +233,48 @@ describe('quota-manager findHealthyAccount — tier_lock', () => {
   });
 
   afterAll(() => {
-    mock.restore();
+    // mock.restore() does NOT unwind mock.module() in Bun 1.3.x.
+    // Re-register with the real PROVIDERS_WITHOUT_EMAIL so any test file that
+    // loads after this suite in the same worker gets a correct account-manager.
+    mock.module('../../../src/cliproxy/accounts/account-manager', () => ({
+      PROVIDERS_WITHOUT_EMAIL: ['kiro', 'ghcp'],
+      getAccountsRegistryPath: () => '',
+      getPausedDir: () => '',
+      getAccountTokenPath: () => '',
+      extractAccountIdFromTokenFile: () => '',
+      deriveNoEmailProviderAccountId: () => '',
+      generateNickname: () => null,
+      validateNickname: () => null,
+      hasAccountNameConflict: () => false,
+      findAccountNameMatch: () => null,
+      tokenFileExists: () => false,
+      loadAccountsRegistry: () => ({}),
+      saveAccountsRegistry: () => undefined,
+      syncRegistryWithTokenFiles: () => undefined,
+      registerAccount: () => undefined,
+      setDefaultAccount: () => undefined,
+      pauseAccount: () => undefined,
+      resumeAccount: () => undefined,
+      removeAccount: () => undefined,
+      renameAccount: () => undefined,
+      touchAccount: () => undefined,
+      setAccountTier: () => undefined,
+      discoverExistingAccounts: () => [],
+      getProviderAccounts: () => [],
+      getDefaultAccount: () => null,
+      getAccount: () => null,
+      findAccountByQuery: () => null,
+      getActiveAccounts: () => [],
+      isAccountPaused: () => false,
+      getAllAccountsSummary: () => [],
+      bulkPauseAccounts: () => ({ succeeded: [], failed: [] }),
+      bulkResumeAccounts: () => ({ succeeded: [], failed: [] }),
+      soloAccount: async () => null,
+    }));
+    mock.module('../../../src/cliproxy/accounts/account-safety', () => ({
+      restoreExpiredQuotaPauses: () => undefined,
+      pauseAccountForQuotaCooldown: () => false,
+    }));
   });
 
   afterEach(() => {
