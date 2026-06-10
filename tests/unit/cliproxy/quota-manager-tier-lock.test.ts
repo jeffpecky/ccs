@@ -25,12 +25,11 @@
  * bun test invocation (Bun 1.3.x, up to --max-concurrency files per worker).
  * mock.module() is GLOBAL and STICKY for the lifetime of a worker — it does NOT
  * reset between files, and mock.restore() does NOT unwind mock.module() calls.
- * To prevent leaking a wrong PROVIDERS_WITHOUT_EMAIL value to later files (e.g.
- * cliproxy-auth-routes.test.ts), we use the REAL value ['kiro','ghcp'] in every
- * mock factory below.  The tier_lock tests never assert on PROVIDERS_WITHOUT_EMAIL
- * directly, so this has no effect on their correctness.
- * The afterAll re-registers the mock with the correct value as a belt-and-suspenders
- * guard against any beforeEach re-registration that runs after the last test.
+ * To avoid leaking broken stubs to later files (e.g. cliproxy-auth-routes.test.ts,
+ * which imports validateNickname/hasAccountNameConflict/PROVIDERS_WITHOUT_EMAIL from
+ * account-manager), every mock factory SPREADS the REAL account-manager and overrides
+ * ONLY the account-DATA reads + IO that these tier_lock tests control; afterAll then
+ * restores the real account-manager/account-safety modules outright.
  */
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
@@ -38,6 +37,17 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { invalidateConfigCache } from '../../../src/config/config-loader-facade';
+// Capture the REAL account modules BEFORE the mock.module calls below replace them
+// in Bun's global, sticky module registry (mock.module is process-wide and is NOT
+// unwound by mock.restore in Bun 1.3.x). We spread these into every mock factory and
+// restore them in afterAll, so leak-sensitive helpers that OTHER test files import
+// from account-manager (validateNickname, hasAccountNameConflict, registry-path
+// getters, PROVIDERS_WITHOUT_EMAIL) stay REAL for any file sharing this Bun worker.
+// Only the account-DATA reads + IO are overridden for these tier_lock tests.
+import * as realAccountManagerNS from '../../../src/cliproxy/accounts/account-manager';
+import * as realAccountSafetyNS from '../../../src/cliproxy/accounts/account-safety';
+const REAL_ACCOUNT_MANAGER = { ...realAccountManagerNS };
+const REAL_ACCOUNT_SAFETY = { ...realAccountSafetyNS };
 
 // ============================================================================
 // Account fixtures
@@ -62,43 +72,39 @@ let _mockPausedIds: Set<string> = new Set();
 // Top-level mock.module registrations (file-load time)
 // ============================================================================
 
-mock.module('../../../src/cliproxy/accounts/account-manager', () => ({
-  // Use the real value so this mock does not corrupt PROVIDERS_WITHOUT_EMAIL for
-  // later test files loaded in the same Bun worker (mock.module is sticky/global).
-  PROVIDERS_WITHOUT_EMAIL: ['kiro', 'ghcp'],
-  getAccountsRegistryPath: () => '',
-  getPausedDir: () => '',
-  getAccountTokenPath: () => '',
-  extractAccountIdFromTokenFile: () => '',
-  deriveNoEmailProviderAccountId: () => '',
-  generateNickname: () => '',
-  validateNickname: () => null,
-  hasAccountNameConflict: () => false,
-  findAccountNameMatch: () => null,
-  tokenFileExists: () => false,
-  loadAccountsRegistry: () => ({}),
-  saveAccountsRegistry: () => undefined,
-  syncRegistryWithTokenFiles: () => undefined,
-  registerAccount: () => undefined,
-  setDefaultAccount: () => undefined,
-  pauseAccount: () => undefined,
-  resumeAccount: () => undefined,
-  removeAccount: () => undefined,
-  renameAccount: () => undefined,
-  touchAccount: () => undefined,
-  setAccountTier: () => undefined,
-  discoverExistingAccounts: () => [],
-  getProviderAccounts: () => _mockAccounts,
-  getDefaultAccount: () => (_mockAccounts.length > 0 ? _mockAccounts[0] : null),
-  getAccount: (_p: string, id: string) => _mockAccounts.find((a) => a.id === id) ?? null,
-  findAccountByQuery: () => null,
-  getActiveAccounts: () => _mockAccounts,
-  isAccountPaused: (_p: string, id: string) => _mockPausedIds.has(id),
-  getAllAccountsSummary: () => [],
-  bulkPauseAccounts: () => ({ succeeded: [], failed: [] }),
-  bulkResumeAccounts: () => ({ succeeded: [], failed: [] }),
-  soloAccount: async () => null,
-}));
+// Build the account-manager mock: REAL by default (spread) so leak-sensitive helpers
+// other files import from account-manager — validateNickname, hasAccountNameConflict,
+// registry-path getters, PROVIDERS_WITHOUT_EMAIL — never leak broken stubs to a file
+// sharing this Bun worker. Override ONLY the account-DATA reads (test fixtures) and IO
+// (no-ops, so the tier_lock tests never touch disk).
+function buildAccountManagerMock() {
+  return {
+    ...REAL_ACCOUNT_MANAGER,
+    loadAccountsRegistry: () => ({}),
+    saveAccountsRegistry: () => undefined,
+    syncRegistryWithTokenFiles: () => undefined,
+    registerAccount: () => undefined,
+    setDefaultAccount: () => undefined,
+    pauseAccount: () => undefined,
+    resumeAccount: () => undefined,
+    removeAccount: () => undefined,
+    renameAccount: () => undefined,
+    touchAccount: () => undefined,
+    setAccountTier: () => undefined,
+    discoverExistingAccounts: () => [],
+    getProviderAccounts: () => _mockAccounts,
+    getDefaultAccount: () => (_mockAccounts.length > 0 ? _mockAccounts[0] : null),
+    getAccount: (_p: string, id: string) => _mockAccounts.find((a) => a.id === id) ?? null,
+    getActiveAccounts: () => _mockAccounts,
+    isAccountPaused: (_p: string, id: string) => _mockPausedIds.has(id),
+    getAllAccountsSummary: () => [],
+    bulkPauseAccounts: () => ({ succeeded: [], failed: [] }),
+    bulkResumeAccounts: () => ({ succeeded: [], failed: [] }),
+    soloAccount: async () => null,
+  };
+}
+
+mock.module('../../../src/cliproxy/accounts/account-manager', () => buildAccountManagerMock());
 
 mock.module('../../../src/cliproxy/accounts/account-safety', () => ({
   restoreExpiredQuotaPauses: () => undefined,
@@ -188,43 +194,7 @@ describe('quota-manager findHealthyAccount — tier_lock', () => {
 
     // Re-register mocks in beforeEach to ensure mutable closures (_mockAccounts,
     // _mockPausedIds) are captured fresh for each test.
-    mock.module('../../../src/cliproxy/accounts/account-manager', () => ({
-      // Real value — must NOT be [] to avoid leaking a broken PROVIDERS_WITHOUT_EMAIL
-      // to later test files in the same Bun worker process.
-      PROVIDERS_WITHOUT_EMAIL: ['kiro', 'ghcp'],
-      getAccountsRegistryPath: () => '',
-      getPausedDir: () => '',
-      getAccountTokenPath: () => '',
-      extractAccountIdFromTokenFile: () => '',
-      deriveNoEmailProviderAccountId: () => '',
-      generateNickname: () => '',
-      validateNickname: () => null,
-      hasAccountNameConflict: () => false,
-      findAccountNameMatch: () => null,
-      tokenFileExists: () => false,
-      loadAccountsRegistry: () => ({}),
-      saveAccountsRegistry: () => undefined,
-      syncRegistryWithTokenFiles: () => undefined,
-      registerAccount: () => undefined,
-      setDefaultAccount: () => undefined,
-      pauseAccount: () => undefined,
-      resumeAccount: () => undefined,
-      removeAccount: () => undefined,
-      renameAccount: () => undefined,
-      touchAccount: () => undefined,
-      setAccountTier: () => undefined,
-      discoverExistingAccounts: () => [],
-      getProviderAccounts: () => _mockAccounts,
-      getDefaultAccount: () => (_mockAccounts.length > 0 ? _mockAccounts[0] : null),
-      getAccount: (_p: string, id: string) => _mockAccounts.find((a) => a.id === id) ?? null,
-      findAccountByQuery: () => null,
-      getActiveAccounts: () => _mockAccounts,
-      isAccountPaused: (_p: string, id: string) => _mockPausedIds.has(id),
-      getAllAccountsSummary: () => [],
-      bulkPauseAccounts: () => ({ succeeded: [], failed: [] }),
-      bulkResumeAccounts: () => ({ succeeded: [], failed: [] }),
-      soloAccount: async () => null,
-    }));
+    mock.module('../../../src/cliproxy/accounts/account-manager', () => buildAccountManagerMock());
 
     mock.module('../../../src/cliproxy/accounts/account-safety', () => ({
       restoreExpiredQuotaPauses: () => undefined,
@@ -233,48 +203,11 @@ describe('quota-manager findHealthyAccount — tier_lock', () => {
   });
 
   afterAll(() => {
-    // mock.restore() does NOT unwind mock.module() in Bun 1.3.x.
-    // Re-register with the real PROVIDERS_WITHOUT_EMAIL so any test file that
-    // loads after this suite in the same worker gets a correct account-manager.
-    mock.module('../../../src/cliproxy/accounts/account-manager', () => ({
-      PROVIDERS_WITHOUT_EMAIL: ['kiro', 'ghcp'],
-      getAccountsRegistryPath: () => '',
-      getPausedDir: () => '',
-      getAccountTokenPath: () => '',
-      extractAccountIdFromTokenFile: () => '',
-      deriveNoEmailProviderAccountId: () => '',
-      generateNickname: () => null,
-      validateNickname: () => null,
-      hasAccountNameConflict: () => false,
-      findAccountNameMatch: () => null,
-      tokenFileExists: () => false,
-      loadAccountsRegistry: () => ({}),
-      saveAccountsRegistry: () => undefined,
-      syncRegistryWithTokenFiles: () => undefined,
-      registerAccount: () => undefined,
-      setDefaultAccount: () => undefined,
-      pauseAccount: () => undefined,
-      resumeAccount: () => undefined,
-      removeAccount: () => undefined,
-      renameAccount: () => undefined,
-      touchAccount: () => undefined,
-      setAccountTier: () => undefined,
-      discoverExistingAccounts: () => [],
-      getProviderAccounts: () => [],
-      getDefaultAccount: () => null,
-      getAccount: () => null,
-      findAccountByQuery: () => null,
-      getActiveAccounts: () => [],
-      isAccountPaused: () => false,
-      getAllAccountsSummary: () => [],
-      bulkPauseAccounts: () => ({ succeeded: [], failed: [] }),
-      bulkResumeAccounts: () => ({ succeeded: [], failed: [] }),
-      soloAccount: async () => null,
-    }));
-    mock.module('../../../src/cliproxy/accounts/account-safety', () => ({
-      restoreExpiredQuotaPauses: () => undefined,
-      pauseAccountForQuotaCooldown: () => false,
-    }));
+    // mock.restore() does NOT unwind mock.module() in Bun 1.3.x. Restore the REAL
+    // modules (captured at load time) so any file loading after this suite in the
+    // same Bun worker gets the genuine account-manager/account-safety, not stubs.
+    mock.module('../../../src/cliproxy/accounts/account-manager', () => REAL_ACCOUNT_MANAGER);
+    mock.module('../../../src/cliproxy/accounts/account-safety', () => REAL_ACCOUNT_SAFETY);
   });
 
   afterEach(() => {
