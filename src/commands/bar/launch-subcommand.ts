@@ -84,18 +84,21 @@ export function resolveBarPort(ccsDir: string): number | null {
  * host 'localhost', which macOS resolves to ::1 — an IPv4-only probe would
  * miss that server and start a redundant second instance.
  *
- * Probe order per port: 127.0.0.1 first, then [::1]. First 200 wins.
- * The bar.json port (if present) is checked first so a previously-used port
- * gets priority. Short timeouts prevent hanging the launch flow.
+ * All probes are fired concurrently (cheap loopback requests) so worst-case
+ * latency is ~1.5 s (one timeout) rather than N × 1.5 s sequentially.
+ * Priority selection is still applied after all results are in: the bar.json
+ * port is preferred over the defaults (3000, 3001, 3002, 8000, 8080), and
+ * within a port 127.0.0.1 is preferred over [::1].
  */
 export async function defaultFindRunningServer(ccsDir: string): Promise<DashboardInfo | null> {
   const { request } = await import('undici');
 
   /**
-   * Probe a single URL. Returns true on HTTP 200, false on any other status
-   * or error (connection refused, timeout, etc.).
+   * Probe a single URL. Resolves to { ok: true } on HTTP 200, { ok: false }
+   * on any other status or error (connection refused, timeout, etc.).
+   * Never rejects — all errors are absorbed so Promise.all never short-circuits.
    */
-  async function probe(url: string): Promise<boolean> {
+  async function probe(url: string): Promise<{ ok: boolean }> {
     try {
       const { statusCode, body } = await request(url, {
         method: 'GET',
@@ -106,9 +109,9 @@ export async function defaultFindRunningServer(ccsDir: string): Promise<Dashboar
       // body.dump() is not available in Bun's undici shim; body.text() works
       // cross-runtime and fully consumes the response stream.
       await body.text();
-      return statusCode === 200;
+      return { ok: statusCode === 200 };
     } catch {
-      return false;
+      return { ok: false };
     }
   }
 
@@ -117,15 +120,22 @@ export async function defaultFindRunningServer(ccsDir: string): Promise<Dashboar
   const candidates: number[] =
     barJsonPort !== null ? [barJsonPort, ...base.filter((p) => p !== barJsonPort)] : base;
 
-  for (const port of candidates) {
-    // Probe IPv4 loopback first (common for explicitly-bound servers).
-    if (await probe(`http://127.0.0.1:${port}/api/bar/summary`)) {
-      return { port, baseUrl: `http://127.0.0.1:${port}` };
-    }
-    // Probe IPv6 loopback — `ccs config` binds 'localhost' which resolves to
-    // ::1 on macOS, so this is the common case for a running CCS server.
-    if (await probe(`http://[::1]:${port}/api/bar/summary`)) {
-      return { port, baseUrl: `http://[::1]:${port}` };
+  // Build the ordered list of (port, host, baseUrl) tuples. Within each port,
+  // IPv4 comes before IPv6 to preserve the existing priority semantics.
+  const probeTargets = candidates.flatMap((port) => [
+    { port, baseUrl: `http://127.0.0.1:${port}`, url: `http://127.0.0.1:${port}/api/bar/summary` },
+    { port, baseUrl: `http://[::1]:${port}`, url: `http://[::1]:${port}/api/bar/summary` },
+  ]);
+
+  // Fire all probes concurrently. Each probe resolves (never rejects), so
+  // Promise.all collects all results without short-circuiting on failure.
+  const results = await Promise.all(probeTargets.map((t) => probe(t.url)));
+
+  // Walk the results in priority order and return the first successful hit.
+  for (let i = 0; i < probeTargets.length; i++) {
+    if (results[i].ok) {
+      const { port, baseUrl } = probeTargets[i];
+      return { port, baseUrl };
     }
   }
   return null;
