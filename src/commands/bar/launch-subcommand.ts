@@ -72,7 +72,10 @@ async function defaultEnsureDashboard(): Promise<DashboardInfo> {
   const { startServer } = await import('../../web-server');
 
   const port = await getPort({ port: [3000, 3001, 3002, 8000, 8080] });
-  const { server } = await startServer({ port });
+  // Bind IPv4 loopback explicitly. Without a host, startServer defaults to
+  // 'localhost', which on macOS resolves to ::1 (IPv6) — but bar.json's baseUrl
+  // (and the Swift app) use 127.0.0.1, so the app could not reach its own server.
+  const { server } = await startServer({ port, host: '127.0.0.1' });
 
   const addr = server.address();
   const resolvedPort = addr && typeof addr === 'object' ? addr.port : port;
