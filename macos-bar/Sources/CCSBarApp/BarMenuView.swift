@@ -192,13 +192,13 @@ struct BarMenuView: View {
         Text("usage & accounts").font(.caption2).foregroundStyle(.secondary)
       }
       Spacer()
+      if viewModel.isRefreshing {
+        ProgressView().controlSize(.small)
+      }
       if let v = BarVersionDisplay.string() {
         Text(v)
           .font(.caption2)
           .foregroundStyle(.secondary)
-      }
-      if viewModel.isRefreshing {
-        ProgressView().controlSize(.small)
       }
     }
     .padding(.horizontal, 14)
