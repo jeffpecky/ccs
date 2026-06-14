@@ -1,3 +1,95 @@
+## [8.3.0](https://github.com/kaitranntt/ccs/compare/v8.2.0...v8.3.0) (2026-06-14)
+
+### Features
+
+* **bar-app:** add CCS icon variants and usage analytics UI ([9b64514](https://github.com/kaitranntt/ccs/commit/9b64514a57f78ff101333caa3daa8c600a48f541))
+* **bar-app:** bar-first quota card with sane time formatting ([df96779](https://github.com/kaitranntt/ccs/commit/df967792b91cd6674b39a08b38cb32eaed730ddc))
+* **bar-app:** inline spend chart bars/line toggle in the Spend header ([a700a92](https://github.com/kaitranntt/ccs/commit/a700a92171cb16a4d08af7775554c5e501d7228a))
+* **bar-app:** label settings clearly and confirm before quit ([26323c1](https://github.com/kaitranntt/ccs/commit/26323c13dfcca42f9ce2dc5e51faa1a65acfc47a))
+* **bar-app:** legible tier chips, honest Icon label, dashboard auto-start ([11b3cd5](https://github.com/kaitranntt/ccs/commit/11b3cd5a5cc91b3a8e71a09ea22f43406e2a00a7))
+* **bar-app:** per-surface usage UI, unambiguous title, hidden scrollbar ([4a633ea](https://github.com/kaitranntt/ccs/commit/4a633eac65adefab4d04a265d0993172d9fca001))
+* **bar-app:** quota gauges, threshold alerts, configurable glance ([559d434](https://github.com/kaitranntt/ccs/commit/559d4340e72e8d900a20e0315f3298ca66e23992))
+* **bar-app:** render native subscription accounts with quota gauges ([03077aa](https://github.com/kaitranntt/ccs/commit/03077aa9fdad5b64a22f157c2470bc816da78b4a))
+* **bar-app:** retune subscription card palette for the dark theme ([5aa94b5](https://github.com/kaitranntt/ccs/commit/5aa94b5019b3a6efdea4ef5e0b8ac15affd4f966))
+* **bar-app:** selectable System/Light/Dark theming ([e33da98](https://github.com/kaitranntt/ccs/commit/e33da989eb7c57f1832864e5d9680d18bce400d5))
+* **bar-app:** subscription-first cockpit with detailed quota card ([0e0b912](https://github.com/kaitranntt/ccs/commit/0e0b9121878a18d1e77b8418006468991fa3c981))
+* **bar-app:** tune density and add spend chart style toggle ([0b1c4e4](https://github.com/kaitranntt/ccs/commit/0b1c4e490880da83245e87f9de2118438ff42dc4))
+* **bar:** add calendar month-to-date spend to analytics ([68f0231](https://github.com/kaitranntt/ccs/commit/68f0231f487a7a56e4571bc67d3171827baebaa5))
+* **bar:** add ccs bar --help with docker-style help screen ([9ae6f85](https://github.com/kaitranntt/ccs/commit/9ae6f85fa7d8f204dc9821d1f9c0fde77a44cc1b))
+* **bar:** add Get CCS Bar dashboard banner and ccs bar docs page ([1e7ad7e](https://github.com/kaitranntt/ccs/commit/1e7ad7e75e2edd1e36fe9651efd44c464b7f8375))
+* **bar:** harden summary against provider hangs and add analytics endpoint ([78f9fc7](https://github.com/kaitranntt/ccs/commit/78f9fc7c0b4c69de48d31147b5501fb50aa99af0))
+* **bar:** honest quota state and merged multi-source analytics ([5f850c4](https://github.com/kaitranntt/ccs/commit/5f850c4899a3d7f64385a72a4d1d5080206a1023))
+* **bar:** native Claude Code + Codex subscription quota (safe, server-side) ([dbeb0c5](https://github.com/kaitranntt/ccs/commit/dbeb0c543a888d7bc54ed0e3ebfffa63334d1f75))
+* **bar:** one-flow install with quarantine automation and launch handoff ([4eef3f7](https://github.com/kaitranntt/ccs/commit/4eef3f77a4a8210501a9dfe369ceeac581772939)), closes [#1504](https://github.com/kaitranntt/ccs/issues/1504)
+* **bar:** per-window subscription quota detail + codex multi-session scan ([e96967c](https://github.com/kaitranntt/ccs/commit/e96967c22492fe312258bf6ab7f5883250cbc4be))
+* **bar:** show running app version in the panel header ([3438c39](https://github.com/kaitranntt/ccs/commit/3438c3940eb0af9a680954526ba63274bf768c30))
+* **catalog:** add Claude Fable 5 to Anthropic model registry ([298c89f](https://github.com/kaitranntt/ccs/commit/298c89f2c30712daaf782082903fcb7d93a0ab5e))
+* **cli:** add ccs bar command for the macOS menu bar app ([205c2f3](https://github.com/kaitranntt/ccs/commit/205c2f3cd607399031c19e49f37cc64108c13def))
+* **cliproxy:** claude pool gap closure - model-neutral launch, shadow warning, provider ban copy ([a257016](https://github.com/kaitranntt/ccs/commit/a257016ebb42ab7f68296188cd71267bab6fecdd)), closes [#1464](https://github.com/kaitranntt/ccs/issues/1464)
+* **cliproxy:** managed drain order for account pools ([a33e126](https://github.com/kaitranntt/ccs/commit/a33e12619ee3dd7b034a952a51feae9cec69759c)), closes [#1464](https://github.com/kaitranntt/ccs/issues/1464)
+* **cliproxy:** pool onboarding hints for existing multi-profile users ([0343734](https://github.com/kaitranntt/ccs/commit/0343734665d5610c84297dc50a486d703c6ff28f)), closes [#1464](https://github.com/kaitranntt/ccs/issues/1464)
+* **cliproxy:** pool routing defaults and safety rails ([fdb0430](https://github.com/kaitranntt/ccs/commit/fdb043083f6a76cc3d33e830d8bd6142827c0cd6)), closes [#1464](https://github.com/kaitranntt/ccs/issues/1464)
+* **cliproxy:** pool visibility in quota output and dashboard routing card ([74894f6](https://github.com/kaitranntt/ccs/commit/74894f61da26410a214e1b2af2fe8ffd18da5c30)), closes [#1464](https://github.com/kaitranntt/ccs/issues/1464)
+* **dashboard:** promote CCS Bar globally ([b9356a7](https://github.com/kaitranntt/ccs/commit/b9356a7ce67d783ecbc8b2d0d4ba70e25176b660))
+* **macos-bar:** add ad-hoc packaging script + Info.plist ([df4554f](https://github.com/kaitranntt/ccs/commit/df4554fe1f9a0d3d4e43e2b21f454fb862a131c5))
+* **macos-bar:** add CCS Bar core (client, models, discovery) + tests ([23abf6a](https://github.com/kaitranntt/ccs/commit/23abf6a6350015dbbc97159564f5ee2678beaf6f))
+* **macos-bar:** add SwiftUI MenuBarExtra app + view-model ([e7001fc](https://github.com/kaitranntt/ccs/commit/e7001fc252c4eea1075d89c2455f8fb29164fdf4))
+* **quota:** add per-provider tier-lock account selection ([40f32eb](https://github.com/kaitranntt/ccs/commit/40f32ebbf06937b85f7e151169ae93399a1dca04))
+* **usage:** attribute CLIProxy usage to accounts for per-account cost ([1867116](https://github.com/kaitranntt/ccs/commit/1867116472dca0d579d34cc82a3aff3268c7648a))
+* **web-server:** add /api/bar/summary aggregator with force-fresh ([6d3fde9](https://github.com/kaitranntt/ccs/commit/6d3fde9ed399845a8aa757b4a7c706395e962dc6))
+
+### Bug Fixes
+
+* **bar-app:** periodic background refresh so the glance self-heals ([28fef67](https://github.com/kaitranntt/ccs/commit/28fef67a453fc50cbbca03d2e8b51ce63e2a983f))
+* **bar-app:** settings as standalone window, real theme forcing, roomier layout ([b950b41](https://github.com/kaitranntt/ccs/commit/b950b41503352bf019b3070e84a44740750c2be1))
+* **bar:** bind 'ccs bar launch' server to IPv4 loopback ([2f8745b](https://github.com/kaitranntt/ccs/commit/2f8745bc1f54f12caa773e716a03e71b6b44bec0))
+* **bar:** capture click location synchronously before async panel anchoring ([54a670c](https://github.com/kaitranntt/ccs/commit/54a670c943e8599bd103421e0cdb6212b31f5f67))
+* **bar:** correct the already-running reinstall hint ([3aab14c](https://github.com/kaitranntt/ccs/commit/3aab14ca85f704cfda95f3e4d3769fb6f5cca4c7))
+* **bar:** harden install handoff per review ([dfc8b7d](https://github.com/kaitranntt/ccs/commit/dfc8b7d1dcca23a3c2f905b6e5e6f7bdd5195752))
+* **bar:** keep header version label rightmost during refresh ([a5c4186](https://github.com/kaitranntt/ccs/commit/a5c41864b3710b31b9cd740305928f76643d9a35))
+* **bar:** keep menu bar panel on the clicked screen in multi-display setups ([70dc53d](https://github.com/kaitranntt/ccs/commit/70dc53d947e54e23d7befb422fbd1f556f8b57f5)), closes [#1502](https://github.com/kaitranntt/ccs/issues/1502) [#1503](https://github.com/kaitranntt/ccs/issues/1503)
+* **bar:** probe IPv6 loopback when detecting a running CCS server ([3569297](https://github.com/kaitranntt/ccs/commit/3569297b6d0b7d36d5ec24bb1e0daeadebd42b4e))
+* **bar:** read app version from Info.plist and verify bar API instead of version majors ([c572d9f](https://github.com/kaitranntt/ccs/commit/c572d9f8608a14d1150b6c9cf8064fd9e6f77417)), closes [#1497](https://github.com/kaitranntt/ccs/issues/1497)
+* **bar:** read codex rollout tail via fs so quota surfaces under node ([2e99b58](https://github.com/kaitranntt/ccs/commit/2e99b58d095b847d0f8862b634262ae79a5666d5))
+* **bar:** resolve pre-dev review findings (security gate, honesty, correctness) ([7d3a11a](https://github.com/kaitranntt/ccs/commit/7d3a11a45278c4507070c958d8ce33c11b157c0b))
+* **bar:** reuse a running CCS web-server and probe ports on the bind host ([af1a2a0](https://github.com/kaitranntt/ccs/commit/af1a2a0f5d74ec368e1edbdd936b1d8024925188)), closes [#1500](https://github.com/kaitranntt/ccs/issues/1500)
+* **bar:** stage downloads and swap so reinstall never strands the user ([cf3bd8a](https://github.com/kaitranntt/ccs/commit/cf3bd8a5efb4e1166650d5a3d0d4002f59b6f3dc))
+* **bar:** stop install at the manual step when quarantine clearing fails ([015cc4d](https://github.com/kaitranntt/ccs/commit/015cc4dd320728f152b13a924b9dceb1c8ea441f))
+* **bar:** verify server compat before Gatekeeper steps and harden reinstall ([f68c08e](https://github.com/kaitranntt/ccs/commit/f68c08ede3188e2f58f74c50049bd72d06ad4ee6))
+* **cli:** harden ccs bar install + align launch path ([63d10cb](https://github.com/kaitranntt/ccs/commit/63d10cb2d0d20d6512fe623cf7d13c3ddc669e61))
+* **cliproxy:** close second-round review gaps in pool onboarding and remote env ([7b8a6f5](https://github.com/kaitranntt/ccs/commit/7b8a6f5cceabddf7a68cc66014ef0ec6eba3e96e))
+* **cliproxy:** guard upstream response timeout cleanup against detached socket ([f59536a](https://github.com/kaitranntt/ccs/commit/f59536a81fd0a2ca4dc58a2e3c89b463bb57150c))
+* **cliproxy:** harden account pools per pre-merge usefulness review ([1c90388](https://github.com/kaitranntt/ccs/commit/1c90388b5d16a3c8f7895f86bc9a769cb0800de3))
+* **cliproxy:** silence legacy-config skip in pool opt-in prompt ([cff9008](https://github.com/kaitranntt/ccs/commit/cff9008f49643bac027de4a3f7eeb010f601ed8b))
+* **macos-bar:** correct set-default key, lead account, asset name ([8350c24](https://github.com/kaitranntt/ccs/commit/8350c247333cec3494409543f4030802b8c768d5))
+* **mcp:** retry Claude user config locks ([cf90f48](https://github.com/kaitranntt/ccs/commit/cf90f48240db2666186eec08dce329690d26d60e))
+* **proxy:** add Anthropic passthrough mode for coding-agent-only endpoints ([b98b0df](https://github.com/kaitranntt/ccs/commit/b98b0df0846944225889167658d9d6251d28baab))
+* **proxy:** route Anthropic passthrough by upstream profile ([bb9d23a](https://github.com/kaitranntt/ccs/commit/bb9d23ad6a5597eadc2b3c23a773c60b3c78ad31))
+* **quota:** reject tier-lock for non-managed providers ([b9a1084](https://github.com/kaitranntt/ccs/commit/b9a1084bd4c6437e34563f10a4b6ce9b09f14224))
+* **test:** restore real account modules in tier-lock to fully stop mock leak ([ad9bdd5](https://github.com/kaitranntt/ccs/commit/ad9bdd5794963b25dce2e3da49b4a0ad18b7fe75))
+* **test:** run bucket paths explicitly ([27c8a95](https://github.com/kaitranntt/ccs/commit/27c8a9570ba7a3b8879539a5817e3f76bbf30d42))
+* **test:** stop tier-lock mock.module leaking an empty PROVIDERS_WITHOUT_EMAIL ([0770b89](https://github.com/kaitranntt/ccs/commit/0770b8903748c83fd1debe3c7c5d489ae72b1c3a))
+* **usage:** compute cost fallback lazily to stop event-loop stall ([f073434](https://github.com/kaitranntt/ccs/commit/f0734348d032d5267e1816cf908f60fd742a97e5))
+* **usage:** correct per-account cost attribution ([cc7ac55](https://github.com/kaitranntt/ccs/commit/cc7ac553e326d7db84ef6ed02211a5afb58e4875))
+
+### Documentation
+
+* **bar:** align install docs with Info.plist version pinning and bar-API check ([e7f3ec0](https://github.com/kaitranntt/ccs/commit/e7f3ec0da1142efa1536ad3f4b95ddfdde097e25))
+* **bar:** troubleshooting reflects reuse-first launch behavior ([db1d125](https://github.com/kaitranntt/ccs/commit/db1d125f83e2a967230be186ae31b2804c6c8177))
+
+### Performance Improvements
+
+* **bar:** probe reuse candidates concurrently to avoid launch stalls ([2fd90ff](https://github.com/kaitranntt/ccs/commit/2fd90fff9bd59b18a2dac713a24ca05363b12759))
+
+### Tests
+
+* **ci:** allow temporary epic branch in PR trigger assertion ([22d4c72](https://github.com/kaitranntt/ccs/commit/22d4c727172567787a7719a87bdda0c3e960011b))
+
+### CI
+
+* drop temporary epic branch from PR trigger ([2b7cfa3](https://github.com/kaitranntt/ccs/commit/2b7cfa32c8b7bde8cf1ab5f8f272a50fedb10c7e))
+* run PR CI for account-pools epic branch ([5101e21](https://github.com/kaitranntt/ccs/commit/5101e21ecd7f7990b06ba6aad05f7d1ba888f24f))
+
 ## [8.2.0](https://github.com/kaitranntt/ccs/compare/v8.1.4...v8.2.0) (2026-06-06)
 
 ### Features
