@@ -381,7 +381,7 @@ export async function fetchClaudeQuota(
 
   if (authData.isExpired) {
     return buildEmptyResult(
-      'Token expired - re-authenticate with ccs cliproxy auth claude',
+      'Token expired - re-authenticate with Authenticate claude from the dashboard',
       accountId,
       true
     );

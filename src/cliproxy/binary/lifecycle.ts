@@ -70,7 +70,7 @@ async function handleAutoUpdate(config: BinaryManagerConfig, verbose: boolean): 
           `Upgrade to latest stable recommended.`
       )
     );
-    console.log(info(`Run "ccs cliproxy install" to upgrade to latest stable`));
+    console.log(info(`Install CLIProxy from the dashboard control panel to upgrade to latest stable`));
   }
 
   if (!updateResult.hasUpdate) return;
@@ -88,7 +88,7 @@ async function handleAutoUpdate(config: BinaryManagerConfig, verbose: boolean): 
 
   if (proxyRunning) {
     console.log(info(updateMsg));
-    console.log(info('Run "ccs cliproxy stop" then restart to apply update'));
+    console.log(info('Stop CLIProxy from the dashboard control panel, then restart to apply update'));
     log(`Skipping update: ${backendLabel} is currently running`, verbose);
   } else {
     console.log(info(updateMsg));
@@ -138,7 +138,7 @@ export async function ensureBinary(config: BinaryManagerConfig): Promise<string>
   if (!config.allowInstall) {
     throw new Error(
       `${getBackendLabel(backend)} binary is not installed locally. ` +
-        'Run "ccs cliproxy install" when you have network access.'
+        'Install CLIProxy from the dashboard control panel when you have network access.'
     );
   }
 

@@ -211,7 +211,7 @@ describe('installCliproxyVersion', () => {
         skipAutoUpdate: true,
       })
     ).rejects.toThrow(
-      'CLIProxy binary is not installed locally. Run "ccs cliproxy install" when you have network access.'
+      'CLIProxy binary is not installed locally. Install CLIProxy from the dashboard control panel when you have network access.'
     );
   });
 });

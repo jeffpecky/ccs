@@ -495,22 +495,22 @@ export function ProxyStatusWidget() {
           </span>
         </div>
 
-        <RoutingGuidanceCard
-          key={`local:${routingState?.strategy ?? 'round-robin'}:${effectiveSessionAffinityState?.enabled ?? 'na'}:${effectiveSessionAffinityState?.ttl ?? 'na'}:${effectiveSessionAffinityState?.manageable ?? 'na'}`}
-          compact
-          className="mt-3"
-          state={routingState}
-          sessionAffinityState={effectiveSessionAffinityState}
-          isLoading={routingLoading || sessionAffinityLoading}
-          isSaving={isSavingRoutingConfig}
-          error={routingConfigError}
-          onApply={(strategy) => updateRouting.mutate(strategy)}
-          onApplyAffinity={(data) => updateSessionAffinity.mutate(data)}
-        />
-
-        {/* Expanded section: Version Management (available even when not running) */}
+        {/* Expanded section: Version Management + Routing (available even when not running) */}
         <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
           <CollapsibleContent className="mt-3 pt-3 border-t border-muted">
+            <RoutingGuidanceCard
+              key={`local:${routingState?.strategy ?? 'round-robin'}:${effectiveSessionAffinityState?.enabled ?? 'na'}:${effectiveSessionAffinityState?.ttl ?? 'na'}:${effectiveSessionAffinityState?.manageable ?? 'na'}`}
+              compact
+              className="mb-3"
+              state={routingState}
+              sessionAffinityState={effectiveSessionAffinityState}
+              isLoading={routingLoading || sessionAffinityLoading}
+              isSaving={isSavingRoutingConfig}
+              error={routingConfigError}
+              onApply={(strategy) => updateRouting.mutate(strategy)}
+              onApplyAffinity={(data) => updateSessionAffinity.mutate(data)}
+            />
+
             {/* Section header */}
             <h4 className="text-xs font-medium text-muted-foreground mb-3">
               {t('proxyStatusWidget.versionManagement')}

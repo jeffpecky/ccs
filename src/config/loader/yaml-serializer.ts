@@ -43,7 +43,7 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
   // Accounts section
   lines.push('# ----------------------------------------------------------------------------');
   lines.push('# Accounts: Isolated Claude instances (each with separate auth/sessions)');
-  lines.push('# Manage with: ccs auth add <name>, ccs auth list, ccs auth remove <name>');
+  lines.push('# Manage with: the dashboard settings');
   lines.push('# ----------------------------------------------------------------------------');
   lines.push(
     yaml.dump({ accounts: config.accounts }, { indent: 2, lineWidth: -1, quotingType: '"' }).trim()
@@ -103,7 +103,7 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
   if (config.cliproxy_server) {
     lines.push('# ----------------------------------------------------------------------------');
     lines.push('# CLIProxy Server: Remote proxy connection settings');
-    lines.push('# Configure via Dashboard (`ccs config`) > Proxy tab.');
+    lines.push('# Configure via Dashboard > Proxy tab.');
     lines.push('#');
     lines.push('# remote: Connect to a remote CLIProxyAPI instance');
     lines.push('# fallback: Use local proxy if remote is unreachable');
@@ -135,7 +135,7 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
   if (config.websearch) {
     lines.push('# ----------------------------------------------------------------------------');
     lines.push('# WebSearch: real search backends for third-party profiles');
-    lines.push('# Dashboard (`ccs config`) is the source of truth for provider selection.');
+    lines.push('# Dashboard is the source of truth for provider selection.');
     lines.push('#');
     lines.push('# Third-party providers (gemini, codex, agy, etc.) do not have access to');
     lines.push("# Anthropic's WebSearch tool. CCS intercepts that tool and runs local search.");
@@ -177,7 +177,7 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
     lines.push('# CCS provides NO WARRANTY and accepts NO RESPONSIBILITY for consequences.');
     lines.push('#');
     lines.push('# Setup: npx copilot-api auth (authenticate with GitHub)');
-    lines.push('# Usage: ccs copilot (switch to copilot profile)');
+    lines.push('# Usage: the dashboard (switch to copilot profile)');
     lines.push('#');
     lines.push('# Models: claude-sonnet-4.5, claude-opus-4.5, gpt-5.1, gemini-2.5-pro');
     lines.push('# Account types: individual, business, enterprise');
@@ -214,7 +214,7 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
       '# Global Environment Variables: Injected into all non-Claude subscription profiles'
     );
     lines.push('# These env vars disable telemetry/reporting for third-party providers.');
-    lines.push('# Configure via Dashboard (`ccs config`) > Global Env tab.');
+    lines.push('# Configure via Dashboard > Global Env tab.');
     lines.push('#');
     lines.push('# Default variables:');
     lines.push('#   DISABLE_BUG_COMMAND: Disables /bug command (not supported by proxy)');
@@ -280,7 +280,7 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
       '# unattended adds --dangerously-skip-permissions only when channel auto-enable is active.'
     );
     lines.push('# Compatible sessions: native Claude default/account profiles only.');
-    lines.push('# Configure via: ccs config channels or the Settings > Channels dashboard tab.');
+    lines.push('# Configure via: Settings > Channels dashboard tab.');
     lines.push('# ----------------------------------------------------------------------------');
     lines.push(
       yaml
@@ -319,7 +319,7 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
     lines.push('#');
     lines.push('# claude.user_data_dir should point at the Chrome user-data directory for the');
     lines.push('# dedicated attach session. claude.devtools_port is the expected debugging port.');
-    lines.push('# Configure via: Settings > Browser or `ccs browser ...`.');
+    lines.push('# Configure via: Settings > Browser.');
     lines.push('# ----------------------------------------------------------------------------');
     lines.push(
       yaml.dump({ browser: config.browser }, { indent: 2, lineWidth: -1, quotingType: '"' }).trim()
@@ -338,7 +338,7 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
     lines.push('# Timeout: Maximum seconds to wait for analysis (10-600)');
     lines.push('#');
     lines.push('# Supported formats: .jpg, .jpeg, .png, .gif, .webp, .heic, .bmp, .tiff, .pdf');
-    lines.push('# Configure via: ccs config image-analysis');
+    lines.push('# Configure via: the dashboard settings');
     lines.push('# ----------------------------------------------------------------------------');
     lines.push(
       yaml

@@ -28,7 +28,6 @@ export type {
   SessionMetadata,
   DelegationSession,
   DelegationSessionsRegistry,
-  ExecutionResult,
   ToolEvent,
   OutputEvent,
   DelegationEvent,

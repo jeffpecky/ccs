@@ -313,7 +313,7 @@ export async function migrate(dryRun = false): Promise<MigrationResult> {
         );
         if (targetName !== sourceName) {
           warnings.push(
-            `Renamed legacy API profile "${sourceName}" to "${targetName}" (ccs kimi API profile is now ccs km)`
+            `Renamed legacy API profile "${sourceName}" to "${targetName}" (Kimi API profile is now km)`
           );
         }
       }
@@ -516,13 +516,13 @@ export async function autoMigrate(): Promise<void> {
           console.log(warn(warning));
         }
       }
-      console.log(`  Rollback: ccs migrate --rollback ${result.backupPath}`);
+      console.log(`  Rollback: Roll back from the dashboard settings`);
       console.log('');
     } else {
       console.log('');
       console.log(infoBox('Migration failed - using legacy config', 'WARNING'));
       console.log(`  Error: ${result.error}`);
-      console.log('  Retry: ccs migrate');
+      console.log('  Retry: Migrate from the dashboard settings');
       console.log('');
     }
     return;
@@ -623,7 +623,7 @@ async function migrateProfilesToUnified(
       migratedFiles.push(targetName);
       if (targetName !== sourceName) {
         warnings.push(
-          `Renamed legacy API profile "${sourceName}" to "${targetName}" (ccs kimi API profile is now ccs km)`
+          `Renamed legacy API profile "${sourceName}" to "${targetName}" (Kimi API profile is now km)`
         );
       }
       modified = true;

@@ -167,9 +167,9 @@ export class ErrorManager {
     console.error(`    ${color('ccs <profile> "your prompt"', 'command')}`);
     console.error('');
     console.error('  Create a new account profile:');
-    console.error(`    ${color('ccs auth create <name>', 'command')}`);
+    console.error(`    ${color('Authenticate from the dashboard', 'command')}`);
     console.error('');
-    console.error(info(`Tip: Use ${color('ccs config', 'command')} for web-based configuration`));
+    console.error(info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`));
     console.error('');
 
     this.showErrorCode(ERROR_CODES.PROFILE_NOT_FOUND);
@@ -220,11 +220,11 @@ export class ErrorManager {
     console.error('');
 
     console.error(header('FOR HEADLESS/SSH ENVIRONMENTS'));
-    console.error(`  ${color(`ccs ${provider} --auth --headless`, 'command')}`);
+    console.error(`  ${color(`Authenticate ${provider} from the dashboard`, 'command')}`);
     console.error('');
     console.error(dim('This displays manual authentication steps.'));
     console.error('');
-    console.error(info(`Tip: Use ${color('ccs config', 'command')} for web-based configuration`));
+    console.error(info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`));
     console.error('');
   }
 
@@ -256,7 +256,7 @@ export class ErrorManager {
     }
     console.error('');
     console.error('  3. Auto-fix: Run:');
-    console.error(`     ${color('ccs doctor --fix', 'command')}`);
+    console.error(`     ${color('Run diagnostics from the dashboard settings', 'command')}`);
     console.error('');
   }
 
@@ -296,12 +296,12 @@ export class ErrorManager {
     console.error('');
 
     console.error(header('TO AUTHENTICATE'));
-    console.error(`  ${color(`ccs ${provider} --auth`, 'command')}`);
+    console.error(`  ${color(`Authenticate ${provider} from the dashboard`, 'command')}`);
     console.error('');
     console.error(dim('This will open a browser for OAuth login.'));
     console.error(dim('After login, you can use the profile normally.'));
     console.error('');
-    console.error(info(`Tip: Use ${color('ccs config', 'command')} for web-based configuration`));
+    console.error(info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`));
     console.error('');
   }
 }

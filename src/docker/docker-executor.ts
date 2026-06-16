@@ -237,7 +237,7 @@ export class DockerExecutor {
 
   update(options: DockerCommandTarget): void {
     const script =
-      'npm install -g @kaitranntt/ccs@latest --force && ccs cliproxy --latest && supervisorctl -c /etc/supervisord.conf restart ccs-dashboard cliproxy';
+      'npm install -g @kaitranntt/ccs@latest --force && Update CLIProxy from the dashboard control panel && supervisorctl -c /etc/supervisord.conf restart ccs-dashboard cliproxy';
     this.ensureSuccess(
       this.runDocker(
         ['exec', DOCKER_CONTAINER_NAME, 'sh', '-lc', script],
@@ -430,7 +430,7 @@ export class DockerExecutor {
     const detail = (result.stderr || result.stdout).trim();
     const hint =
       options.host && /No such file|no configuration file|can't cd|not found/i.test(detail)
-        ? `\nRun \`ccs docker up --host ${options.host}\` first.`
+        ? `\nManage Docker from the dashboard settings first.`
         : '';
     throw new Error(`${label} failed.${detail ? `\n${detail}` : ''}${hint}`);
   }

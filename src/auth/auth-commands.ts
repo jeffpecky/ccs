@@ -184,7 +184,7 @@ class AuthCommands {
       `  To make future plain ${color('ccs', 'command')} resume with an account, set ${color('ccs auth default <profile>', 'command')}; back up the current native lane first with ${color('ccs auth backup default', 'command')}.`
     );
     console.log(
-      `  Existing history sync: open ${color('ccs config', 'command')} -> Accounts -> Edit Context.`
+      `  Existing history sync: open ${color('the dashboard settings', 'command')} -> Accounts -> Edit Context.`
     );
     console.log(
       `  Existing shared resources: use ${color('ccs auth resources <profile> --mode shared|profile-local', 'command')}.`
@@ -322,8 +322,7 @@ class AuthCommands {
         await initUI();
         console.log(fail(`Unknown command: ${command}`));
         console.log('');
-        console.log('Run for help:');
-        console.log(`  ${color('ccs auth --help', 'command')}`);
+        console.log('Check the dashboard for available options');
         process.exit(1);
     }
   }

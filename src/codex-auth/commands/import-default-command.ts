@@ -132,7 +132,7 @@ async function readAuthJsonSafe(authSrcPath: string): Promise<Record<string, unk
           parsed[CLIPROXY_TYPE_MARKER] === 'gemini')
       ) {
         throw new Error(
-          `CLIPROXY_FORMAT: Source is a CLIProxy auth file (type="${parsed[CLIPROXY_TYPE_MARKER]}"); use \`ccs cliproxy ...\` instead.`
+          `CLIPROXY_FORMAT: Source is a CLIProxy auth file (type="${parsed[CLIPROXY_TYPE_MARKER]}"); manage from the dashboard instead.`
         );
       }
 

@@ -34,9 +34,6 @@ export interface DelegationSessionsRegistry {
   lastSessionId?: string; // Most recent session ID
 }
 
-// Re-export ExecutionResult from canonical location for backward compatibility
-export type { ExecutionResult } from '../delegation/executor/types';
-
 /**
  * Real-time output event
  */

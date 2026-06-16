@@ -4,14 +4,12 @@ import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 
 const UI_ROOT = __dirname;
-const REPO_ROOT = path.resolve(__dirname, '..');
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      '@shared': path.resolve(REPO_ROOT, './src/shared'),
       '@': path.resolve(__dirname, './src'),
     },
   },
@@ -59,7 +57,7 @@ export default defineConfig({
   server: {
     port: 5173,
     fs: {
-      allow: [UI_ROOT, REPO_ROOT],
+      allow: [UI_ROOT],
     },
     proxy: {
       '/api': 'http://localhost:3000',

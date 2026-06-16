@@ -1541,7 +1541,7 @@ describe('PR #1514: enablePoolRouting rollback on regenerate failure', () => {
     expect(result.failed).toBe(true);
     expect(result.changed).toBe(false);
     expect(result.message).toContain('[X] Could not write CLIProxy config');
-    expect(result.message).toContain('ccs cliproxy pool --enable');
+    expect(result.message).toContain('enable pool routing from the dashboard control panel');
 
     // The flag must be rolled back to NOT-enabled so status surfaces do not lie.
     const cfg = loadOrCreateUnifiedConfig();

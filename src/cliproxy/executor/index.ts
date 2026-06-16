@@ -108,7 +108,7 @@ export async function execClaudeWithCLIProxy(
   // Validate Claude CLI exists before proceeding
   if (!fs.existsSync(claudeCli)) {
     console.error(fail(`Claude CLI not found at: ${claudeCli}`));
-    console.error('    Run "ccs doctor --fix" to reinstall or check your PATH');
+    console.error('    Run diagnostics from the dashboard settings to reinstall or check your PATH');
     process.exit(1);
   }
 
@@ -227,7 +227,7 @@ export async function execClaudeWithCLIProxy(
       console.log(
         warn('Composite variants use per-tier config. Edit config.yaml to change tier models.')
       );
-      console.error(`    Use "ccs cliproxy edit ${variantName}" to modify composite variants`);
+      console.error(`    Edit variants from the dashboard to modify composite variants`);
       process.exit(1);
     } else {
       // Run the one-time stale-pin migration on the pre-existing settings file

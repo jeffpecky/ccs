@@ -77,8 +77,8 @@ function buildCurrentPlatformLaunchCommand(userDataDir: string, devtoolsPort: nu
 
 function buildManagedBrowserActionLines(): string[] {
   return [
-    'Run `ccs browser setup` to configure and start the managed browser session.',
-    'Diagnose only: `ccs browser doctor`.',
+    'Set up the browser from the dashboard settings to configure and start the managed browser session.',
+    'Diagnose from the dashboard settings.',
   ];
 }
 

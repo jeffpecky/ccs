@@ -57,7 +57,7 @@ function poolActiveOverrideNote(kind: 'strategy' | 'affinity'): string {
   const what = kind === 'strategy' ? 'stored strategy' : 'stored affinity setting';
   return (
     `[!] Pool routing is active. The ${what} will not take effect\n` +
-    `    until pool routing is disabled: ccs cliproxy pool --disable`
+    `    until pool routing is disabled: Disable pool routing from the dashboard control panel`
   );
 }
 
@@ -187,7 +187,7 @@ export function enablePoolRouting(
         changed: false,
         preservedExplicitSetting: false,
         failed: true,
-        message: `[X] Could not write CLIProxy config: ${(err as Error).message}.\n    Pool routing is flagged enabled but the config was not regenerated.\n    Fix the file permission and re-run: ccs cliproxy pool --enable`,
+        message: `[X] Could not write CLIProxy config: ${(err as Error).message}.\n    Pool routing is flagged enabled but the config was not regenerated.\n    Fix the file permission and enable pool routing from the dashboard control panel.`,
       };
     }
     return {
@@ -208,7 +208,7 @@ export function enablePoolRouting(
       console.warn(
         `[!] CLIProxy v${installedVersion} is older than the pool routing minimum (v${POOL_ROUTING_MIN_VERSION}).\n` +
           `    The max-retry-credentials and cooling keys may be silently ignored by the running binary.\n` +
-          `    Run 'ccs cliproxy --latest' to update CLIProxy, then restart with 'ccs cliproxy restart'.`
+          `    Update CLIProxy from the dashboard control panel, then restart from the dashboard.`
       );
     }
   } catch {
@@ -246,7 +246,7 @@ export function enablePoolRouting(
       changed: false,
       preservedExplicitSetting,
       failed: true,
-      message: `[X] Could not write CLIProxy config: ${(err as Error).message}.\n    Pool routing was not enabled; fix the file permission and re-run: ccs cliproxy pool --enable`,
+      message: `[X] Could not write CLIProxy config: ${(err as Error).message}.\n    Pool routing was not enabled; fix the file permission and enable pool routing from the dashboard control panel.`,
     };
   }
 
@@ -254,7 +254,7 @@ export function enablePoolRouting(
     changed: true,
     preservedExplicitSetting,
     message: preservedExplicitSetting
-      ? '[!] Pool routing enabled. Your existing routing setting is preserved in config.\n    The generator uses pool defaults (fill-first, affinity 1h) while pool is active.\n    To restore your setting, disable pool routing first: ccs cliproxy pool --disable'
+      ? '[!] Pool routing enabled. Your existing routing setting is preserved in config.\n    The generator uses pool defaults (fill-first, affinity 1h) while pool is active.\n    To restore your setting, disable pool routing from the dashboard control panel.'
       : '[OK] Pool routing enabled. CLIProxy config regenerated with cooling ON,\n    fill-first strategy, session affinity 1h, max-retry-credentials 3.\n    CLIProxy will hot-reload the change; live session pins will re-pin on\n    next request.',
   };
 }
@@ -309,7 +309,7 @@ export function disablePoolRouting(
     return {
       changed: true,
       failed: true,
-      message: `[X] Could not write CLIProxy config: ${(err as Error).message}.\n    Pool routing is flagged disabled but the config was not regenerated.\n    Fix the file permission and re-run: ccs cliproxy pool --disable`,
+      message: `[X] Could not write CLIProxy config: ${(err as Error).message}.\n    Pool routing is flagged disabled but the config was not regenerated.\n    Fix the file permission and disable pool routing from the dashboard control panel.`,
     };
   }
 
@@ -320,7 +320,7 @@ export function disablePoolRouting(
       '    Your original routing settings are restored.\n' +
       '    If you have multiple accounts and want fair distribution, round-robin is active.\n' +
       '    To avoid cache-burn with large multi-account fleets, consider reducing to 1 account\n' +
-      '    or re-enabling pool routing: ccs cliproxy pool --enable',
+      '    or re-enabling pool routing from the dashboard control panel.',
   };
 }
 

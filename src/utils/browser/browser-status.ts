@@ -149,7 +149,7 @@ async function buildClaudeBrowserStatus(
       title: 'Claude Browser Attach is disabled.',
       detail:
         'CCS keeps Claude Browser Attach off by default and will not provision the managed browser MCP runtime until this lane is enabled.',
-      nextStep: `Enable Claude Browser Attach in Settings > Browser or in ${getCcsPathDisplay('config.yaml')}, then run \`ccs browser setup\` when you are ready to opt in.`,
+      nextStep: `Enable Claude Browser Attach in Settings > Browser or in ${getCcsPathDisplay('config.yaml')}, then set up the browser from the dashboard settings.`,
     };
   }
 

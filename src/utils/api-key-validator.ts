@@ -51,7 +51,7 @@ async function validateProviderKey(
       error: 'API key not configured',
       suggestion:
         `Set ANTHROPIC_AUTH_TOKEN in ~/.ccs/${config.profile}.settings.json\n` +
-        `Or run: ccs config -> API Profiles -> ${config.name}`,
+        `Or configure from the dashboard settings -> API Profiles -> ${config.name}`,
     };
   }
 
@@ -99,7 +99,7 @@ async function validateProviderKey(
             `Your key may have expired. To fix:\n` +
             `  1. Go to ${config.dashboardUrl} and regenerate your API key\n` +
             `  2. Update ~/.ccs/${config.profile}.settings.json with new key\n` +
-            `  3. Or run: ccs config -> API Profiles -> ${config.name}`,
+            `  3. Or configure from the dashboard settings -> API Profiles -> ${config.name}`,
         });
       } else {
         if (process.env.CCS_DEBUG === '1') {
@@ -217,7 +217,7 @@ export async function validateAnthropicKey(
             'Your key may have expired. To fix:\n' +
             '  1. Go to console.anthropic.com/settings/keys and regenerate your API key\n' +
             '  2. Update ANTHROPIC_API_KEY in your profile settings.json\n' +
-            '  3. Or run: ccs api create --preset anthropic',
+            '  3. Or configure from the dashboard settings -> API Profiles -> Anthropic',
         });
       } else {
         safeResolve({ valid: true });

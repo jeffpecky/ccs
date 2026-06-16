@@ -620,7 +620,7 @@ describe('Codex Quota Fetcher', () => {
       expect(result.httpStatus).toBe(401);
       expect(result.errorCode).toBe('reauth_required');
       expect(result.needsReauth).toBe(true);
-      expect(result.actionHint).toContain('ccs cliproxy auth codex');
+      expect(result.actionHint).toContain('Authenticate codex from the dashboard');
     });
 
     it('uses the registry token file for duplicate-email Codex accounts', async () => {

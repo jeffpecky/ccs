@@ -83,7 +83,7 @@ export class CcsSymlinksChecker implements IHealthChecker {
       } else {
         spinner.warn();
         console.log(`  ${warn('CCS Symlinks'.padEnd(22))}  ${health.issues.length} issues found`);
-        results.addCheck('CCS Symlinks', 'warning', health.issues.join(', '), 'Run: ccs sync', {
+        results.addCheck('CCS Symlinks', 'warning', health.issues.join(', '), 'Sync from the dashboard settings', {
           status: 'WARN',
           info: `${health.issues.length} issues`,
         });
@@ -95,7 +95,7 @@ export class CcsSymlinksChecker implements IHealthChecker {
         'CCS Symlinks',
         'warning',
         'Could not check CCS symlinks: ' + (e as Error).message,
-        'Run: ccs sync',
+        'Sync from the dashboard settings',
         { status: 'WARN', info: 'Could not check' }
       );
     }
@@ -139,7 +139,7 @@ export class SettingsSymlinksChecker implements IHealthChecker {
           'Settings Symlinks',
           'warning',
           'Shared settings.json not found',
-          'Run: ccs sync'
+          'Sync from the dashboard settings'
         );
         return;
       }
@@ -152,7 +152,7 @@ export class SettingsSymlinksChecker implements IHealthChecker {
           'Settings Symlinks',
           'warning',
           'Shared settings.json is not a symlink',
-          'Run: ccs sync'
+          'Sync from the dashboard settings'
         );
         return;
       }
@@ -164,7 +164,7 @@ export class SettingsSymlinksChecker implements IHealthChecker {
           'Settings Symlinks',
           'warning',
           'Shared symlink points to wrong target',
-          'Run: ccs sync'
+          'Sync from the dashboard settings'
         );
         return;
       }
@@ -195,7 +195,7 @@ export class SettingsSymlinksChecker implements IHealthChecker {
           'Settings Symlinks',
           'warning',
           `${broken} instance(s) have broken symlinks`,
-          'Run: ccs sync',
+          'Sync from the dashboard settings',
           { status: 'WARN', info: `${broken} broken instance(s)` }
         );
       } else {
@@ -213,7 +213,7 @@ export class SettingsSymlinksChecker implements IHealthChecker {
         'Settings Symlinks',
         'warning',
         `Failed to check: ${(err as Error).message}`,
-        'Run: ccs sync',
+        'Sync from the dashboard settings',
         { status: 'WARN', info: 'Check failed' }
       );
     }

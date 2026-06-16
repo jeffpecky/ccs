@@ -120,7 +120,7 @@ export async function waitForProxyReadyWithSpinner(
     console.error(`  - Check port: ${getPortCheckCommand(port)}`);
     console.error('  - Run with --verbose for detailed logs');
     console.error(`  - View config: ${getCatCommand(configPath)}`);
-    console.error('  - Try: ccs doctor --fix');
+    console.error('  - Try: Run diagnostics from the dashboard settings');
     console.error('');
 
     throw new Error(`CLIProxy startup failed: ${err.message}`);

@@ -214,7 +214,7 @@ function classifyAccount(
 
 /**
  * Compute the effective drain order for the active (non-paused) accounts,
- * mirroring the selector's pick order used by `ccs cliproxy accounts order`.
+   * mirroring the selector's pick order used by the dashboard account management.
  *
  * Delegates to the shared resolveEffectiveDrainOrder() so the quota Pool
  * section, the `accounts order` show, and the selector all agree: the order is

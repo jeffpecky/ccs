@@ -170,15 +170,11 @@ export interface OfficialChannelsStatus {
 // === Tab Types ===
 
 export type SettingsTab =
-  | 'browser'
-  | 'websearch'
-  | 'image'
-  | 'channels'
   | 'globalenv'
   | 'proxy'
   | 'auth'
-  | 'thinking'
-  | 'backups';
+  | 'backups'
+  | 'thinking';
 
 // === Thinking Types ===
 

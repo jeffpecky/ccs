@@ -282,7 +282,7 @@ class ProfileDetector {
         const error = new Error(
           'Copilot profile is not enabled.\n\n' +
             'To enable GitHub Copilot integration:\n' +
-            '  1. Run: ccs config\n' +
+            '  1. Configure from the dashboard settings\n' +
             '  2. Go to "GitHub Copilot" section\n' +
             '  3. Enable the integration\n' +
             '  4. Authenticate with GitHub: npx copilot-api auth\n\n' +

@@ -372,7 +372,7 @@ export function runAccountSafetyGuards(
  *
  * claude is model-neutral passthrough: the user's own /model selection inside
  * Claude Code governs which model is used, so no auto-prompt at launch.
- * Use `ccs claude --config` for an explicit pin opt-in.
+ * Use the dashboard settings for an explicit pin opt-in.
  */
 export async function ensureModelConfiguration(
   provider: CLIProxyProvider,

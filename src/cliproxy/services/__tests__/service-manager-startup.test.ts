@@ -14,7 +14,7 @@ describe('ensureCliproxyService', () => {
       ensureBinaryFn: async (_verbose, options) => {
         ensureBinaryCalls.push(options);
         throw new Error(
-          'CLIProxy Plus binary is not installed locally. Run "ccs cliproxy install" when you have network access.'
+          'CLIProxy Plus binary is not installed locally. Install CLIProxy from the dashboard control panel when you have network access.'
         );
       },
       detectRunningProxyFn: async () => ({ running: false, verified: false }),
@@ -27,7 +27,7 @@ describe('ensureCliproxyService', () => {
       alreadyRunning: false,
       port: 8317,
       error:
-        'Failed to prepare binary: CLIProxy Plus binary is not installed locally. Run "ccs cliproxy install" when you have network access.',
+        'Failed to prepare binary: CLIProxy Plus binary is not installed locally. Install CLIProxy from the dashboard control panel when you have network access.',
     });
     expect(ensureBinaryCalls).toEqual([
       {

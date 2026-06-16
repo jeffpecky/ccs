@@ -48,10 +48,6 @@ function lazyWithRetry<T extends ComponentType<unknown>>(importFn: () => Promise
 }
 
 // Lazy-loaded sections with retry capability
-const WebSearchSection = lazyWithRetry(() => import('./sections/websearch'));
-const BrowserSection = lazyWithRetry(() => import('./sections/browser'));
-const ImageAnalysisSection = lazyWithRetry(() => import('./sections/image-analysis'));
-const ChannelsSection = lazyWithRetry(() => import('./sections/channels'));
 const GlobalEnvSection = lazyWithRetry(() => import('./sections/globalenv-section'));
 const ThinkingSection = lazyWithRetry(() => import('./sections/thinking'));
 const ProxySection = lazyWithRetry(() => import('./sections/proxy'));
@@ -103,13 +99,6 @@ class SectionErrorBoundary extends Component<
 
 function resolveSettingsTab(tabParam: string | null | undefined): SettingsTab {
   switch (tabParam?.toLowerCase()) {
-    case 'browser':
-      return 'browser';
-    case 'imageanalysis':
-    case 'image':
-      return 'image';
-    case 'channels':
-      return 'channels';
     case 'globalenv':
       return 'globalenv';
     case 'proxy':
@@ -121,7 +110,7 @@ function resolveSettingsTab(tabParam: string | null | undefined): SettingsTab {
     case 'backups':
       return 'backups';
     default:
-      return 'websearch';
+      return 'globalenv';
   }
 }
 
@@ -159,10 +148,6 @@ function SettingsPageInner() {
         </div>
         <SectionErrorBoundary>
           <Suspense fallback={<SectionSkeleton />}>
-            {activeTab === 'browser' && <BrowserSection />}
-            {activeTab === 'websearch' && <WebSearchSection />}
-            {activeTab === 'image' && <ImageAnalysisSection />}
-            {activeTab === 'channels' && <ChannelsSection />}
             {activeTab === 'globalenv' && <GlobalEnvSection />}
             {activeTab === 'thinking' && <ThinkingSection />}
             {activeTab === 'proxy' && <ProxySection />}
@@ -185,10 +170,6 @@ function SettingsPageInner() {
             {/* Tab Content */}
             <SectionErrorBoundary>
               <Suspense fallback={<SectionSkeleton />}>
-                {activeTab === 'browser' && <BrowserSection />}
-                {activeTab === 'websearch' && <WebSearchSection />}
-                {activeTab === 'image' && <ImageAnalysisSection />}
-                {activeTab === 'channels' && <ChannelsSection />}
                 {activeTab === 'globalenv' && <GlobalEnvSection />}
                 {activeTab === 'thinking' && <ThinkingSection />}
                 {activeTab === 'proxy' && <ProxySection />}

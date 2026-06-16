@@ -145,7 +145,7 @@ class Doctor {
     if (this.results.isHealthy() && !this.results.hasWarnings()) {
       console.log(ok('All checks passed! Installation is healthy.'));
       console.log('');
-      console.log(info(`Tip: Use ${color('ccs config', 'command')} for web-based configuration`));
+      console.log(info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`));
     } else if (this.results.hasErrors()) {
       console.log(fail('Installation has errors. Run suggested fixes above.'));
     } else {
@@ -155,7 +155,7 @@ class Doctor {
         )
       );
       console.log('');
-      console.log(info(`Tip: Use ${color('ccs config', 'command')} for web-based configuration`));
+      console.log(info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`));
     }
 
     // Pool onboarding hint: fires when >= 2 native Claude profiles exist and
@@ -178,7 +178,7 @@ class Doctor {
         'Docker Key Rotation',
         'warning',
         `Legacy API key remains valid until ${status.legacyGrace.expiresAt}`,
-        'Run `ccs docker show-key --full`, update clients, then run `ccs docker finalize-key-rotation`.',
+        'Manage Docker key rotation from the dashboard settings.',
         {
           status: 'WARN',
           info: `legacy key grace active until ${status.legacyGrace.expiresAt}`,
@@ -192,7 +192,7 @@ class Doctor {
         'Docker Key Rotation',
         'warning',
         'Docker bootstrap state marker is unreadable',
-        'Run `ccs docker up` to recreate the marker.',
+        'Recreate Docker marker from the dashboard settings.',
         {
           status: 'WARN',
           info: 'state marker unreadable',

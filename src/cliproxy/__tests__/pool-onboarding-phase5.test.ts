@@ -382,7 +382,7 @@ describe('Phase 5: Pool Onboarding Hint', () => {
   });
 
   // ── 13. Hint copy is opt-in framed and names the enable command ──────────
-  it("hint copy mentions 'ccs claude' and the opt-in enable command", async () => {
+  it("hint copy mentions 'Claude' and the opt-in enable command", async () => {
     const ccsDir = path.join(tempHome, '.ccs');
     writeProfiles(ccsDir, ['work', 'personal']);
 
@@ -394,10 +394,10 @@ describe('Phase 5: Pool Onboarding Hint', () => {
       const result = maybeShowPoolOnboardingHint();
       expect(result.printed).toBe(true);
       const allOutput = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
-      expect(allOutput).toContain('ccs claude');
+      expect(allOutput).toContain('Claude profiles');
       // Copy must be opt-in (not declarative "already pools") and name the
       // actual enable command so the user has an actionable next step.
-      expect(allOutput).toContain('ccs cliproxy pool --enable');
+      expect(allOutput).toContain('Enable pool routing from the dashboard control panel');
       expect(allOutput.toLowerCase()).toContain('can auto-continue');
       // Must NOT read as already-active behavior.
       expect(allOutput).not.toContain('pool auto-continues');

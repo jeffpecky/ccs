@@ -153,7 +153,7 @@ export async function importKiroToken(verbose = false): Promise<boolean> {
   console.log('Make sure you are logged into Kiro IDE first:');
   console.log('  1. Open Kiro IDE');
   console.log('  2. Sign in with your AWS/Google account');
-  console.log('  3. Run: ccs kiro --import');
+  console.log('  3. Run: Import Kiro token from the dashboard');
 
   return false;
 }

@@ -59,7 +59,7 @@ function emitPlusFallbackWarning(): void {
   process.stderr.write(
     `${warn(
       'Legacy CLIProxyAPIPlus upstream repo is unavailable; local CLIProxy is falling back to ' +
-        '`backend: original`. Run `ccs config` to use the maintained Plus fork. ' +
+        '`backend: original`. Configure from the dashboard settings to use the maintained Plus fork. ' +
         `Tracking: ${CLIPROXY_PLUS_FALLBACK_TRACKING_URL}`
     )}\n`
   );

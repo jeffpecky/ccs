@@ -22,7 +22,7 @@ import { requestLoggingMiddleware } from './middleware/request-logging-middlewar
 import { startAutoSyncWatcher, stopAutoSyncWatcher } from '../cliproxy/sync';
 import { shutdownUsageAggregator } from './usage/aggregator';
 import { createLogger } from '../services/logging';
-import { DEFAULT_DASHBOARD_HOST, isLoopbackHost } from '../commands/config-dashboard-host';
+import { DEFAULT_DASHBOARD_HOST, isLoopbackHost } from './dashboard-host';
 
 export interface ServerOptions {
   port: number;
@@ -87,10 +87,6 @@ export async function startServer(options: ServerOptions): Promise<ServerInstanc
   // REST API routes (modularized)
   const { apiRoutes } = await import('./routes/index');
   app.use('/api', apiRoutes);
-
-  // Shared data routes (Phase 07)
-  const { sharedRoutes } = await import('./shared-routes');
-  app.use('/api/shared', sharedRoutes);
 
   // Overview routes (Phase 07)
   const { overviewRoutes } = await import('./overview-routes');

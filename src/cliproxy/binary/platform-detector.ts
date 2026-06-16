@@ -32,11 +32,9 @@ export const BACKEND_CONFIG = {
 /**
  * Default backend
  *
- * Keep 'original' as the stable default. The Plus backend is available as an
- * opt-in community-maintained fork for providers that are not available in the
- * original upstream binary.
+ * CLIProxyAPIPlus is the default backend with extended provider support.
  */
-export const DEFAULT_BACKEND: CLIProxyBackend = 'original';
+export const DEFAULT_BACKEND: CLIProxyBackend = 'plus';
 
 /**
  * CLIProxyAPIPlus fallback version (used when GitHub API unavailable)

@@ -686,7 +686,7 @@ function generateUnifiedConfigContent(
   const disableCoolingValue = poolEnabled ? 'false' : 'true';
   const coolingComment = poolEnabled
     ? '# Pool routing enabled: cooling ON so exhausted accounts enter backoff and rotate out.\n# First 429 gets a 1s backoff (exponential to 30m cap); Retry-After header is honored.\n# Retry-cap below stops burn loops from retrying already-known-bad credentials.'
-    : '# Disable quota cooldown scheduling for stability.\n# Pool routing is off: cooling stays disabled to prevent single-account blackouts.\n# Re-enabled automatically when pool routing is turned on (ccs cliproxy pool --enable).';
+    : '# Disable quota cooldown scheduling for stability.\n# Pool routing is off: cooling stays disabled to prevent single-account blackouts.\n# Re-enabled automatically when pool routing is turned on from the dashboard control panel.';
   const poolRoutingBlock = poolEnabled
     ? `\n# Max credentials to try per request before returning 429 to caller.\n# ONLY valid with cooling on (above). Without cooling a just-exhausted credential\n# remains "available" and retry-cap would not prevent re-targeting it.\nmax-retry-credentials: ${poolMaxRetry}\n`
     : '';
@@ -702,7 +702,7 @@ routing:
 # Generated: ${new Date().toISOString()}
 #
 # This config is auto-managed by CCS. Manual edits may be overwritten.
-# Use 'ccs doctor' to regenerate with latest settings.
+# Use the dashboard settings to regenerate with latest settings.
 
 # =============================================================================
 # Server Settings
@@ -720,7 +720,7 @@ debug: false
 #     logging:
 #       enabled: true
 #       request_log: true
-# Then run 'ccs doctor --fix' to regenerate this config.
+# Then run diagnostics from the dashboard settings to regenerate this config.
 # Use 'ccs cleanup' to remove old logs.
 
 # Write logs to file (stored in ~/.ccs/cliproxy/logs/)

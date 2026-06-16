@@ -162,7 +162,7 @@ export async function reconcileCodexModelForActivePlan(
     console.error(
       formatWarn(
         `Configured Codex model "${normalizeCodexModelId(currentModel)}" may require a paid Codex plan. ` +
-          `If startup fails, switch to "${fallbackModel}" with "ccs codex --config".`
+          `If startup fails, switch to "${fallbackModel}" from the dashboard settings.`
       )
     );
     return;
@@ -191,7 +191,7 @@ export async function reconcileCodexModelForActivePlan(
   console.error(
     formatWarn(
       `Could not verify Codex plan for model "${normalizeCodexModelId(currentModel)}". ` +
-        `If startup fails with model_not_supported, switch to "${fallbackModel}" via "ccs codex --config".`
+        `If startup fails with model_not_supported, switch to "${fallbackModel}" from the dashboard settings.`
     )
   );
 }

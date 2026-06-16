@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { queryClient } from '@/lib/query-client';
@@ -19,7 +19,6 @@ import { LoginPage } from '@/pages/login';
 const AnalyticsPage = lazy(() =>
   import('@/pages/analytics').then((m) => ({ default: m.AnalyticsPage }))
 );
-const ApiPage = lazy(() => import('@/pages/api').then((m) => ({ default: m.ApiPage })));
 const CliproxyPage = lazy(() =>
   import('@/pages/cliproxy').then((m) => ({ default: m.CliproxyPage }))
 );
@@ -31,26 +30,11 @@ const CliproxyControlPanelPage = lazy(() =>
 );
 const CopilotPage = lazy(() => import('@/pages/copilot').then((m) => ({ default: m.CopilotPage })));
 const CursorPage = lazy(() => import('@/pages/cursor').then((m) => ({ default: m.CursorPage })));
-const ClaudeExtensionPage = lazy(() =>
-  import('@/pages/claude-extension').then((m) => ({ default: m.ClaudeExtensionPage }))
-);
-const CodexPage = lazy(() => import('@/pages/codex').then((m) => ({ default: m.CodexPage })));
-const DroidPage = lazy(() => import('@/pages/droid').then((m) => ({ default: m.DroidPage })));
 const LogsPage = lazy(() => import('@/pages/logs').then((m) => ({ default: m.LogsPage })));
-const AccountsPage = lazy(() =>
-  import('@/pages/accounts').then((m) => ({ default: m.AccountsPage }))
-);
 const SettingsPage = lazy(() =>
   import('@/pages/settings').then((m) => ({ default: m.SettingsPage }))
 );
 const HealthPage = lazy(() => import('@/pages/health').then((m) => ({ default: m.HealthPage })));
-const SharedPage = lazy(() => import('@/pages/shared').then((m) => ({ default: m.SharedPage })));
-const UpdatesPage = lazy(() => import('@/pages/updates').then((m) => ({ default: m.UpdatesPage })));
-
-// Dev-only: design system styleguide
-const StyleguidePage = import.meta.env.DEV
-  ? lazy(() => import('@/pages/_styleguide').then((m) => ({ default: m.StyleguidePage })))
-  : null;
 
 // Loading fallback for lazy components
 function PageLoader() {
@@ -81,22 +65,6 @@ export default function App() {
                       element={
                         <Suspense fallback={<PageLoader />}>
                           <AnalyticsPage />
-                        </Suspense>
-                      }
-                    />
-                    <Route
-                      path="/updates"
-                      element={
-                        <Suspense fallback={<PageLoader />}>
-                          <UpdatesPage />
-                        </Suspense>
-                      }
-                    />
-                    <Route
-                      path="/providers"
-                      element={
-                        <Suspense fallback={<PageLoader />}>
-                          <ApiPage />
                         </Suspense>
                       }
                     />
@@ -133,46 +101,10 @@ export default function App() {
                       }
                     />
                     <Route
-                      path="/cursor"
-                      element={<Navigate to="/cliproxy?provider=cursor" replace />}
-                    />
-                    <Route
                       path="/legacy/cursor"
                       element={
                         <Suspense fallback={<PageLoader />}>
                           <CursorPage />
-                        </Suspense>
-                      }
-                    />
-                    <Route
-                      path="/claude-extension"
-                      element={
-                        <Suspense fallback={<PageLoader />}>
-                          <ClaudeExtensionPage />
-                        </Suspense>
-                      }
-                    />
-                    <Route
-                      path="/codex"
-                      element={
-                        <Suspense fallback={<PageLoader />}>
-                          <CodexPage />
-                        </Suspense>
-                      }
-                    />
-                    <Route
-                      path="/droid"
-                      element={
-                        <Suspense fallback={<PageLoader />}>
-                          <DroidPage />
-                        </Suspense>
-                      }
-                    />
-                    <Route
-                      path="/accounts"
-                      element={
-                        <Suspense fallback={<PageLoader />}>
-                          <AccountsPage />
                         </Suspense>
                       }
                     />
@@ -200,24 +132,6 @@ export default function App() {
                         </Suspense>
                       }
                     />
-                    <Route
-                      path="/shared"
-                      element={
-                        <Suspense fallback={<PageLoader />}>
-                          <SharedPage />
-                        </Suspense>
-                      }
-                    />
-                    {StyleguidePage && (
-                      <Route
-                        path="/_styleguide"
-                        element={
-                          <Suspense fallback={<PageLoader />}>
-                            <StyleguidePage />
-                          </Suspense>
-                        }
-                      />
-                    )}
                   </Route>
                 </Route>
               </Routes>

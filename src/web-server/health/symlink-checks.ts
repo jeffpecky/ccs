@@ -33,7 +33,7 @@ export function checkCcsSymlinks(): HealthCheck {
       name: 'CCS Symlinks',
       status: 'warning',
       message: `${health.issues.length} issues found`,
-      fix: 'Run: ccs sync',
+      fix: 'Sync from the dashboard settings',
     };
   } catch (e) {
     return {
@@ -42,7 +42,7 @@ export function checkCcsSymlinks(): HealthCheck {
       status: 'warning',
       message: 'Could not check',
       details: (e as Error).message,
-      fix: 'Run: ccs sync',
+      fix: 'Sync from the dashboard settings',
     };
   }
 }
@@ -62,7 +62,7 @@ export function checkSettingsSymlinks(ccsDir: string, claudeDir: string): Health
         name: 'settings.json',
         status: 'warning',
         message: 'Shared not found',
-        fix: 'Run: ccs sync',
+        fix: 'Sync from the dashboard settings',
       };
     }
 
@@ -73,7 +73,7 @@ export function checkSettingsSymlinks(ccsDir: string, claudeDir: string): Health
         name: 'settings.json',
         status: 'warning',
         message: 'Not a symlink',
-        fix: 'Run: ccs sync',
+        fix: 'Sync from the dashboard settings',
       };
     }
 
@@ -86,7 +86,7 @@ export function checkSettingsSymlinks(ccsDir: string, claudeDir: string): Health
         name: 'settings.json',
         status: 'warning',
         message: 'Wrong target',
-        fix: 'Run: ccs sync',
+        fix: 'Sync from the dashboard settings',
       };
     }
 
@@ -132,7 +132,7 @@ export function checkSettingsSymlinks(ccsDir: string, claudeDir: string): Health
         name: 'settings.json',
         status: 'warning',
         message: `${broken} broken instance(s)`,
-        fix: 'Run: ccs sync',
+        fix: 'Sync from the dashboard settings',
       };
     }
 
@@ -149,7 +149,7 @@ export function checkSettingsSymlinks(ccsDir: string, claudeDir: string): Health
       status: 'warning',
       message: 'Check failed',
       details: (e as Error).message,
-      fix: 'Run: ccs sync',
+      fix: 'Sync from the dashboard settings',
     };
   }
 }

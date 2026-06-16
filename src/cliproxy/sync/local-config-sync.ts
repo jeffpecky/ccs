@@ -43,7 +43,7 @@ export function syncToLocalConfig(): {
         success: false,
         syncedCount: 0,
         configPath,
-        error: 'CLIProxy config not found. Run ccs doctor to generate.',
+        error: 'CLIProxy config not found. Run diagnostics from the dashboard settings to generate.',
       };
     }
 
@@ -56,7 +56,7 @@ export function syncToLocalConfig(): {
           success: false,
           syncedCount: 0,
           configPath,
-          error: 'CLIProxy config deleted during sync. Run ccs doctor to regenerate.',
+          error: 'CLIProxy config deleted during sync. Run diagnostics from the dashboard settings to regenerate.',
         };
       }
       throw error;

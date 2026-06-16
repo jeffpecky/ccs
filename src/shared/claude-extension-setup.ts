@@ -124,7 +124,7 @@ function resultUsesCodexProvider(result: ProfileDetectionResult): boolean {
 
 function createCodexClaudeExtensionError(profileName: string): Error {
   return new Error(
-    `Profile "${profileName}" is a Codex CLIProxy profile. CCS does not persist Codex CLIProxy profiles into Claude Code or Claude Code Extension settings because that routes Claude traffic through the Codex translator. Use ccsxp or ccs codex --target codex for ChatGPT/Codex subscriptions. To clear stale Claude settings, run ccs persist default --yes.`
+    `Profile "${profileName}" is a Codex CLIProxy profile. CCS does not persist Codex CLIProxy profiles into Claude Code or Claude Code Extension settings because that routes Claude traffic through the Codex translator. Use the dashboard to manage Codex for ChatGPT/Codex subscriptions. To clear stale Claude settings, reset configuration from the dashboard settings.`
   );
 }
 

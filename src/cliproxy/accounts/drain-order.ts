@@ -554,7 +554,7 @@ export interface EffectiveDrainOrder {
 
 /**
  * Resolve the effective drain order for a provider's active (non-paused)
- * accounts, mirroring what `ccs cliproxy accounts order` shows and what the
+   * accounts, mirroring what the dashboard account management shows and what the
  * selector actually drains.
  *
  * Semantics (shared by the order subcommand and the quota pool section):

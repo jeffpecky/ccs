@@ -57,8 +57,8 @@ export function normalizeDeprecatedGlmtEnv(env: Record<string, string>): GlmtNor
 export function buildGlmtCompatibilityWarnings(migrated: boolean): string[] {
   const warnings = [
     'GLMT is deprecated and kept only as a compatibility path.',
-    'Use ccs glm for Z.AI API profiles.',
-    'Use ccs km for reasoning-first Kimi API profiles.',
+    'Use the dashboard to manage GLM for Z.AI API profiles.',
+    'Use the dashboard to manage Kimi for reasoning-first Kimi API profiles.',
   ];
 
   if (migrated) {

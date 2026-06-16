@@ -103,7 +103,7 @@ export function rejectUnsupportedAuthOptions(
   console.log(fail(`Unknown option(s): ${unknownList}`));
   console.log('');
   console.log(`Usage: ${color(options.usage, 'command')}`);
-  console.log(`Help:  ${color('ccs auth --help', 'command')}`);
+  console.log(`Help:  ${color('Check the dashboard for available options', 'command')}`);
   console.log('');
   exitWithError(`Unknown option(s): ${unknownList}`, ExitCode.PROFILE_ERROR);
 }

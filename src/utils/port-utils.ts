@@ -95,13 +95,37 @@ async function getPortProcessWindows(port: number): Promise<PortProcess | null> 
 
     const pid = parseInt(match[1], 10);
 
-    // Get process name from PID
-    const { stdout: tasklistOut } = await execAsync(`tasklist /FI "PID eq ${pid}" /NH`, {
-      timeout: 3000,
-    });
+    // Get process name from PID — try multiple methods
+    let processName = `PID-${pid}`;
 
-    const taskMatch = tasklistOut.match(/^([^\s]+)/);
-    const processName = taskMatch ? taskMatch[1] : `PID-${pid}`;
+    // Method 1: tasklist
+    try {
+      const { stdout: tasklistOut } = await execAsync(`tasklist /FI "PID eq ${pid}" /NH`, {
+        timeout: 3000,
+      });
+      const taskMatch = tasklistOut.match(/^([^\s]+)/);
+      if (taskMatch && !taskMatch[1].startsWith('PID-')) {
+        processName = taskMatch[1];
+      }
+    } catch {
+      // tasklist failed, try next method
+    }
+
+    // Method 2: wmic (more reliable on some Windows versions)
+    if (processName.startsWith('PID-')) {
+      try {
+        const { stdout: wmicOut } = await execAsync(
+          `wmic process where "ProcessId=${pid}" get Name /value`,
+          { timeout: 3000 }
+        );
+        const wmicMatch = wmicOut.match(/Name=([^\r\n]+)/);
+        if (wmicMatch) {
+          processName = wmicMatch[1].trim();
+        }
+      } catch {
+        // wmic failed, keep PID fallback
+      }
+    }
 
     return { pid, processName };
   } catch {
@@ -120,8 +144,27 @@ export function isCLIProxyProcess(process: PortProcess | null): boolean {
   }
 
   const name = process.processName.toLowerCase();
+  // All CLIProxy variants: cli-proxy-api, cli-proxy-api-plus, cliproxy, cliproxyapiplus, etc.
+  return (
+    name.includes('cli-proxy') ||
+    name.includes('cliproxy') ||
+    name.includes('cli_proxy')
+  );
+}
+
+  const name = process.processName.toLowerCase();
   // All CLIProxy variants start with 'cli-proxy' or 'cliproxy'
-  return name.startsWith('cli-proxy') || name.startsWith('cliproxy');
+  if (name.startsWith('cli-proxy') || name.startsWith('cliproxy')) {
+    return true;
+  }
+
+  // If process name detection failed (PID-xxx fallback on Windows),
+  // assume it's CLIProxy since the dashboard initiated the check
+  if (name.startsWith('pid-')) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

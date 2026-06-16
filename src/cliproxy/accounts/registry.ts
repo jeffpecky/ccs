@@ -828,7 +828,7 @@ export function discoverExistingAccounts(): void {
 /**
  * Persist drain order configuration for a provider.
  * The config survives re-auth and registry sync; priorities are NOT automatically
- * re-applied after sync. Re-run `ccs cliproxy accounts order <provider> --by-tier`
+ * re-applied after sync. Manage account order from the dashboard
  * or `--set` after adding or re-authing accounts to re-apply.
  */
 export function saveDrainOrderConfig(

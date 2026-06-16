@@ -316,7 +316,7 @@ router.get('/usage', async (_req: Request, res: Response): Promise<void> => {
     if (!daemonRunning) {
       res.status(503).json({
         error: 'copilot-api daemon is not running',
-        message: 'Start daemon first: ccs copilot start',
+        message: 'Start daemon first: Start Copilot from the dashboard',
       });
       return;
     }

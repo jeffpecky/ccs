@@ -45,7 +45,7 @@ export class CLIProxyBinaryChecker implements IHealthChecker {
         'CLIProxy Binary',
         'success',
         'Not installed yet',
-        'Run: ccs gemini "test" (will download automatically)',
+        'Use the dashboard to manage Gemini (will download automatically)',
         { status: 'OK', info: 'Not installed (downloads on first use)' }
       );
     }
@@ -128,8 +128,8 @@ export class CLIProxyAuthChecker implements IHealthChecker {
           `${providerName} Auth`,
           'success',
           'Not authenticated',
-          `Run: ccs ${status.provider} --auth`,
-          { status: 'OK', info: 'Not authenticated (run ccs <profile> to login)' }
+          `Authenticate ${status.provider} from the dashboard`,
+          { status: 'OK', info: 'Not authenticated (authenticate from the dashboard)' }
         );
       }
     }

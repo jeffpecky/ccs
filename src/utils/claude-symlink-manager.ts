@@ -194,7 +194,7 @@ export class ClaudeSymlinkManager {
 
   /**
    * Windows fallback: copy files/directories when symlinks unavailable
-   * Note: Changes won't auto-sync; user must run 'ccs sync' after updates
+   * Note: Changes won't auto-sync; user must sync from the dashboard settings after updates
    */
   private copyFallback(
     sourcePath: string,
@@ -212,7 +212,7 @@ export class ClaudeSymlinkManager {
       }
       if (!silent) {
         console.log(ok(`Copied ${item.target} (symlink unavailable)`));
-        console.log(info("Run 'ccs sync' after CCS updates to refresh"));
+        console.log(info("Sync from the dashboard settings after CCS updates to refresh"));
       }
       return true;
     } catch (copyErr) {
@@ -339,7 +339,7 @@ export class ClaudeSymlinkManager {
 
   /**
    * Check symlink health and report issues
-   * Used by 'ccs doctor' command
+   * Used by dashboard diagnostics
    */
   checkHealth(): HealthCheckResult {
     const issues: string[] = [];
@@ -366,16 +366,16 @@ export class ClaudeSymlinkManager {
 
       // Check target
       if (!fs.existsSync(targetPath)) {
-        issues.push(`Not installed: ${item.target} (run 'ccs sync' to install)`);
+        issues.push(`Not installed: ${item.target} (sync from the dashboard settings to install)`);
         healthy = false;
       } else if (!this.isOurSymlink(targetPath, sourcePath)) {
         // On Windows, copied files are valid (symlink fallback)
         if (process.platform === 'win32' && this.isCopiedItem(targetPath, sourcePath, item.type)) {
           // Copied file is valid on Windows, but note it's not a symlink
-          issues.push(`${item.target} is a copy (not symlink) - run 'ccs sync' after updates`);
+          issues.push(`${item.target} is a copy (not symlink) - sync from the dashboard settings after updates`);
           // Still healthy, just a warning
         } else {
-          issues.push(`Not a CCS symlink: ${item.target} (run 'ccs sync' to fix)`);
+          issues.push(`Not a CCS symlink: ${item.target} (sync from the dashboard settings to fix)`);
           healthy = false;
         }
       }
@@ -411,7 +411,7 @@ export class ClaudeSymlinkManager {
   }
 
   /**
-   * Sync delegation commands and skills to ~/.claude/ (used by 'ccs sync' command)
+   * Sync delegation commands and skills to ~/.claude/ (used by dashboard sync)
    * Same as install() but with explicit sync message
    */
   sync(): void {

@@ -88,7 +88,7 @@ async function resolveAuthReadiness(
       authDisplayName,
       authReason: authenticated
         ? null
-        : `${authDisplayName} auth is missing. Run "ccs ${authProvider} --auth" to enable image analysis.`,
+        : `${authDisplayName} auth is missing. Authenticate ${authProvider} from the dashboard to enable image analysis.`,
     };
   } catch (error) {
     return {

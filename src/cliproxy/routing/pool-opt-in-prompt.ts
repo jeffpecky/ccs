@@ -235,8 +235,8 @@ export async function maybeOfferPoolRouting(
     `      - max-retry-credentials: ${POOL_MAX_RETRY_CREDENTIALS}  (stop after ${POOL_MAX_RETRY_CREDENTIALS} attempts per request)`
   );
   console.log('');
-  console.log('    You can roll back at any time: ccs cliproxy pool --disable');
-  console.log('    (Or re-enable later: ccs cliproxy pool --enable)');
+  console.log('    You can roll back at any time: Disable pool routing from the dashboard control panel');
+  console.log('    (Or re-enable later: Enable pool routing from the dashboard control panel)');
   console.log('');
 
   const yes = await InteractivePrompt.confirm(
@@ -249,7 +249,7 @@ export async function maybeOfferPoolRouting(
     dismissPoolPrompt();
     console.log(
       info(
-        "    Declined. Pool routing stays off. Run 'ccs cliproxy pool --enable' to opt in later."
+        "    Declined. Pool routing stays off. Enable pool routing from the dashboard control panel to opt in later."
       )
     );
     console.log('');

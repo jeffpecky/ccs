@@ -9,9 +9,9 @@ import {
   AGY_GEMINI_PRO_COMPATIBILITY_IDS,
   AGY_GEMINI_PRO_HIGH_ID,
   AGY_GEMINI_PRO_LOW_ID,
-} from '@shared/agy-gemini-pro-compatibility';
-import { GEMINI_MINOR_VERSION_COMPATIBILITY_IDS } from '@shared/gemini-minor-version-compatibility';
+} from '@/lib/agy-gemini-pro-compatibility';
 
+import { GEMINI_MINOR_VERSION_COMPATIBILITY_IDS } from '@/lib/gemini-minor-version-compatibility';
 const GEMINI_PREVIEW_MODEL_ID_PATTERN =
   /^gemini-(\d+(?:[.-]\d+)*)-(pro|flash)-preview(-customtools)?$/i;
 const MANAGED_MODEL_PREFIXES = ['agy/', 'gcli/'] as const;

@@ -10,7 +10,6 @@ import { requireLocalAccessWhenAuthDisabled } from '../middleware/auth-middlewar
 
 // Import domain routers
 import profileRoutes from './profile-routes';
-import accountRoutes from './account-routes';
 import configRoutes from './config-routes';
 import healthRoutes from './health-routes';
 import providerRoutes from './provider-routes';
@@ -27,14 +26,11 @@ import cliproxySyncRoutes from './cliproxy-sync-routes';
 import aiProviderRoutes from './ai-provider-routes';
 import copilotRoutes from './copilot-routes';
 import cursorRoutes from './cursor-routes';
-import droidRoutes from './droid-routes';
-import codexRoutes from './codex-routes';
 import miscRoutes from './misc-routes';
 import cliproxyServerRoutes from './proxy-routes';
 import authRoutes from './auth-routes';
 import persistRoutes from './persist-routes';
 import catalogRoutes from './catalog-routes';
-import claudeExtensionRoutes from './claude-extension-routes';
 import logsRoutes from './logs-routes';
 import barRoutes from './bar-routes';
 
@@ -88,7 +84,6 @@ apiRoutes.use((req, res, next) => {
 apiRoutes.use('/profiles', profileRoutes);
 apiRoutes.use('/settings', settingsRoutes);
 apiRoutes.use('/channels', channelsRoutes);
-apiRoutes.use('/accounts', accountRoutes);
 
 // ==================== Unified Config ====================
 // Config format, migration
@@ -102,7 +97,6 @@ apiRoutes.use('/auth', authRoutes);
 
 // ==================== Persist (Backup Management) ====================
 apiRoutes.use('/persist', persistRoutes);
-apiRoutes.use('/claude-extension', claudeExtensionRoutes);
 
 // ==================== CLIProxy ====================
 // Variants, auth, accounts, stats, status, models, error logs
@@ -127,11 +121,6 @@ apiRoutes.use('/copilot', copilotRoutes);
 apiRoutes.use('/cursor', cursorRoutes);
 apiRoutes.use('/legacy/cursor', cursorRoutes);
 
-// ==================== Droid ====================
-apiRoutes.use('/droid', droidRoutes);
-
-// ==================== Codex ====================
-apiRoutes.use('/codex', codexRoutes);
 
 // ==================== CLIProxy Server Settings ====================
 apiRoutes.use('/cliproxy-server', cliproxyServerRoutes);

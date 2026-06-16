@@ -159,7 +159,7 @@ describe('formatErrorMessage', () => {
   test('UNKNOWN preserves backward-compat 3-bullet feel and ends with verbose hint', () => {
     const lines = formatErrorMessage({ branchId: 'UNKNOWN', data: {} }, baseOpts);
     expect(lines.some((l) => l.includes('Token not found'))).toBe(true);
-    expect(lines.some((l) => l.startsWith('Try: ccs codex --auth --verbose'))).toBe(true);
+    expect(lines.some((l) => l.startsWith('Try: Authenticate codex from the dashboard'))).toBe(true);
     // body lines (excluding trailing remediation) ≤ 5 -> not exploding
     expect(lines.length).toBeLessThanOrEqual(6);
   });
@@ -258,7 +258,7 @@ describe('cross-profile OAuth failure matrix', () => {
         ev(OAuthTracePhase.BinaryExit, { data: { code: 0 } }),
         ev(OAuthTracePhase.TokenFileMissing),
       ],
-      hint: 'ccs update',
+      hint: 'Update from the dashboard settings',
     },
   ] as const;
 
@@ -276,7 +276,7 @@ describe('cross-profile OAuth failure matrix', () => {
         provider,
       }).join('\n');
       expect(message).toContain(scenario.hint);
-      expect(message.includes(`ccs ${provider}`) || message.includes('ccs update')).toBe(true);
+      expect(message.includes(`Authenticate ${provider} from the dashboard`) || message.includes('Update from the dashboard settings')).toBe(true);
     }
   );
 });

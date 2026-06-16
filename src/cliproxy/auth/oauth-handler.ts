@@ -1159,7 +1159,7 @@ export async function triggerOAuth(
 
   if (provider === 'kiro' && resolvedKiroMethod === 'github') {
     console.log(fail('Kiro GitHub login is only available in Dashboard management OAuth flow.'));
-    console.log('    Use: ccs config -> Accounts -> Add Kiro account -> Method: GitHub OAuth');
+    console.log('    Use: the dashboard settings -> Accounts -> Add Kiro account -> Method: GitHub OAuth');
     return null;
   }
 
@@ -1354,8 +1354,8 @@ export async function triggerOAuth(
   if (account && provider === 'kiro' && !noIncognito) {
     console.log('');
     console.log(info('Tip: To save your AWS login credentials for future sessions:'));
-    console.log('       Use: ccs kiro --no-incognito');
-    console.log('       Or enable "Kiro: Use normal browser" in: ccs config');
+    console.log('       Use: Authenticate from the dashboard without incognito mode');
+    console.log('       Or enable "Kiro: Use normal browser" in: the dashboard settings');
   }
 
   // Account safety: check for cross-provider conflicts

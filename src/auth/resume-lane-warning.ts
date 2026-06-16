@@ -46,9 +46,9 @@ export async function maybeWarnAboutResumeLaneMismatch(
       );
     }
     log(info('  Recover the original lane first: ccs -r'));
-    log(info('  Back it up before changing setup: ccs auth backup default'));
+    log(info('  Back it up before changing setup: Backup from the dashboard settings'));
     log(
-      info(`  For future work, align plain ccs with this account: ccs auth default ${profileName}`)
+      info(`  For future work, align plain ccs with this account: Set default from the dashboard settings`)
     );
     log('');
   } catch (error) {

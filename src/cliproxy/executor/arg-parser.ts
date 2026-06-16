@@ -606,7 +606,7 @@ export function validateFlagCombinations(
   if (kiroAuthMethod === 'idc' && !kiroIDCStartUrl) {
     console.error(fail('Kiro IDC login requires --kiro-idc-start-url'));
     console.error(
-      '    Example: ccs kiro --auth --kiro-auth-method idc --kiro-idc-start-url https://d-xxx.awsapps.com/start'
+      '    Example: Authenticate Kiro from the dashboard with IDC method and start URL'
     );
     process.exitCode = 1;
     return false;

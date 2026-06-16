@@ -186,7 +186,7 @@ export class ProfileRegistry {
     });
 
     // Note: No longer auto-set as default
-    // Users must explicitly run: ccs auth default <profile>
+    // Users must explicitly set default from the dashboard settings
     // Default always stays on implicit 'default' profile (uses ~/.claude/)
 
     this._write(data);

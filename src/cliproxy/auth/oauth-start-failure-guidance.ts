@@ -35,12 +35,7 @@ function buildAuthCommand(
   flag: '--paste-callback' | '--port-forward',
   addAccount?: boolean
 ): string {
-  const parts = ['ccs', provider, '--auth'];
-  if (addAccount) {
-    parts.push('--add');
-  }
-  parts.push(flag);
-  return parts.join(' ');
+  return `Authenticate ${provider} from the dashboard`;
 }
 
 export function buildOAuthStartFailureGuidance(
@@ -77,7 +72,7 @@ export function buildOAuthStartFailureGuidance(
         `After fixing the remote proxy, retry: ${retryCommand}`,
       ]
     : [
-        'Start local CLIProxy first: ccs cliproxy start',
+        'Start local CLIProxy first: Start CLIProxy from the dashboard control panel',
         `Then retry paste-callback mode: ${retryCommand}`,
         ...(portForwardCommand
           ? [

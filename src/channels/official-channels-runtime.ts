@@ -286,7 +286,7 @@ export function getOfficialChannelsStateScopeMessage(): string {
 }
 
 export function getOfficialChannelsSupportMessage(): string {
-  return 'Works only for native Claude default/account sessions. It does not apply to API, OAuth, or non-Claude targets such as `ccs glm`, `ccs gemini`, `ccs codex`, `ccs --target droid`, or `ccs --target codex`.';
+  return 'Works only for native Claude default/account sessions. It does not apply to API, OAuth, or non-Claude targets such as GLM, Gemini, Codex, or Droid.';
 }
 
 export function getOfficialChannelsAccountStatusCaveat(): string {
@@ -809,7 +809,7 @@ export function getOfficialChannelsLegacyEnableHelp(): string {
 }
 
 export function getOfficialChannelTokenHelp(): string {
-  return 'Use --set-token <channel> and pass the token via that channel env var (for example TELEGRAM_BOT_TOKEN=... ccs config channels --set-token telegram).';
+  return 'Use --set-token <channel> and pass the token via that channel env var (for example TELEGRAM_BOT_TOKEN=... configure from the dashboard settings > Channels).';
 }
 
 export function getOfficialChannelClearTokenHelp(): string {
@@ -851,7 +851,7 @@ export function getOfficialChannelsBunMissingMessage(): string {
 }
 
 export function getOfficialChannelsCompatibilityMessage(): string {
-  return 'Official Channels auto-enable only works for native Claude default/account sessions. It does not apply to `ccs glm`, other API/OAuth profiles, or Droid targets.';
+  return 'Official Channels auto-enable only works for native Claude default/account sessions. It does not apply to GLM, other API/OAuth profiles, or Droid targets.';
 }
 
 export function getOfficialChannelsNoSelectionMessage(): string {

@@ -364,7 +364,7 @@ export async function showUpdateNotification(updateInfo: {
   const content = [
     `Update available: ${updateInfo.current} -> ${updateInfo.latest}`,
     '',
-    `Run ${color('ccs update', 'command')} to update`,
+    `Update from the dashboard settings to update`,
   ].join('\n');
 
   console.log('');

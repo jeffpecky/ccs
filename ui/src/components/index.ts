@@ -13,6 +13,5 @@ export * from './copilot';
 export * from './health';
 export * from './layout';
 export * from './monitoring';
-export * from './profiles';
 export * from './setup';
 export * from './shared';

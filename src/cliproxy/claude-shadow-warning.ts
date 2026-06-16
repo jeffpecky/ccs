@@ -121,7 +121,7 @@ export function maybeWarnClaudeShadow(): void {
     ) + '\n'
   );
   process.stderr.write(
-    `    Rename it to continue using it: ccs config  (or edit ~/.ccs/config.yaml / config.json)\n`
+    `    Rename it to continue using it: the dashboard settings  (or edit ~/.ccs/config.yaml / config.json)\n`
   );
   process.stderr.write('\n');
 }
@@ -171,7 +171,7 @@ export function maybeShowClaudeRoutingNotice(): void {
   markRoutingNoticeShown();
 
   process.stderr.write(
-    info('ccs claude: traffic routes through the local CLIProxy instance.') + '\n'
+    info('Claude: traffic routes through the local CLIProxy instance.') + '\n'
   );
   process.stderr.write(
     `    Native Claude Code (direct Anthropic API) is still available via bare \`ccs\`.\n`

@@ -336,7 +336,7 @@ describe('cliproxy routing strategy service', () => {
       const result = await mod.applyCliproxyRoutingStrategy('round-robin');
 
       expect(result.message).toContain('Pool routing is active');
-      expect(result.message).toContain('ccs cliproxy pool --disable');
+      expect(result.message).toContain('Disable pool routing from the dashboard control panel');
     });
   });
 
@@ -353,7 +353,7 @@ describe('cliproxy routing strategy service', () => {
       const result = await mod.applyCliproxySessionAffinitySettings({ enabled: true, ttl: '1h' });
 
       expect(result.message).toContain('Pool routing is active');
-      expect(result.message).toContain('ccs cliproxy pool --disable');
+      expect(result.message).toContain('Disable pool routing from the dashboard control panel');
     });
   });
 

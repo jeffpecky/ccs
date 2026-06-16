@@ -594,7 +594,7 @@ async function handleTokenNotFound(
     console.log(fail('Authentication failed before a usable token was saved'));
     console.log(`    ${sanitizedReason}`);
     console.log('');
-    console.log(`Try: ccs ${provider} --auth --verbose`);
+    console.log(`Try: Authenticate ${provider} from the dashboard with verbose logging`);
     return null;
   }
 
@@ -614,7 +614,7 @@ async function handleTokenNotFound(
     console.log('');
     console.log('To manually import from Kiro IDE:');
     console.log('  1. Ensure you are logged into Kiro IDE');
-    console.log('  2. Run: ccs kiro --import');
+    console.log('  2. Run: Import Kiro token from the dashboard');
     return null;
   }
 
@@ -661,7 +661,7 @@ async function handleTokenNotFound(
   console.log('  - Ensure you are on the same machine (localhost callback)');
   console.log('  - Copy the entire URL including all parameters');
   console.log('');
-  console.log(`Try: ccs ${provider} --auth --verbose`);
+  console.log(`Try: Authenticate ${provider} from the dashboard with verbose logging`);
   return null;
 }
 
@@ -887,7 +887,7 @@ export function executeOAuthProcess(options: OAuthProcessOptions): Promise<Accou
           info('Complete the login in your browser. This page will update automatically.')
         );
       }
-      if (!verbose) console.log(info('If stuck, try: ccs ' + provider + ' --auth --verbose'));
+      if (!verbose) console.log(info('If stuck, try: Authenticate ' + provider + ' from the dashboard with verbose logging'));
     }, 2000);
 
     // Timeout handling

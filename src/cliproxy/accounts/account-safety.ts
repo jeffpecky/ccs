@@ -114,7 +114,7 @@ function loadQuotaPaused(): QuotaPausedFile {
 
 /**
  * Read-only view of a persisted quota-cooldown pause.
- * Exposed for visibility surfaces (e.g. `ccs cliproxy quota` pool section)
+ * Exposed for visibility surfaces (e.g. quota pool section)
  * that must distinguish a quota cooldown (with a reset time) from a manual pause.
  */
 export interface QuotaCooldownEntry {
@@ -255,9 +255,9 @@ export function warnCrossProviderDuplicates(provider: CLIProxyProvider): boolean
   console.error('');
   console.error(warn('Account safety: cross-provider duplicate detected'));
   console.error(
-    '    Same Google account across "ccs gemini" + "ccs agy" is a known suspension/ban risk (ref: #509).'
+    '    Same Google account across Gemini + Antigravity is a known suspension/ban risk (ref: #509).'
   );
-  console.error('    This risk applies to both CLI sessions and accounts added from "ccs config".');
+  console.error('    This risk applies to both CLI sessions and accounts added from the dashboard.');
   console.error(
     '    If provider requests start returning 403/Forbidden, treat it as a possible account disable/ban.'
   );
@@ -276,7 +276,7 @@ export function warnCrossProviderDuplicates(provider: CLIProxyProvider): boolean
 
   console.error('');
   console.error('    Immediate action: pause duplicate account and use separate Google accounts.');
-  console.error('    Fix command: "ccs cliproxy pause <account> --provider <provider>"');
+  console.error('    Fix: Pause accounts from the dashboard');
   console.error('');
 
   return true;
@@ -295,10 +295,10 @@ export function warnNewAccountConflict(
     `    ${maskEmail(email)} is also registered under: ${conflictingProviders.join(', ')}`
   );
   console.error(
-    '    Reusing one Google account between "ccs gemini" and "ccs agy" can trigger bans.'
+    '    Reusing one Google account between Gemini and Antigravity can trigger bans.'
   );
   console.error(
-    '    This applies to both CLI auth and "ccs config" dashboard auth for these providers.'
+    '    This applies to both CLI auth and dashboard auth for these providers.'
   );
   console.error('    403/Forbidden responses can be an early sign of account disablement.');
   console.error(
@@ -327,7 +327,7 @@ export function warnOAuthBanRisk(provider: CLIProxyProvider): void {
   console.error('');
   console.error(warn('Account safety warning (#509 - read before continuing)'));
   console.error(
-    '    Known risk: one Google account shared by "ccs gemini" + "ccs agy" can be disabled/banned.'
+    '    Known risk: one Google account shared by Gemini + Antigravity can be disabled/banned.'
   );
   if (isAgy) {
     console.error(
@@ -335,7 +335,7 @@ export function warnOAuthBanRisk(provider: CLIProxyProvider): void {
     );
   }
   console.error(
-    '    This risk applies whether auth was done from CLI or from "ccs config" dashboard.'
+    '    This risk applies whether auth was done from CLI or from the dashboard.'
   );
   console.error(
     '    If you want to keep Google AI access, do not continue with this shared-account setup.'

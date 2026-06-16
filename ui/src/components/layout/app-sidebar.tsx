@@ -1,19 +1,13 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home,
-  Key,
   Zap,
-  Users,
   Settings,
   Activity,
-  FolderOpen,
   ChevronRight,
   BarChart3,
-  Gauge,
   ScrollText,
   Github,
-  Puzzle,
-  TerminalSquare,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -77,49 +71,19 @@ function buildNavGroups(t: (key: string) => string): SidebarGroupDef[] {
       ],
     },
     {
-      title: t('nav.identityAccess'),
+      title: 'CLIProxy',
       items: [
-        {
-          path: '/providers',
-          icon: Key,
-          label: t('nav.apiProfiles'),
-          badge: {
-            icons: [
-              '/icons/openrouter.svg',
-              '/assets/providers/alibabacloud-color.svg',
-              '/icons/ollama.svg',
-            ],
-          },
-        },
         {
           path: '/cliproxy',
           icon: Zap,
-          label: t('nav.cliproxyPlus'),
+          label: t('nav.cliproxyOverview'),
           isCollapsible: true,
           children: [
             { path: '/cliproxy', label: t('nav.cliproxyOverview') },
-            { path: '/cliproxy/ai-providers', icon: Key, label: 'AI Providers' },
-            { path: '/cliproxy/control-panel', icon: Gauge, label: t('nav.controlPanel') },
+            { path: '/cliproxy/ai-providers', label: 'AI Providers' },
+            { path: '/cliproxy/control-panel', label: t('nav.controlPanel') },
           ],
         },
-        {
-          path: '/accounts',
-          icon: Users,
-          label: t('nav.accounts'),
-          isCollapsible: true,
-          children: [
-            { path: '/accounts', label: t('nav.allAccounts') },
-            { path: '/shared', icon: FolderOpen, label: t('nav.sharedData') },
-          ],
-        },
-      ],
-    },
-    {
-      title: t('nav.compatibleClis'),
-      items: [
-        { path: '/claude-extension', icon: Puzzle, label: t('nav.claudeExtension') },
-        { path: '/codex', iconSrc: '/assets/sidebar/codex.svg', label: 'Codex CLI' },
-        { path: '/droid', icon: TerminalSquare, label: t('nav.factoryDroid') },
       ],
     },
     {

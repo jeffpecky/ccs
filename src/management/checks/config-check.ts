@@ -236,7 +236,7 @@ export class ClaudeSettingsChecker implements IHealthChecker {
           'Claude Settings',
           'warning',
           `Claude settings route Claude Code through the Codex CLIProxy translator at ${formattedPaths} (${CODEX_TRANSLATOR_URL_MARKER})`,
-          'Run: ccs persist default --yes; use ccsxp or ccs codex --target codex for Codex'
+          'Reset configuration from the dashboard settings; use the dashboard to manage Codex'
         );
         return;
       }

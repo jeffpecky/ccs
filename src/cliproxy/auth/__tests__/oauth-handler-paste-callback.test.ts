@@ -107,10 +107,10 @@ describe('OAuth start failure guidance', () => {
     expect(guidance.endpoint).toBe(
       'http://127.0.0.1:8317/v0/management/codex-auth-url?is_webui=true'
     );
-    expect(cliOutput).toContain('ccs cliproxy start');
-    expect(cliOutput).toContain('ccs codex --auth --add --paste-callback');
+    expect(cliOutput).toContain('Start CLIProxy from the dashboard control panel');
+    expect(cliOutput).toContain('Authenticate codex from the dashboard');
     expect(cliOutput).toContain('ssh -L 1455:localhost:1455 <USER>@<HOST>');
-    expect(cliOutput).toContain('ccs codex --auth --add --port-forward');
+    expect(cliOutput).toContain('Authenticate codex from the dashboard');
   });
 });
 

@@ -50,8 +50,8 @@ Notes
   Default profile (switch) is persistent across shells.
   Active profile (use) is per-terminal via CODEX_HOME / CCS_CODEX_PROFILE.
 
-  Note: This feature applies only to native \`codex\`. \`ccsxp\` ignores
-  CCS_CODEX_PROFILE and uses its own cliproxy pool.
+  Note: This feature applies only to native \`codex\`. The dashboard
+  ignores CCS_CODEX_PROFILE and uses its own cliproxy pool.
 `);
 }
 
@@ -77,7 +77,7 @@ Shell evaluation
 Options
   --shell <s>   Override auto-detected shell: bash|zsh|fish|pwsh|cmd
 
-Note: This profile applies only to native \`codex\`. \`ccsxp\` ignores
-CCS_CODEX_PROFILE and uses its own cliproxy pool.
+Note: This profile applies only to native \`codex\`. The dashboard
+ignores CCS_CODEX_PROFILE and uses its own cliproxy pool.
 `);
 }

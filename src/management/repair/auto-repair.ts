@@ -152,14 +152,14 @@ export async function runAutoRepair(): Promise<void> {
     console.log(ok(`Auto-fix complete: ${fixed} issue(s) resolved`));
     console.log('');
     console.log(info('Try your command again. If issues persist, run:'));
-    console.log(`  ${color('ccs doctor', 'command')}  - for full diagnostics`);
+    console.log(`  ${color('the dashboard settings', 'command')}  - for full diagnostics`);
   } else {
     console.log(ok('No issues found that needed fixing'));
     console.log('');
     console.log(info('If you still have issues:'));
-    console.log(`  1. Run ${color('ccs doctor', 'command')} for diagnostics`);
+    console.log(`  1. Run ${color('the dashboard settings', 'command')} for diagnostics`);
     console.log(
-      `  2. Try ${color('ccs <provider> --auth --verbose', 'command')} for detailed logs`
+      `  2. Try ${color('Authenticate from the dashboard', 'command')} for detailed logs`
     );
     console.log(`  3. Restart your terminal/computer`);
   }

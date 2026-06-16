@@ -157,7 +157,7 @@ describe('codex plan compatibility reconcile', () => {
       };
       expect(settings.env.ANTHROPIC_MODEL).toBe('gpt-5.3-codex');
       expect(errorSpy).toHaveBeenCalledWith(
-        'Configured Codex model "gpt-5.3-codex" may require a paid Codex plan. If startup fails, switch to "gpt-5.4" with "ccs codex --config".'
+        'Configured Codex model "gpt-5.3-codex" may require a paid Codex plan. If startup fails, switch to "gpt-5.4" from the dashboard settings.'
       );
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -237,7 +237,7 @@ describe('codex plan compatibility reconcile', () => {
       };
       expect(settings.env.ANTHROPIC_MODEL).toBe('gpt-5.3-codex');
       expect(errorSpy).toHaveBeenCalledWith(
-        'Could not verify Codex plan for model "gpt-5.3-codex". If startup fails with model_not_supported, switch to "gpt-5.4" via "ccs codex --config".'
+        'Could not verify Codex plan for model "gpt-5.3-codex". If startup fails with model_not_supported, switch to "gpt-5.4" from the dashboard settings.'
       );
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -278,7 +278,7 @@ describe('codex plan compatibility reconcile', () => {
       expect(settings.env.ANTHROPIC_MODEL).toBe('gpt-5.3-codex');
       expect(settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('gpt-5.4-mini');
       expect(errorSpy).toHaveBeenCalledWith(
-        'Could not verify Codex plan for model "gpt-5.3-codex". If startup fails with model_not_supported, switch to "gpt-5.4" via "ccs codex --config".'
+        'Could not verify Codex plan for model "gpt-5.3-codex". If startup fails with model_not_supported, switch to "gpt-5.4" from the dashboard settings.'
       );
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });

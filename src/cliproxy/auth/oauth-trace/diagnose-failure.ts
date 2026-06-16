@@ -125,7 +125,7 @@ export function formatErrorMessage(result: DiagnosisResult, opts: FormatErrorOpt
     case 'URL_NOT_DISPLAYED':
       lines.push('OAuth URL was never produced.');
       lines.push('The CLIProxy binary may have failed to start or exited too early.');
-      lines.push(`Try: ccs ${provider} --auth --verbose`);
+      lines.push(`Try: Authenticate ${provider} from the dashboard with verbose logging`);
       break;
 
     case 'BROWSER_NOT_OPENED':
@@ -152,19 +152,19 @@ export function formatErrorMessage(result: DiagnosisResult, opts: FormatErrorOpt
       lines.push(`CLIProxy binary exited with code ${code}.`);
       const tail = String(data['stderrTail'] ?? '').trim();
       if (tail) lines.push(`  ${tail}`);
-      lines.push(`Try: ccs ${provider} --auth --verbose`);
+      lines.push(`Try: Authenticate ${provider} from the dashboard`);
       break;
     }
 
     case 'TOKEN_FILE_MISSING_POST_EXIT':
       lines.push('Authentication appeared to succeed but no token file was created.');
-      lines.push('Update CLIProxy and retry: ccs update');
+      lines.push('Update CLIProxy and retry: Update from the dashboard settings');
       break;
 
     case 'TIMEOUT': {
       const min = data['timeoutMs'] ? Math.round((data['timeoutMs'] as number) / 60000) : '?';
       lines.push(`OAuth flow timed out after ${min} minutes.`);
-      lines.push(`Re-run and complete login faster: ccs ${provider} --auth`);
+      lines.push(`Re-run and complete login faster: Authenticate ${provider} from the dashboard`);
       break;
     }
 
@@ -176,7 +176,7 @@ export function formatErrorMessage(result: DiagnosisResult, opts: FormatErrorOpt
       lines.push(
         `Token exchange rejected by provider: ${String(data['upstreamError'] ?? 'unknown')}.`
       );
-      lines.push(`Try: ccs ${provider} --auth --verbose`);
+      lines.push(`Try: Authenticate ${provider} from the dashboard with verbose logging`);
       break;
 
     case 'PASTE_INVALID':
@@ -201,7 +201,7 @@ export function formatErrorMessage(result: DiagnosisResult, opts: FormatErrorOpt
       lines.push('  1. OAuth session timed out');
       lines.push('  2. Callback server could not receive the redirect');
       lines.push('  3. Browser did not redirect to localhost properly');
-      lines.push(`Try: ccs ${provider} --auth --verbose`);
+      lines.push(`Try: Authenticate ${provider} from the dashboard with verbose logging`);
       break;
   }
 
