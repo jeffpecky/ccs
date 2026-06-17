@@ -70,7 +70,7 @@ export function checkProfiles(ccsDir: string): HealthCheck {
         name: 'Profiles',
         status: 'error',
         message: 'Missing profiles object',
-        fix: 'Run: npm install -g @kaitranntt/ccs --force',
+        fix: 'Run: npm install -g @jeffpecky/ccs --force',
       };
     }
 
@@ -142,7 +142,7 @@ export function checkDelegation(ccsDir: string): HealthCheck {
       name: 'Delegation',
       status: 'warning',
       message: 'Not installed',
-      fix: 'Run: npm install -g @kaitranntt/ccs --force',
+      fix: 'Run: npm install -g @jeffpecky/ccs --force',
     };
   }
 

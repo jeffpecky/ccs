@@ -1,5 +1,5 @@
 {
-  "name": "@kaitranntt/ccs",
+  "name": "@jeffpecky/ccs",
   "version": "8.3.0",
   "description": "CCS Dashboard - Management dashboard for CLIProxyAPI",
   "keywords": [
@@ -9,13 +9,13 @@
     "proxy",
     "management"
   ],
-  "homepage": "https://github.com/kaitranntt/ccs",
+  "homepage": "https://github.com/jeffpecky/ccs",
   "bugs": {
-    "url": "https://github.com/kaitranntt/ccs/issues"
+    "url": "https://github.com/jeffpecky/ccs/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kaitranntt/ccs.git"
+    "url": "git+https://github.com/jeffpecky/ccs.git"
   },
   "license": "MIT",
   "author": {

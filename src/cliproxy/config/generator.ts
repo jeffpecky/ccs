@@ -51,7 +51,7 @@ export const CLIPROXY_CONFIG_VERSION = 20;
 export const ORIGINAL_MANAGEMENT_PANEL_REPOSITORY =
   'https://github.com/router-for-me/Cli-Proxy-API-Management-Center';
 export const PLUS_MANAGEMENT_PANEL_REPOSITORY =
-  'https://github.com/kaitranntt/Cli-Proxy-API-Management-Center';
+  'https://github.com/jeffpecky/Cli-Proxy-API-Management-Center';
 
 interface RegenerateConfigOptions {
   configPath?: string;

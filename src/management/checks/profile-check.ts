@@ -105,7 +105,7 @@ export class ProfilesChecker implements IHealthChecker {
         'Profiles',
         'error',
         `${configFileName} missing profiles object`,
-        'Run: npm install -g @kaitranntt/ccs --force',
+        'Run: npm install -g @jeffpecky/ccs --force',
         { status: 'ERROR', info: 'Missing profiles object' }
       );
       return;
@@ -186,7 +186,7 @@ export class DelegationChecker implements IHealthChecker {
         'Delegation',
         'warning',
         'Delegation commands not found',
-        'Install with: npm install -g @kaitranntt/ccs --force',
+        'Install with: npm install -g @jeffpecky/ccs --force',
         { status: 'WARN', info: 'Not installed' }
       );
       return;

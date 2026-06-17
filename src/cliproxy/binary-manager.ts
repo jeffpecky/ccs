@@ -43,9 +43,9 @@ import { getVersionListCachePath } from './binary/version-cache';
 import { loadOrCreateUnifiedConfig } from '../config/config-loader-facade';
 
 export const CLIPROXY_DELETED_PLUS_REPO = 'router-for-me/CLIProxyAPIPlus';
-export const CLIPROXY_PLUS_FALLBACK_TRACKING_URL = 'https://github.com/kaitranntt/ccs/issues/1062';
-export const CLIPROXY_PLUS_FORK_URL = 'https://github.com/kaitranntt/CLIProxyAPIPlus';
-export const CLIPROXY_PLUS_TRACKING_URL = 'https://github.com/kaitranntt/ccs/issues/1065';
+export const CLIPROXY_PLUS_FALLBACK_TRACKING_URL = 'https://github.com/jeffpecky/ccs/issues/1062';
+export const CLIPROXY_PLUS_FORK_URL = 'https://github.com/jeffpecky/CLIProxyAPIPlus';
+export const CLIPROXY_PLUS_TRACKING_URL = 'https://github.com/jeffpecky/ccs/issues/1065';
 
 /**
  * Track whether we've already warned the user about the legacy Plus fallback

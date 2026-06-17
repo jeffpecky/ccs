@@ -35,7 +35,7 @@ describe('Backend Selection', () => {
 
     it('has correct configuration for plus backend', () => {
       const config = platformDetector.BACKEND_CONFIG.plus;
-      assert.strictEqual(config.repo, 'kaitranntt/CLIProxyAPIPlus');
+      assert.strictEqual(config.repo, 'jeffpecky/CLIProxyAPIPlus');
       assert.strictEqual(config.binaryPrefix, 'CLIProxyAPIPlus');
       assert.strictEqual(config.executable, 'cli-proxy-api-plus');
       assert(config.fallbackVersion.match(/^\d+\.\d+\.\d+-\d+$/), 'plus version has -0 suffix');
@@ -99,7 +99,7 @@ describe('Backend Selection', () => {
         );
         assert.strictEqual(
           platformDetector.getDownloadUrl('7.1.68-2', 'plus'),
-          'https://github.com/kaitranntt/CLIProxyAPIPlus/releases/download/v7.1.68-2/CLIProxyAPIPlus_7.1.68-2_darwin_aarch64_no-plugin.tar.gz'
+          'https://github.com/jeffpecky/CLIProxyAPIPlus/releases/download/v7.1.68-2/CLIProxyAPIPlus_7.1.68-2_darwin_aarch64_no-plugin.tar.gz'
         );
       });
 
@@ -167,7 +167,7 @@ describe('Backend Selection', () => {
 
     it('uses correct repo for plus backend', () => {
       const url = platformDetector.getDownloadUrl('6.6.51-0', 'plus');
-      assert(url.includes('kaitranntt/CLIProxyAPIPlus/releases'));
+      assert(url.includes('jeffpecky/CLIProxyAPIPlus/releases'));
     });
 
     it('defaults to original backend', () => {

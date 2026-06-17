@@ -39,7 +39,7 @@ describe('version-checker stale cache fallback', () => {
       getVersionCachePath('plus'),
       JSON.stringify({
         latestVersion: '6.9.23-0',
-        repo: 'kaitranntt/CLIProxyAPIPlus',
+        repo: 'jeffpecky/CLIProxyAPIPlus',
         checkedAt: Date.now() - VERSION_CACHE_DURATION_MS - 1_000,
       }),
       'utf8'

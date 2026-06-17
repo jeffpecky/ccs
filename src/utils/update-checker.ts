@@ -10,8 +10,8 @@ import { getCcsDir } from './config-manager';
 const CACHE_DIR = path.join(getCcsDir(), 'cache');
 const UPDATE_CHECK_FILE = path.join(CACHE_DIR, 'update-check.json');
 const CHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
-const GITHUB_API_URL = 'https://api.github.com/repos/kaitranntt/ccs/releases/latest';
-const NPM_REGISTRY_BASE = 'https://registry.npmjs.org/@kaitranntt/ccs';
+const GITHUB_API_URL = 'https://api.github.com/repos/jeffpecky/ccs/releases/latest';
+const NPM_REGISTRY_BASE = 'https://registry.npmjs.org/@jeffpecky/ccs';
 const REQUEST_TIMEOUT = 5000; // 5 seconds
 
 interface UpdateCache {

@@ -6,7 +6,7 @@ import * as os from 'os';
  */
 export function error(message: string): never {
   console.error(`ERROR: ${message}`);
-  console.error('Try: npm install -g @kaitranntt/ccs --force');
+  console.error('Try: npm install -g @jeffpecky/ccs --force');
   process.exit(1);
 }
 

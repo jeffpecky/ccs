@@ -99,7 +99,7 @@ export class ErrorManager {
       console.error(dim('Why: Newer Claude CLI versions require explicit login.'));
     } else {
       console.error(header('SOLUTIONS'));
-      console.error(`  ${color('npm install -g @kaitranntt/ccs --force', 'command')}`);
+      console.error(`  ${color('npm install -g @jeffpecky/ccs --force', 'command')}`);
       console.error('');
       console.error(dim('This will recreate missing profile settings.'));
     }
@@ -129,7 +129,7 @@ export class ErrorManager {
     console.error(`  ${color(`mv ${configPath} ${configPath}.backup`, 'command')}`);
     console.error('');
     console.error(`  ${dim('# Reinstall CCS')}`);
-    console.error(`  ${color('npm install -g @kaitranntt/ccs --force', 'command')}`);
+    console.error(`  ${color('npm install -g @jeffpecky/ccs --force', 'command')}`);
     console.error('');
     console.error(dim('Your profile settings will be preserved.'));
     console.error('');
@@ -194,7 +194,7 @@ export class ErrorManager {
     console.error(`  ${color('chmod 755 ~/.ccs ~/.claude', 'command')}`);
     console.error('');
     console.error(`  ${dim('# Retry installation')}`);
-    console.error(`  ${color('npm install -g @kaitranntt/ccs --force', 'command')}`);
+    console.error(`  ${color('npm install -g @jeffpecky/ccs --force', 'command')}`);
     console.error('');
 
     this.showErrorCode(ERROR_CODES.FS_CANNOT_WRITE_FILE);

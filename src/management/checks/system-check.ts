@@ -124,7 +124,7 @@ export class CcsDirectoryChecker implements IHealthChecker {
         'CCS Directory',
         'error',
         '~/.ccs/ directory not found',
-        'Run: npm install -g @kaitranntt/ccs --force',
+        'Run: npm install -g @jeffpecky/ccs --force',
         { status: 'ERROR', info: 'Not found' }
       );
     }

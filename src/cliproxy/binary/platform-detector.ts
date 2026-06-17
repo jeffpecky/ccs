@@ -22,7 +22,7 @@ export const BACKEND_CONFIG = {
     fallbackVersion: '6.9.45',
   },
   plus: {
-    repo: 'kaitranntt/CLIProxyAPIPlus',
+    repo: 'jeffpecky/CLIProxyAPIPlus',
     binaryPrefix: 'CLIProxyAPIPlus',
     executable: 'cli-proxy-api-plus',
     fallbackVersion: '6.9.45-0',
@@ -48,7 +48,7 @@ export const CLIPROXY_FALLBACK_VERSION = BACKEND_CONFIG[DEFAULT_BACKEND].fallbac
  * Maximum stable version cap - prevents auto-update to known unstable releases
  * Currently set high since v89+ are all stable.
  * Only v81-88 have known bugs (see CLIPROXY_FAULTY_RANGE).
- * See: https://github.com/kaitranntt/ccs/issues/269
+ * See: https://github.com/jeffpecky/ccs/issues/269
  */
 export const CLIPROXY_MAX_STABLE_VERSION = '9.9.999-0';
 

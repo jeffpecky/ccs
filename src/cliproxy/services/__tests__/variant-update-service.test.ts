@@ -107,7 +107,7 @@ cliproxy:
 
     const error = validateProviderBackend('ghcp');
     expect(error).toContain('`backend: plus`');
-    expect(error).toContain('kaitranntt/CLIProxyAPIPlus');
+    expect(error).toContain('jeffpecky/CLIProxyAPIPlus');
   });
 
   it('leaves the settings file unchanged when a plus-only provider update is rejected', () => {

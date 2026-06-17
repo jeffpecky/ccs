@@ -152,21 +152,6 @@ export function isCLIProxyProcess(process: PortProcess | null): boolean {
   );
 }
 
-  const name = process.processName.toLowerCase();
-  // All CLIProxy variants start with 'cli-proxy' or 'cliproxy'
-  if (name.startsWith('cli-proxy') || name.startsWith('cliproxy')) {
-    return true;
-  }
-
-  // If process name detection failed (PID-xxx fallback on Windows),
-  // assume it's CLIProxy since the dashboard initiated the check
-  if (name.startsWith('pid-')) {
-    return true;
-  }
-
-  return false;
-}
-
 /**
  * Windows firewall check result
  */

@@ -76,7 +76,7 @@ export class ConfigFilesChecker implements IHealthChecker {
           'config.yaml',
           'error',
           `Invalid YAML: ${(e as Error).message}`,
-          `Backup and recreate: mv ${configYamlPath} ${configYamlPath}.backup && npm install -g @kaitranntt/ccs --force`,
+          `Backup and recreate: mv ${configYamlPath} ${configYamlPath}.backup && npm install -g @jeffpecky/ccs --force`,
           { status: 'ERROR', info: 'Invalid YAML' }
         );
         return;
@@ -102,7 +102,7 @@ export class ConfigFilesChecker implements IHealthChecker {
           'config.json',
           'error',
           `Invalid JSON: ${(e as Error).message}`,
-          `Backup and recreate: mv ${configJsonPath} ${configJsonPath}.backup && npm install -g @kaitranntt/ccs --force`,
+          `Backup and recreate: mv ${configJsonPath} ${configJsonPath}.backup && npm install -g @jeffpecky/ccs --force`,
           { status: 'ERROR', info: 'Invalid JSON' }
         );
       }
@@ -117,7 +117,7 @@ export class ConfigFilesChecker implements IHealthChecker {
       'config.yaml',
       'error',
       'No configuration file found (config.yaml or config.json)',
-      'Run: npm install -g @kaitranntt/ccs --force',
+      'Run: npm install -g @jeffpecky/ccs --force',
       { status: 'ERROR', info: 'Not found' }
     );
   }

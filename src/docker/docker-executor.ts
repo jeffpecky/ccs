@@ -237,7 +237,7 @@ export class DockerExecutor {
 
   update(options: DockerCommandTarget): void {
     const script =
-      'npm install -g @kaitranntt/ccs@latest --force && Update CLIProxy from the dashboard control panel && supervisorctl -c /etc/supervisord.conf restart ccs-dashboard cliproxy';
+      'npm install -g @jeffpecky/ccs@latest --force && Update CLIProxy from the dashboard control panel && supervisorctl -c /etc/supervisord.conf restart ccs-dashboard cliproxy';
     this.ensureSuccess(
       this.runDocker(
         ['exec', DOCKER_CONTAINER_NAME, 'sh', '-lc', script],

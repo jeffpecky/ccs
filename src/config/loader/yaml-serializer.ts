@@ -16,7 +16,7 @@ import type { UnifiedConfig } from '../unified-config-types';
  */
 export function generateYamlHeader(): string {
   return `# CCS Unified Configuration
-# Docs: https://github.com/kaitranntt/ccs
+# Docs: https://github.com/jeffpecky/ccs
 `;
 }
 

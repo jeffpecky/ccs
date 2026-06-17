@@ -6,7 +6,7 @@
  * 2. Ban/disable detection (auto-pauses affected accounts on error response)
  * 3. Crash recovery (restores stale auto-pauses from dead sessions)
  *
- * Ref: https://github.com/kaitranntt/ccs/issues/509
+ * Ref: https://github.com/jeffpecky/ccs/issues/509
  */
 
 import * as fs from 'fs';
@@ -16,7 +16,7 @@ import { CLIProxyProvider } from '../types';
 import { loadAccountsRegistry, pauseAccount, resumeAccount } from './registry';
 import { getCcsDir } from '../../config/config-loader-facade';
 
-const ISSUE_509_URL = 'https://github.com/kaitranntt/ccs/issues/509';
+const ISSUE_509_URL = 'https://github.com/jeffpecky/ccs/issues/509';
 
 /** Providers that use Google OAuth (ban risk when overlapping) */
 const GOOGLE_OAUTH_PROVIDERS: CLIProxyProvider[] = ['gemini', 'agy', 'codex'];

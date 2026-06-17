@@ -591,7 +591,7 @@ auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
     const path = require('path');
 
     const ORIGINAL_PANEL_REPO = 'https://github.com/router-for-me/Cli-Proxy-API-Management-Center';
-    const PLUS_PANEL_REPO = 'https://github.com/kaitranntt/Cli-Proxy-API-Management-Center';
+    const PLUS_PANEL_REPO = 'https://github.com/jeffpecky/Cli-Proxy-API-Management-Center';
 
     let testDir;
     let originalCcsHome;
