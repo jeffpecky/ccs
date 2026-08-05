@@ -18,8 +18,6 @@ import {
   type HealthReport,
   checkCcsDirectory,
   checkPermissions,
-  checkCcsSymlinks,
-  checkSettingsSymlinks,
   checkEnvironment,
   checkConfigFile,
   checkSettingsFiles,
@@ -84,8 +82,6 @@ export async function runHealthChecks(): Promise<HealthReport> {
   // Group 5: System Health
   const healthChecks: HealthCheck[] = [];
   healthChecks.push(checkPermissions(ccsDir));
-  healthChecks.push(checkCcsSymlinks());
-  healthChecks.push(checkSettingsSymlinks(ccsDir, claudeDir));
   groups.push({ id: 'system-health', name: 'System Health', icon: 'Shield', checks: healthChecks });
 
   // Group 6: CLIProxy

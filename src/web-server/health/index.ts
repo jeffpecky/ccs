@@ -8,9 +8,6 @@ export type { HealthCheck, HealthGroup, HealthReport } from './types';
 // System checks
 export { checkCcsDirectory, checkPermissions } from './system-checks';
 
-// Symlink checks
-export { checkCcsSymlinks, checkSettingsSymlinks } from './symlink-checks';
-
 // Environment checks
 export { checkEnvironment } from './environment-checks';
 
