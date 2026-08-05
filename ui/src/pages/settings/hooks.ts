@@ -3,11 +3,9 @@
  */
 
 export {
-  useBrowserConfig,
   useSettingsContext,
   useSettingsActions,
   useSettingsTab,
-  useWebSearchConfig,
   useGlobalEnvConfig,
   useProxyConfig,
   useRawConfig,

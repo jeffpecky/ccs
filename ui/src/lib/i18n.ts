@@ -361,6 +361,16 @@ const resources = {
         completion: 'Completion',
         stepsCount: '{{current}}/4 steps',
       },
+      accountSafetyWarning: {
+        title: 'OAuth Account Safety Warning',
+        subtitle: 'Issue #509 · Gemini + AGY OAuth risk',
+        firstLine:
+          'Issue #509 documents suspension/ban reports tied to ccs agy and shared-account usage between ccs gemini and ccs agy.',
+        secondLine:
+          'Continue only if you accept full responsibility for OAuth and account-access risk.',
+        issueLabel: 'Read issue #509',
+        proxySettingsLabel: 'Gemini + AGY controls: Settings > Proxy',
+      },
       cliproxyDialog: {
         name: 'Name',
         provider: 'Provider',
@@ -1018,6 +1028,65 @@ const resources = {
       // ========================================
       // Domain 2: Accounts / Auth
       // ========================================
+      addAccountDialog: {
+        title: 'Add {{displayName}} Account',
+        descKiro:
+          'Choose a Kiro auth method, then authenticate via browser or import from Kiro IDE.',
+        descDeviceCode:
+          'Click Authenticate. A verification code will appear for you to enter on the provider website.',
+        descOauth: 'Click Authenticate to get an OAuth URL. Open it in any browser to sign in.',
+        powerUserEnabled: 'Power user mode enabled',
+        powerUserSkipped:
+          'Settings > Proxy power user mode is skipping safety checks. You accept full responsibility for OAuth/account risk.',
+        powerUserLoadFailed:
+          'Failed to load power user mode settings. Check Settings > Proxy and try again.',
+        powerUserLoading: 'Loading power user safety settings. Please wait a moment and retry.',
+        powerUserUnavailableRetry:
+          'Power user mode is unavailable. Complete the required provider safety step and retry.',
+        authMethod: 'Auth Method',
+        selectKiroAuthMethod: 'Select Kiro auth method',
+        gitlabAuthMethod: 'GitLab auth method',
+        selectGitlabAuthMethod: 'Select GitLab auth method',
+        gitlabAuthOAuth: 'Browser OAuth',
+        gitlabAuthPat: 'Personal Access Token',
+        gitlabAuthHint:
+          'Use Browser OAuth for gitlab.com, or PAT for self-hosted and admin-managed setups.',
+        gitlabUrl: 'GitLab URL',
+        gitlabUrlPlaceholder: 'https://gitlab.com',
+        gitlabUrlHint:
+          'Optional. Leave blank for gitlab.com, or set your self-hosted GitLab base URL.',
+        gitlabPat: 'Personal Access Token',
+        gitlabPatPlaceholder: 'glpat-...',
+        gitlabPatHint: 'Token must include at least',
+        gitlabPatRequired: 'GitLab Personal Access Token is required for PAT login.',
+        nicknameRequired: 'Nickname (required)',
+        nicknameOptional: 'Nickname (optional)',
+        nicknamePlaceholder: 'e.g., work, personal',
+        nicknameRequiredHint:
+          'Required for this provider. Use a unique friendly name (e.g., work, personal).',
+        nicknameOptionalHint:
+          'A friendly name to identify this account. Leave blank to use a safe generated identifier.',
+        waitingForAuth: 'Waiting for authentication...',
+        deviceCodeHint:
+          'A verification code dialog will appear shortly. Enter the code on the provider website.',
+        browserHint:
+          'Complete the authentication in your browser. This dialog closes automatically.',
+        openUrlLabel: 'Open this URL in any browser to sign in:',
+        copied: 'Copied',
+        copy: 'Copy',
+        open: 'Open',
+        popupBlocked: 'Popup blocked. Copy the URL above and open it manually in your browser.',
+        redirectPasteLabel: "Redirect didn't work? Paste the callback URL:",
+        callbackPlaceholder: 'Paste the redirect URL here...',
+        submitCallback: 'Submit Callback',
+        submitting: 'Submitting...',
+        preparingUrl: 'Preparing sign-in URL...',
+        cancel: 'Cancel',
+        importingToken: 'Importing token from Kiro IDE...',
+        authenticate: 'Authenticate',
+        importFromIde: 'Import from IDE',
+        importing: 'Importing...',
+      },
       setupWizard: {
         title: 'Advanced Variant Setup',
         stepProviderDesc: 'Select a provider for the runtime variant',
@@ -1826,6 +1895,15 @@ const resources = {
         completion: '完成度',
         stepsCount: '{{current}}/4 步',
       },
+      accountSafetyWarning: {
+        title: 'OAuth 账号安全提示',
+        subtitle: 'Issue #509 · Gemini + AGY OAuth 风险',
+        firstLine:
+          'Issue #509 记录了与 ccs agy 及 ccs gemini 与 ccs agy 共享账号使用相关的封禁/停用报告。',
+        secondLine: '仅在您愿意承担 OAuth 与账号访问风险的前提下继续。',
+        issueLabel: '查看 issue #509',
+        proxySettingsLabel: 'Gemini + AGY 控制：设置 > 代理',
+      },
       cliproxyDialog: {
         name: '名称',
         provider: '提供商',
@@ -2461,6 +2539,55 @@ const resources = {
         overwrite: '覆盖',
         invalidJson: 'JSON 无效',
         failedSave: '保存失败',
+      },
+      addAccountDialog: {
+        title: '添加 {{displayName}} 账号',
+        descKiro: '选择 Kiro 认证方式，然后通过浏览器或从 Kiro IDE 导入完成认证。',
+        descDeviceCode: '点击认证后，验证码将显示，请在提供商网站输入。',
+        descOauth: '点击认证获取 OAuth URL，在任意浏览器中打开即可登录。',
+        powerUserEnabled: '已启用高级用户模式',
+        powerUserSkipped:
+          '设置 > 代理 中的高级用户模式会跳过 AGY 责任确认清单和 Gemini Dashboard 的风险短语。OAuth / 账号风险需自行承担。',
+        powerUserLoadFailed: '加载高级用户模式设置失败。请检查“设置 > 代理”后重试。',
+        powerUserLoading: '正在加载高级用户安全设置。请稍候后重试。',
+        powerUserUnavailableRetry: '高级用户模式不可用。请完成当前提供商要求的安全步骤后重试。',
+        authMethod: '认证方式',
+        selectKiroAuthMethod: '选择 Kiro 认证方式',
+        gitlabAuthMethod: 'GitLab 认证方式',
+        selectGitlabAuthMethod: '选择 GitLab 认证方式',
+        gitlabAuthOAuth: '浏览器 OAuth',
+        gitlabAuthPat: '个人访问令牌',
+        gitlabAuthHint: 'gitlab.com 推荐使用浏览器 OAuth；自托管或管理员管理场景可使用 PAT。',
+        gitlabUrl: 'GitLab URL',
+        gitlabUrlPlaceholder: 'https://gitlab.com',
+        gitlabUrlHint: '可选。留空表示 gitlab.com，或填写你的自托管 GitLab 基础 URL。',
+        gitlabPat: '个人访问令牌',
+        gitlabPatPlaceholder: 'glpat-...',
+        gitlabPatHint: '令牌至少需要包含',
+        gitlabPatRequired: 'PAT 登录需要提供 GitLab 个人访问令牌。',
+        nicknameRequired: '昵称（必填）',
+        nicknameOptional: '昵称（选填）',
+        nicknamePlaceholder: '例如：工作、个人',
+        nicknameRequiredHint: '该提供商必填。请使用唯一易记名称（如工作、个人）。',
+        nicknameOptionalHint: '用于区分账号的友好名称。留空将自动生成安全标识。',
+        waitingForAuth: '等待认证中...',
+        deviceCodeHint: '验证码对话框即将出现，请在提供商网站输入验证码。',
+        browserHint: '在浏览器中完成认证后，本对话框将自动关闭。',
+        openUrlLabel: '在任意浏览器中打开此 URL 登录：',
+        copied: '已复制',
+        copy: '复制',
+        open: '打开',
+        popupBlocked: '弹窗被拦截。请复制上方 URL 在浏览器中手动打开。',
+        redirectPasteLabel: '重定向未生效？请粘贴回调 URL：',
+        callbackPlaceholder: '在此粘贴重定向 URL...',
+        submitCallback: '提交回调',
+        submitting: '提交中...',
+        preparingUrl: '正在准备登录 URL...',
+        cancel: '取消',
+        importingToken: '正在从 Kiro IDE 导入令牌...',
+        authenticate: '认证',
+        importFromIde: '从 IDE 导入',
+        importing: '导入中...',
       },
       setupWizard: {
         title: '高级变体设置',
@@ -3263,6 +3390,16 @@ const resources = {
         completion: 'Hoàn thành',
         stepsCount: '{{current}}/4 bước',
       },
+      accountSafetyWarning: {
+        title: 'Cảnh báo an toàn tài khoản OAuth',
+        subtitle: 'Vấn đề #509 · Rủi ro Gemini + AGY OAuth',
+        firstLine:
+          'Issue #509 ghi nhận các trường hợp bị đình chỉ/cấm liên quan đến ccs agy và việc dùng chung tài khoản giữa ccs gemini và ccs agy.',
+        secondLine:
+          'Chỉ tiếp tục nếu bạn chấp nhận hoàn toàn trách nhiệm về OAuth và rủi ro truy cập tài khoản.',
+        issueLabel: 'Đọc vấn đề #509',
+        proxySettingsLabel: 'Điều khiển Gemini + AGY: Cài đặt > Proxy',
+      },
       cliproxyDialog: {
         name: 'Tên',
         provider: 'Nhà cung cấp',
@@ -3915,6 +4052,68 @@ const resources = {
         overwrite: 'Ghi đè',
         invalidJson: 'JSON không hợp lệ',
         failedSave: 'Không lưu được',
+      },
+      addAccountDialog: {
+        title: 'Thêm tài khoản {{displayName}}',
+        descKiro:
+          'Chọn phương thức xác thực Kiro, sau đó xác thực qua trình duyệt hoặc nhập từ Kiro IDE.',
+        descDeviceCode:
+          'Nhấp vào Xác thực. Mã xác minh sẽ xuất hiện để bạn nhập vào trang web của nhà cung cấp.',
+        descOauth:
+          'Nhấp vào Xác thực để nhận URL OAuth. Mở nó trong bất kỳ trình duyệt nào để đăng nhập.',
+        powerUserEnabled: 'Đã bật chế độ power user',
+        powerUserSkipped:
+          'Chế độ power user trong Cài đặt > Proxy đang bỏ qua danh sách kiểm tra trách nhiệm AGY và bước nhập cụm từ rủi ro của Gemini trên dashboard. Bạn tự chịu hoàn toàn rủi ro OAuth/tài khoản.',
+        powerUserLoadFailed:
+          'Không thể tải cài đặt chế độ power user. Hãy kiểm tra Cài đặt > Proxy rồi thử lại.',
+        powerUserLoading:
+          'Đang tải cài đặt an toàn cho chế độ power user. Vui lòng đợi một chút rồi thử lại.',
+        powerUserUnavailableRetry:
+          'Chế độ power user hiện không khả dụng. Hãy hoàn tất bước an toàn bắt buộc của nhà cung cấp rồi thử lại.',
+        authMethod: 'Phương thức xác thực',
+        selectKiroAuthMethod: 'Chọn phương thức xác thực Kiro',
+        gitlabAuthMethod: 'Phương thức xác thực GitLab',
+        selectGitlabAuthMethod: 'Chọn phương thức xác thực GitLab',
+        gitlabAuthOAuth: 'OAuth trên trình duyệt',
+        gitlabAuthPat: 'Personal Access Token',
+        gitlabAuthHint:
+          'Dùng OAuth trên trình duyệt cho gitlab.com, hoặc PAT cho GitLab tự lưu trữ và môi trường do quản trị viên quản lý.',
+        gitlabUrl: 'GitLab URL',
+        gitlabUrlPlaceholder: 'https://gitlab.com',
+        gitlabUrlHint:
+          'Tùy chọn. Để trống cho gitlab.com, hoặc nhập URL GitLab tự lưu trữ của bạn.',
+        gitlabPat: 'Personal Access Token',
+        gitlabPatPlaceholder: 'glpat-...',
+        gitlabPatHint: 'Token phải có ít nhất các scope',
+        gitlabPatRequired: 'PAT login yêu cầu GitLab Personal Access Token.',
+        nicknameRequired: 'Biệt danh (bắt buộc)',
+        nicknameOptional: 'Biệt danh (tùy chọn)',
+        nicknamePlaceholder: 'ví dụ: công việc, cá nhân',
+        nicknameRequiredHint:
+          'Bắt buộc với nhà cung cấp này. Dùng tên thân thiện duy nhất (ví dụ: work, personal).',
+        nicknameOptionalHint:
+          'Tên thân thiện để nhận biết tài khoản này. Để trống để dùng mã nhận dạng an toàn do hệ thống tạo.',
+        waitingForAuth: 'Đang chờ xác thực...',
+        deviceCodeHint:
+          'Hộp thoại mã xác minh sẽ sớm xuất hiện. Nhập mã trên trang web của nhà cung cấp.',
+        browserHint:
+          'Hoàn tất xác thực trong trình duyệt của bạn. Hộp thoại này sẽ tự động đóng lại.',
+        openUrlLabel: 'Mở URL này trong bất kỳ trình duyệt nào để đăng nhập:',
+        copied: 'Đã sao chép',
+        copy: 'Sao chép',
+        open: 'Mở',
+        popupBlocked:
+          'Cửa sổ bật lên bị chặn. Sao chép URL ở trên và mở thủ công trong trình duyệt của bạn.',
+        redirectPasteLabel: 'Chuyển hướng không hoạt động? Dán URL gọi lại:',
+        callbackPlaceholder: 'Dán URL chuyển hướng vào đây...',
+        submitCallback: 'Gửi cuộc gọi lại',
+        submitting: 'Đang gửi...',
+        preparingUrl: 'Đang chuẩn bị URL đăng nhập...',
+        cancel: 'Hủy',
+        importingToken: 'Đang nhập token từ Kiro IDE...',
+        authenticate: 'Xác thực',
+        importFromIde: 'Nhập từ IDE',
+        importing: 'Đang nhập...',
       },
       setupWizard: {
         title: 'Thiết lập biến thể nâng cao',
@@ -4721,6 +4920,16 @@ const resources = {
         mandatory: '必須',
         completion: '完了状況',
         stepsCount: '{{current}}/4 ステップ',
+      },
+      accountSafetyWarning: {
+        title: 'OAuth アカウント安全性の警告',
+        subtitle: 'Issue #509 · Gemini + AGY OAuth リスク',
+        firstLine:
+          'Issue #509 では、CCS AGY と、CCS Gemini と CCS AGY 間での共有アカウント利用に関連する停止・BAN 報告がまとめられています。',
+        secondLine:
+          'OAuth とアカウントアクセスのリスクをすべて自己責任で負う場合のみ続行してください。',
+        issueLabel: 'Issue #509 を読む',
+        proxySettingsLabel: 'Gemini + AGY の設定: 設定 > プロキシ',
       },
       cliproxyDialog: {
         name: '名前',
@@ -5660,6 +5869,69 @@ const resources = {
           loadingImageSettings: '画像設定を読み込み中...',
         },
       },
+      addAccountDialog: {
+        title: '{{displayName}} アカウントを追加',
+        descKiro:
+          'Kiro の認証方法を選び、ブラウザーで認証するか Kiro IDE からインポートしてください。',
+        descDeviceCode:
+          '認証をクリックすると、プロバイダーのサイトで入力する確認コードが表示されます。',
+        descOauth:
+          '認証をクリックすると OAuth URL を取得します。任意のブラウザーで開いてサインインしてください。',
+        powerUserEnabled: '上級者モードが有効です',
+        powerUserSkipped:
+          '設定 > プロキシのパワーユーザーモードにより、AGY の責任確認チェックと Gemini ダッシュボードのリスク文言入力をスキップしています。OAuth / アカウントに関するリスクはすべて自己責任です。',
+        powerUserLoadFailed:
+          'パワーユーザーモード設定を読み込めませんでした。設定 > プロキシを確認してから再試行してください。',
+        powerUserLoading:
+          'パワーユーザーモードの安全設定を読み込み中です。少し待ってから再試行してください。',
+        powerUserUnavailableRetry:
+          'パワーユーザーモードは利用できません。必要なプロバイダーの安全確認を完了してから再試行してください。',
+        authMethod: '認証方法',
+        selectKiroAuthMethod: 'Kiro の認証方法を選択',
+        gitlabAuthMethod: 'GitLab 認証方法',
+        selectGitlabAuthMethod: 'GitLab 認証方法を選択',
+        gitlabAuthOAuth: 'ブラウザー OAuth',
+        gitlabAuthPat: 'Personal Access Token',
+        gitlabAuthHint:
+          'gitlab.com ではブラウザー OAuth を使い、自前ホストや管理者運用環境では PAT を使ってください。',
+        gitlabUrl: 'GitLab URL',
+        gitlabUrlPlaceholder: 'https://gitlab.com',
+        gitlabUrlHint:
+          '任意です。gitlab.com を使う場合は空欄のままにし、自前ホストの場合はベース URL を指定してください。',
+        gitlabPat: 'Personal Access Token',
+        gitlabPatPlaceholder: 'glpat-...',
+        gitlabPatHint: 'トークンには少なくとも次のスコープが必要です:',
+        gitlabPatRequired: 'PAT ログインには GitLab Personal Access Token が必要です。',
+        nicknameRequired: 'ニックネーム（必須）',
+        nicknameOptional: 'ニックネーム（任意）',
+        nicknamePlaceholder: '例: work, personal',
+        nicknameRequiredHint:
+          'このプロバイダーでは必須です。重複しないわかりやすい名前を付けてください（例: work, personal）。',
+        nicknameOptionalHint:
+          'このアカウントを識別しやすい名前です。空欄の場合は安全な識別子を自動生成します。',
+        waitingForAuth: '認証を待機中...',
+        deviceCodeHint:
+          '確認コードのダイアログがまもなく表示されます。プロバイダーのサイトでコードを入力してください。',
+        browserHint:
+          'ブラウザーで認証を完了してください。このダイアログは自動で閉じます。',
+        openUrlLabel: 'サインインするには、この URL を任意のブラウザーで開いてください:',
+        copied: 'コピー済み',
+        copy: 'コピー',
+        open: '開く',
+        popupBlocked:
+          'ポップアップがブロックされました。上の URL をコピーして、ブラウザーで手動で開いてください。',
+        redirectPasteLabel:
+          'リダイレクトが機能しない場合は、コールバック URL を貼り付けてください:',
+        callbackPlaceholder: 'リダイレクト URL をここに貼り付け...',
+        submitCallback: 'コールバックを送信',
+        submitting: '送信中...',
+        preparingUrl: 'サインイン URL を準備中...',
+        cancel: 'キャンセル',
+        importingToken: 'Kiro IDE からトークンをインポート中...',
+        authenticate: '認証',
+        importFromIde: 'IDE からインポート',
+        importing: 'インポート中...',
+      },
       setupWizard: {
         title: '高度なバリアント設定',
         stepProviderDesc: 'ランタイムバリアント用のプロバイダーを選択',
@@ -6193,6 +6465,16 @@ const resources = {
         mandatory: '필수',
         completion: '완료',
         stepsCount: '{{current}}/4 단계',
+      },
+      accountSafetyWarning: {
+        title: 'OAuth 계정 안전 경고',
+        subtitle: '이슈 #509 · Gemini + AGY OAuth 위험',
+        firstLine:
+          '이슈 #509는 ccs agy와 ccs gemini 및 ccs agy 간의 계정 공유 사용과 관련된 정지/차단 보고를 문서화합니다.',
+        secondLine:
+          'OAuth 및 계정 액세스 위험에 대한 전적인 책임을 수락하는 경우에만 계속하십시오.',
+        issueLabel: '이슈 #509 읽기',
+        proxySettingsLabel: 'Gemini + AGY 제어: 설정 > 프록시',
       },
       cliproxyDialog: {
         name: '이름',
@@ -6850,6 +7132,64 @@ const resources = {
         overwrite: '덮어쓰기',
         invalidJson: '잘못된 JSON',
         failedSave: '저장 실패',
+      },
+      addAccountDialog: {
+        title: '{{displayName}} 계정 추가',
+        descKiro: 'Kiro 인증 방법을 선택한 다음, 브라우저로 인증하거나 Kiro IDE에서 가져오십시오.',
+        descDeviceCode:
+          '인증을 클릭하십시오. 프로바이더 웹사이트에서 입력할 검증 코드가 표시됩니다.',
+        descOauth:
+          '인증을 클릭하여 OAuth URL을 받으십시오. 아무 브라우저에서나 열어 로그인하십시오.',
+        powerUserEnabled: '파워 유저 모드 활성화됨',
+        powerUserSkipped:
+          '설정 > 프록시 파워 유저 모드가 AGY 책임 체크리스트와 Gemini 대시보드 위험 문구를 건너뛰고 있습니다. OAuth/계정 위험에 대한 전적인 책임을 수락합니다.',
+        powerUserLoadFailed:
+          '파워 유저 모드 설정을 로드하지 못했습니다. 설정 > 프록시를 확인하고 다시 시도하십시오.',
+        powerUserLoading: '파워 유저 안전 설정을 로드 중입니다. 잠시 기다린 후 다시 시도하십시오.',
+        powerUserUnavailableRetry:
+          '파워 유저 모드를 사용할 수 없습니다. 필요한 프로바이더 안전 단계를 완료하고 다시 시도하십시오.',
+        authMethod: '인증 방법',
+        selectKiroAuthMethod: 'Kiro 인증 방법 선택',
+        gitlabAuthMethod: 'GitLab 인증 방법',
+        selectGitlabAuthMethod: 'GitLab 인증 방법 선택',
+        gitlabAuthOAuth: '브라우저 OAuth',
+        gitlabAuthPat: '개인 액세스 토큰',
+        gitlabAuthHint:
+          'gitlab.com에는 브라우저 OAuth를, 자체 호스팅 및 관리자 관리 설정에는 PAT를 사용하십시오.',
+        gitlabUrl: 'GitLab URL',
+        gitlabUrlPlaceholder: 'https://gitlab.com',
+        gitlabUrlHint:
+          '선택 사항. gitlab.com의 경우 비워두거나 자체 호스팅 GitLab base URL을 설정하십시오.',
+        gitlabPat: '개인 액세스 토큰',
+        gitlabPatPlaceholder: 'glpat-...',
+        gitlabPatHint: '토큰에는 최소한 다음이 포함되어야 합니다',
+        gitlabPatRequired: 'PAT 로그인에는 GitLab 개인 액세스 토큰이 필요합니다.',
+        nicknameRequired: '닉네임 (필수)',
+        nicknameOptional: '닉네임 (선택)',
+        nicknamePlaceholder: '예: work, personal',
+        nicknameRequiredHint:
+          '이 프로바이더에 필요합니다. 고유한 친숙한 이름을 사용하십시오(예: work, personal).',
+        nicknameOptionalHint:
+          '이 계정을 식별할 친숙한 이름입니다. 안전한 생성된 식별자를 사용하려면 비워두십시오.',
+        waitingForAuth: '인증 대기 중...',
+        deviceCodeHint:
+          '검증 코드 대화 상자가 곧 나타납니다. 프로바이더 웹사이트에 코드를 입력하십시오.',
+        browserHint: '브라우저에서 인증을 완료하십시오. 이 대화 상자는 자동으로 닫힙니다.',
+        openUrlLabel: '아무 브라우저에서나 이 URL을 열어 로그인하십시오:',
+        copied: '복사됨',
+        copy: '복사',
+        open: '열기',
+        popupBlocked: '팝업이 차단되었습니다. 위 URL을 복사하여 브라우저에서 수동으로 여십시오.',
+        redirectPasteLabel: '리디렉션이 작동하지 않았습니까? 콜백 URL을 붙여넣으십시오:',
+        callbackPlaceholder: '리디렉션 URL을 여기에 붙여넣으십시오...',
+        submitCallback: '콜백 제출',
+        submitting: '제출 중...',
+        preparingUrl: '로그인 URL 준비 중...',
+        cancel: '취소',
+        importingToken: 'Kiro IDE에서 토큰을 가져오는 중...',
+        authenticate: '인증',
+        importFromIde: 'IDE에서 가져오기',
+        importing: '가져오는 중...',
       },
 
       // ========================================

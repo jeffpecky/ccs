@@ -223,7 +223,6 @@ export async function execClaudeWithCLIProxy(
   if (forceConfig && supportsModelConfig(provider)) {
     // Block --config for composite variants (per-tier models in config.yaml)
     if (cfg.isComposite) {
-      const variantName = cfg.profileName || provider;
       console.log(
         warn('Composite variants use per-tier config. Edit config.yaml to change tier models.')
       );

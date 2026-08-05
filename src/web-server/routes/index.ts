@@ -15,10 +15,6 @@ import healthRoutes from './health-routes';
 import providerRoutes from './provider-routes';
 import variantRoutes from './variant-routes';
 import settingsRoutes from './settings-routes';
-import channelsRoutes from './channels-routes';
-import websearchRoutes from './websearch-routes';
-import imageAnalysisRoutes from './image-analysis-routes';
-import browserRoutes from './browser-routes';
 import cliproxyAuthRoutes from './cliproxy-auth-routes';
 import cliproxyStatsRoutes from './cliproxy-stats-routes';
 import cliproxyRoutingRoutes from './cliproxy-routing-routes';
@@ -83,7 +79,6 @@ apiRoutes.use((req, res, next) => {
 // Profile CRUD, settings management, presets, accounts
 apiRoutes.use('/profiles', profileRoutes);
 apiRoutes.use('/settings', settingsRoutes);
-apiRoutes.use('/channels', channelsRoutes);
 
 // ==================== Unified Config ====================
 // Config format, migration
@@ -109,18 +104,12 @@ apiRoutes.use('/cliproxy/catalog', catalogRoutes);
 apiRoutes.use('/cliproxy/ai-providers', aiProviderRoutes);
 apiRoutes.use('/cliproxy/openai-compat', providerRoutes);
 
-// ==================== WebSearch ====================
-apiRoutes.use('/websearch', websearchRoutes);
-apiRoutes.use('/browser', browserRoutes);
-apiRoutes.use('/image-analysis', imageAnalysisRoutes);
-
 // ==================== Copilot ====================
 apiRoutes.use('/copilot', copilotRoutes);
 
 // ==================== Cursor ====================
 apiRoutes.use('/cursor', cursorRoutes);
 apiRoutes.use('/legacy/cursor', cursorRoutes);
-
 
 // ==================== CLIProxy Server Settings ====================
 apiRoutes.use('/cliproxy-server', cliproxyServerRoutes);

@@ -32,8 +32,8 @@ function getCauseMessage(cause: unknown): string | null {
 
 function buildAuthCommand(
   provider: CLIProxyProvider,
-  flag: '--paste-callback' | '--port-forward',
-  addAccount?: boolean
+  _flag: '--paste-callback' | '--port-forward',
+  _addAccount?: boolean
 ): string {
   return `Authenticate ${provider} from the dashboard`;
 }

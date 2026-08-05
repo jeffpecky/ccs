@@ -336,6 +336,16 @@ export async function installCliproxyVersion(
   const formatWarn = deps.formatWarn ?? warn;
   const getInstalledVersion = deps.getInstalledVersion ?? getInstalledCliproxyVersion;
 
+  // Skip if the requested version is already installed
+  const installedVersion = getInstalledVersion(effectiveBackend);
+  if (installedVersion === version && manager.isBinaryInstalled()) {
+    const label = effectiveBackend === 'plus' ? 'CLIProxy Plus' : 'CLIProxy';
+    if (verbose) {
+      console.log(formatInfo(`${label} v${version} is already installed, skipping download`));
+    }
+    return;
+  }
+
   // Always attempt a best-effort stop first so we also catch untracked proxies
   // that are running without a session lock.
   if (verbose) console.log(formatInfo('Stopping running CLIProxy before update...'));
@@ -355,7 +365,7 @@ export async function installCliproxyVersion(
     const label = effectiveBackend === 'plus' ? 'CLIProxy Plus' : 'CLIProxy';
     if (verbose)
       console.log(
-        formatInfo(`Removing existing ${label} v${getInstalledVersion(effectiveBackend)}`)
+        formatInfo(`Removing existing ${label} v${installedVersion}`)
       );
     manager.deleteBinary();
   }

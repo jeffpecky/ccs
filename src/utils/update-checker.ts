@@ -358,7 +358,7 @@ export async function showUpdateNotification(updateInfo: {
   latest: string;
 }): Promise<void> {
   // Lazy import UI to ensure modules are loaded
-  const { initUI, warnBox, color } = await import('./ui');
+  const { initUI, warnBox, color: _color } = await import('./ui');
   await initUI();
 
   const content = [

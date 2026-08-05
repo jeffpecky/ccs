@@ -102,8 +102,6 @@ interface PasteCallbackTraceOptions {
 
 const PASTE_CALLBACK_AUTH_URL_POLL_INTERVAL_MS = 3000;
 const POLLED_AUTH_LOCAL_TOKEN_GRACE_MS = 15 * 1000;
-const GEMINI_PLUS_CLIENT_ID_ENV = 'CLIPROXY_GEMINI_OAUTH_CLIENT_ID';
-const GEMINI_PLUS_CLIENT_SECRET_ENV = 'CLIPROXY_GEMINI_OAUTH_CLIENT_SECRET';
 
 const logger = createLogger('cliproxy:auth:oauth');
 
@@ -116,18 +114,7 @@ const logger = createLogger('cliproxy:auth:oauth');
  */
 export const PLUS_OAUTH_ENV_BY_PROVIDER: Partial<
   Record<CLIProxyProvider, { idEnv: string; secretEnv: string; displayName: string }>
-> = {
-  gemini: {
-    idEnv: GEMINI_PLUS_CLIENT_ID_ENV,
-    secretEnv: GEMINI_PLUS_CLIENT_SECRET_ENV,
-    displayName: 'Gemini',
-  },
-  agy: {
-    idEnv: 'CLIPROXY_ANTIGRAVITY_OAUTH_CLIENT_ID',
-    secretEnv: 'CLIPROXY_ANTIGRAVITY_OAUTH_CLIENT_SECRET',
-    displayName: 'Antigravity',
-  },
-};
+> = {};
 
 /**
  * Build a human-readable error message for a provider whose Plus OAuth client

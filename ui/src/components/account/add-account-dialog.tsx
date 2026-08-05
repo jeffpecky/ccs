@@ -31,12 +31,8 @@ import { useCliproxyAuthFlow } from '@/hooks/use-cliproxy-auth-flow';
 import { applyDefaultPreset } from '@/lib/preset-utils';
 import type { CliproxyProviderCatalog, OAuthAccount } from '@/lib/api-client';
 import { AccountSafetyWarningCard } from '@/components/account/account-safety-warning-card';
-import { AntigravityResponsibilityChecklist } from '@/components/account/antigravity-responsibility-checklist';
 import {
-  ANTIGRAVITY_ACK_VERSION,
-  DEFAULT_ANTIGRAVITY_RISK_CHECKLIST,
   RISK_ACK_PHRASE,
-  isAntigravityRiskChecklistComplete,
 } from '@/components/account/antigravity-responsibility-constants';
 import {
   DEFAULT_KIRO_AUTH_METHOD,
@@ -87,7 +83,6 @@ export function AddAccountDialog({
   const [copied, setCopied] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [riskAcknowledgementText, setRiskAcknowledgementText] = useState('');
-  const [agyRiskChecklist, setAgyRiskChecklist] = useState(DEFAULT_ANTIGRAVITY_RISK_CHECKLIST);
   const [powerUserModeEnabled, setPowerUserModeEnabled] = useState(false);
   const [powerUserModeLoading, setPowerUserModeLoading] = useState(false);
   const [kiroAuthMethod, setKiroAuthMethod] = useState<KiroAuthMethod>(DEFAULT_KIRO_AUTH_METHOD);
@@ -108,9 +103,7 @@ export function AddAccountDialog({
   const isGitLab = provider === 'gitlab';
   const supportsPowerUserMode = provider === 'agy' || provider === 'gemini';
   const requiresGeminiSafetyAcknowledgement = provider === 'gemini' && !powerUserModeEnabled;
-  const requiresAgyResponsibilityFlow = provider === 'agy' && !powerUserModeEnabled;
   const isPowerUserModePending = supportsPowerUserMode && powerUserModeLoading;
-  const isAgyRiskChecklistComplete = isAntigravityRiskChecklistComplete(agyRiskChecklist);
   const isGeminiRiskAcknowledged = normalizeRiskPhrase(riskAcknowledgementText) === RISK_ACK_PHRASE;
   const defaultDeviceCode = isDeviceCodeProvider(provider);
   const kiroMethodOption = getKiroAuthMethodOption(kiroAuthMethod);
@@ -195,7 +188,6 @@ export function AddAccountDialog({
     setCopied(false);
     setLocalError(null);
     setRiskAcknowledgementText('');
-    setAgyRiskChecklist(DEFAULT_ANTIGRAVITY_RISK_CHECKLIST);
     setPowerUserModeEnabled(false);
     setPowerUserModeLoading(false);
     setKiroAuthMethod(DEFAULT_KIRO_AUTH_METHOD);
@@ -214,7 +206,6 @@ export function AddAccountDialog({
   useEffect(() => {
     if (open) {
       setRiskAcknowledgementText('');
-      setAgyRiskChecklist(DEFAULT_ANTIGRAVITY_RISK_CHECKLIST);
       setLocalError(null);
     }
   }, [provider, open]);
@@ -306,13 +297,6 @@ export function AddAccountDialog({
       setLocalError(t('addAccountDialog.powerUserLoading'));
       return;
     }
-    if (requiresAgyResponsibilityFlow && !isAgyRiskChecklistComplete) {
-      setLocalError(
-        // TODO i18n: missing key for AGY responsibility error
-        'Complete all Antigravity responsibility steps before authenticating this provider.'
-      );
-      return;
-    }
     if (requiresGeminiSafetyAcknowledgement && !isGeminiRiskAcknowledged) {
       setLocalError(
         `Type "${RISK_ACK_PHRASE}" to acknowledge the account safety warning before authenticating this provider.`
@@ -348,15 +332,7 @@ export function AddAccountDialog({
         : isGitLab && gitlabAuthMode === 'pat'
           ? 'start'
           : undefined,
-      riskAcknowledgement: requiresAgyResponsibilityFlow
-        ? {
-            version: ANTIGRAVITY_ACK_VERSION,
-            reviewedIssue509: agyRiskChecklist.reviewedIssue509,
-            understandsBanRisk: agyRiskChecklist.understandsBanRisk,
-            acceptsFullResponsibility: agyRiskChecklist.acceptsFullResponsibility,
-            typedPhrase: agyRiskChecklist.typedPhrase,
-          }
-        : undefined,
+      riskAcknowledgement: undefined,
     });
   };
 
@@ -408,17 +384,6 @@ export function AddAccountDialog({
         </DialogHeader>
 
         <div className="min-h-0 space-y-4 overflow-y-auto px-6 py-4">
-          {requiresAgyResponsibilityFlow && !showAuthUI && (
-            <AntigravityResponsibilityChecklist
-              value={agyRiskChecklist}
-              onChange={(value) => {
-                setAgyRiskChecklist(value);
-                setLocalError(null);
-              }}
-              disabled={isPending}
-            />
-          )}
-
           {supportsPowerUserMode && powerUserModeEnabled && !showAuthUI && (
             <div className="rounded-lg border border-amber-400/35 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/25 dark:text-amber-100">
               <div className="mb-1.5 flex items-center gap-1.5 font-semibold">
@@ -800,7 +765,6 @@ export function AddAccountDialog({
                 disabled={
                   isPending ||
                   isPowerUserModePending ||
-                  (requiresAgyResponsibilityFlow && !isAgyRiskChecklistComplete) ||
                   (requiresGeminiSafetyAcknowledgement && !isGeminiRiskAcknowledged)
                 }
               >

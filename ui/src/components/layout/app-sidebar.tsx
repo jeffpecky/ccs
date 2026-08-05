@@ -176,7 +176,7 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.path}>
                     {item.isCollapsible && item.children ? (
                       <Collapsible
-                        defaultOpen={isParentActive(item.children) || isRouteActive(item.path)}
+                        defaultOpen={true}
                         className="group/collapsible"
                       >
                         {/* Click navigates to overview AND opens submenu */}
