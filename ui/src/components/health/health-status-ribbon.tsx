@@ -134,6 +134,14 @@ export function HealthStatusRibbon({
               </span>
             </div>
           )}
+          {summary.info > 0 && (
+            <div className="flex flex-col">
+              <span className="text-muted-foreground uppercase text-[10px] tracking-widest">
+                Info
+              </span>
+              <span className="text-blue-500">{summary.info}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex-1" />
