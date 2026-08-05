@@ -6,7 +6,7 @@
 export type { HealthCheck, HealthGroup, HealthReport } from './types';
 
 // System checks
-export { checkClaudeCli, checkCcsDirectory, checkPermissions } from './system-checks';
+export { checkCcsDirectory, checkPermissions } from './system-checks';
 
 // Symlink checks
 export { checkCcsSymlinks, checkSettingsSymlinks } from './symlink-checks';
@@ -30,6 +30,3 @@ export {
 
 // OAuth checks
 export { checkOAuthPortsForDashboard } from './oauth-checks';
-
-// WebSearch checks
-export { checkWebSearchClis } from './websearch-checks';

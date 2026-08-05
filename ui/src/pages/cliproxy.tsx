@@ -13,7 +13,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Check, X, RefreshCw, Plus, Zap, GitBranch, Trash2 } from 'lucide-react';
 import { QuickSetupWizard } from '@/components/quick-setup-wizard';
 import { AddAccountDialog } from '@/components/account/add-account-dialog';
-import { AccountSafetyWarningCard } from '@/components/account/account-safety-warning-card';
 import { ProviderEditor } from '@/components/cliproxy/provider-editor';
 import { ProviderLogo } from '@/components/cliproxy/provider-logo';
 import { ProxyStatusWidget } from '@/components/monitoring/proxy-status-widget';
@@ -350,10 +349,6 @@ export function CliproxyPage() {
           accountCount: 0,
         };
   const accountSetupTarget = selectedAccountTarget ?? fallbackAccountTarget;
-  const warningProvider = (selectedVariantData?.provider || selectedStatus?.provider || '')
-    .toLowerCase()
-    .trim();
-  const showAccountSafetyWarning = warningProvider === 'gemini' || warningProvider === 'agy';
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['cliproxy'] });
@@ -573,11 +568,6 @@ export function CliproxyPage() {
               defaultTarget={selectedVariantData.target}
               isRemoteMode={isRemoteMode}
               port={selectedVariantData.port}
-              topNotice={
-                showAccountSafetyWarning ? (
-                  <AccountSafetyWarningCard compact showProxySettingsLink />
-                ) : undefined
-              }
               onAddAccount={() =>
                 setAddAccountProvider({
                   provider: selectedVariantData.provider,
@@ -631,11 +621,6 @@ export function CliproxyPage() {
               catalog={catalogs[selectedStatus.provider]}
               routing={routingHints[selectedStatus.provider]}
               isRemoteMode={isRemoteMode}
-              topNotice={
-                showAccountSafetyWarning ? (
-                  <AccountSafetyWarningCard compact showProxySettingsLink />
-                ) : undefined
-              }
               onAddAccount={() =>
                 setAddAccountProvider({
                   provider: selectedStatus.provider,

@@ -16,7 +16,6 @@ import {
   type HealthCheck,
   type HealthGroup,
   type HealthReport,
-  checkClaudeCli,
   checkCcsDirectory,
   checkPermissions,
   checkCcsSymlinks,
@@ -33,7 +32,6 @@ import {
   checkOAuthProviders,
   checkCliproxyPort,
   checkOAuthPortsForDashboard,
-  checkWebSearchClis,
 } from './health';
 import { getCcsDir } from '../config/config-loader-facade';
 
@@ -53,7 +51,6 @@ export async function runHealthChecks(): Promise<HealthReport> {
 
   // Group 1: System
   const systemChecks: HealthCheck[] = [];
-  systemChecks.push(await checkClaudeCli());
   systemChecks.push(checkCcsDirectory(ccsDir));
   groups.push({ id: 'system', name: 'System', icon: 'Monitor', checks: systemChecks });
 
@@ -110,11 +107,6 @@ export async function runHealthChecks(): Promise<HealthReport> {
     icon: 'Key',
     checks: oauthReadinessChecks,
   });
-
-  // Group 8: WebSearch CLI Providers
-  const websearchChecks: HealthCheck[] = [];
-  websearchChecks.push(...checkWebSearchClis());
-  groups.push({ id: 'websearch', name: 'WebSearch', icon: 'Search', checks: websearchChecks });
 
   // Flatten all checks for backward compatibility
   const allChecks = groups.flatMap((g) => g.checks);
