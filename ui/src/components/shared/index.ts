@@ -4,7 +4,6 @@
 
 export { CcsLogo } from './ccs-logo';
 export { CcsBarButton } from './ccs-bar-button';
-export { ClaudeKitBadge } from './claudekit-badge';
 export { CodeEditor } from './code-editor';
 export { ConfirmDialog } from './confirm-dialog';
 export { ConnectionIndicator } from './connection-indicator';
@@ -17,4 +16,3 @@ export { PrivacyToggle } from './privacy-toggle';
 export { ProjectSelectionDialog } from './project-selection-dialog';
 export { ProviderIcon } from './provider-icon';
 export { QuotaTooltipContent } from './quota-tooltip-content';
-export { SponsorButton } from './sponsor-button';

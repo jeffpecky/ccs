@@ -30,10 +30,6 @@ import { useKiroImport } from '@/hooks/use-cliproxy';
 import { useCliproxyAuthFlow } from '@/hooks/use-cliproxy-auth-flow';
 import { applyDefaultPreset } from '@/lib/preset-utils';
 import type { CliproxyProviderCatalog, OAuthAccount } from '@/lib/api-client';
-import { AccountSafetyWarningCard } from '@/components/account/account-safety-warning-card';
-import {
-  RISK_ACK_PHRASE,
-} from '@/components/account/antigravity-responsibility-constants';
 import {
   DEFAULT_KIRO_AUTH_METHOD,
   DEFAULT_KIRO_IDC_FLOW,
@@ -60,10 +56,6 @@ interface AddAccountDialogProps {
   isFirstAccount?: boolean;
 }
 
-function normalizeRiskPhrase(value: string): string {
-  return value.trim().replace(/\s+/g, ' ').toUpperCase();
-}
-
 interface PowerUserModeSyncOptions {
   pendingMessage?: string | null;
   disabledMessage?: string | null;
@@ -82,7 +74,6 @@ export function AddAccountDialog({
   const [callbackUrl, setCallbackUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [riskAcknowledgementText, setRiskAcknowledgementText] = useState('');
   const [powerUserModeEnabled, setPowerUserModeEnabled] = useState(false);
   const [powerUserModeLoading, setPowerUserModeLoading] = useState(false);
   const [kiroAuthMethod, setKiroAuthMethod] = useState<KiroAuthMethod>(DEFAULT_KIRO_AUTH_METHOD);
@@ -102,9 +93,7 @@ export function AddAccountDialog({
   const isKiro = provider === 'kiro';
   const isGitLab = provider === 'gitlab';
   const supportsPowerUserMode = provider === 'agy' || provider === 'gemini';
-  const requiresGeminiSafetyAcknowledgement = provider === 'gemini' && !powerUserModeEnabled;
   const isPowerUserModePending = supportsPowerUserMode && powerUserModeLoading;
-  const isGeminiRiskAcknowledged = normalizeRiskPhrase(riskAcknowledgementText) === RISK_ACK_PHRASE;
   const defaultDeviceCode = isDeviceCodeProvider(provider);
   const kiroMethodOption = getKiroAuthMethodOption(kiroAuthMethod);
   const isKiroIdc = isKiro && kiroAuthMethod === 'idc';
@@ -187,7 +176,6 @@ export function AddAccountDialog({
     setCallbackUrl('');
     setCopied(false);
     setLocalError(null);
-    setRiskAcknowledgementText('');
     setPowerUserModeEnabled(false);
     setPowerUserModeLoading(false);
     setKiroAuthMethod(DEFAULT_KIRO_AUTH_METHOD);
@@ -205,7 +193,6 @@ export function AddAccountDialog({
 
   useEffect(() => {
     if (open) {
-      setRiskAcknowledgementText('');
       setLocalError(null);
     }
   }, [provider, open]);
@@ -226,24 +213,6 @@ export function AddAccountDialog({
 
     void syncPowerUserModeState();
   }, [open, provider, supportsPowerUserMode, syncPowerUserModeState]);
-
-  useEffect(() => {
-    if (!open || provider !== 'agy' || !authFlow.error || !powerUserModeEnabled) {
-      return;
-    }
-
-    const normalizedError = authFlow.error.toLowerCase();
-    const ackRequired =
-      normalizedError.includes('agy_risk_ack_required') ||
-      normalizedError.includes('responsibility acknowledgement') ||
-      normalizedError.includes('responsibility checklist');
-    if (!ackRequired) return;
-
-    void syncPowerUserModeState({
-      pendingMessage: t('addAccountDialog.powerUserLoading'),
-      disabledMessage: t('addAccountDialog.powerUserUnavailableRetry'),
-    });
-  }, [authFlow.error, open, powerUserModeEnabled, provider, syncPowerUserModeState, t]);
 
   // When authFlow completes successfully (polling detected success), apply preset and close
   useEffect(() => {
@@ -297,12 +266,6 @@ export function AddAccountDialog({
       setLocalError(t('addAccountDialog.powerUserLoading'));
       return;
     }
-    if (requiresGeminiSafetyAcknowledgement && !isGeminiRiskAcknowledged) {
-      setLocalError(
-        `Type "${RISK_ACK_PHRASE}" to acknowledge the account safety warning before authenticating this provider.`
-      );
-      return;
-    }
     setLocalError(null);
     if (isKiroIdc && !kiroIDCStartUrlTrimmed) {
       setLocalError('IDC Start URL is required for Kiro IAM Identity Center login.');
@@ -332,7 +295,6 @@ export function AddAccountDialog({
         : isGitLab && gitlabAuthMode === 'pat'
           ? 'start'
           : undefined,
-      riskAcknowledgement: undefined,
     });
   };
 
@@ -392,19 +354,6 @@ export function AddAccountDialog({
               </div>
               {t('addAccountDialog.powerUserSkipped')}
             </div>
-          )}
-
-          {requiresGeminiSafetyAcknowledgement && !showAuthUI && (
-            <AccountSafetyWarningCard
-              showAcknowledgement
-              acknowledgementPhrase={RISK_ACK_PHRASE}
-              acknowledgementText={riskAcknowledgementText}
-              onAcknowledgementTextChange={(value) => {
-                setRiskAcknowledgementText(value);
-                setLocalError(null);
-              }}
-              disabled={isPending}
-            />
           )}
 
           {/* Kiro auth method */}
@@ -764,8 +713,7 @@ export function AddAccountDialog({
                 className="w-full sm:w-auto"
                 disabled={
                   isPending ||
-                  isPowerUserModePending ||
-                  (requiresGeminiSafetyAcknowledgement && !isGeminiRiskAcknowledged)
+                  isPowerUserModePending
                 }
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
