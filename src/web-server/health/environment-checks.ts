@@ -1,32 +1,24 @@
 /**
  * Environment Health Checks
  *
- * Check platform, SSH, TTY, and browser capability.
+ * Check platform and SSH status.
  */
 
 import { getEnvironmentDiagnostics } from '../../management/environment-diagnostics';
 import type { HealthCheck } from './types';
 
 /**
- * Check environment (platform, SSH, TTY, browser capability)
+ * Check environment (platform, SSH, TTY)
  */
 export function checkEnvironment(): HealthCheck {
   const diag = getEnvironmentDiagnostics();
 
   let status: 'ok' | 'warning' | 'info' = 'ok';
-  let message = 'Browser available';
+  let message = `${diag.platformName}`;
 
-  if (diag.detectedHeadless) {
-    if (diag.platform === 'win32' && diag.ttyStatus === 'undefined') {
-      status = 'warning';
-      message = 'Possible headless false positive (Windows)';
-    } else if (diag.sshSession) {
-      status = 'info';
-      message = 'SSH session (headless mode)';
-    } else {
-      status = 'info';
-      message = 'Headless environment';
-    }
+  if (diag.sshSession) {
+    status = 'info';
+    message += ' (SSH session)';
   }
 
   return {
@@ -34,6 +26,6 @@ export function checkEnvironment(): HealthCheck {
     name: 'Environment',
     status,
     message,
-    details: `${diag.platformName} | SSH: ${diag.sshSession ? 'Yes' : 'No'} | Browser: ${diag.browserReason}`,
+    details: `${diag.platformName} | SSH: ${diag.sshSession ? 'Yes' : 'No'}`,
   };
 }
