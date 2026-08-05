@@ -26,7 +26,6 @@ import {
   checkClaudeSettings,
   checkProfiles,
   checkInstances,
-  checkDelegation,
   checkCliproxyBinary,
   checkCliproxyConfig,
   checkOAuthProviders,
@@ -71,14 +70,13 @@ export async function runHealthChecks(): Promise<HealthReport> {
     checks: configChecks,
   });
 
-  // Group 4: Profiles & Delegation
+  // Group 4: Profiles
   const profileChecks: HealthCheck[] = [];
   profileChecks.push(checkProfiles(ccsDir));
   profileChecks.push(checkInstances(ccsDir));
-  profileChecks.push(checkDelegation(ccsDir));
   groups.push({
     id: 'profiles',
-    name: 'Profiles & Delegation',
+    name: 'Profiles',
     icon: 'Users',
     checks: profileChecks,
   });

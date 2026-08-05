@@ -18,7 +18,7 @@ export { checkEnvironment } from './environment-checks';
 export { checkConfigFile, checkSettingsFiles, checkClaudeSettings } from './config-checks';
 
 // Profile checks
-export { checkProfiles, checkInstances, checkDelegation } from './profile-checks';
+export { checkProfiles, checkInstances } from './profile-checks';
 
 // CLIProxy checks
 export {

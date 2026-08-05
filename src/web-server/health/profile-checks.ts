@@ -1,7 +1,7 @@
 /**
  * Profile Health Checks
  *
- * Check profiles, instances, and delegation.
+ * Check profiles and instances.
  * Supports both legacy (config.json) and unified (config.yaml) modes.
  */
 
@@ -125,52 +125,5 @@ export function checkInstances(ccsDir: string): HealthCheck {
     name: 'Instances',
     status: 'ok',
     message: `${instances.length} account profile${instances.length !== 1 ? 's' : ''}`,
-  };
-}
-
-/**
- * Check delegation setup
- */
-export function checkDelegation(ccsDir: string): HealthCheck {
-  const ccsClaudeCommandsDir = path.join(ccsDir, '.claude', 'commands');
-  const hasCcsCommand = fs.existsSync(path.join(ccsClaudeCommandsDir, 'ccs.md'));
-  const hasContinueCommand = fs.existsSync(path.join(ccsClaudeCommandsDir, 'ccs', 'continue.md'));
-
-  if (!hasCcsCommand || !hasContinueCommand) {
-    return {
-      id: 'delegation',
-      name: 'Delegation',
-      status: 'warning',
-      message: 'Not installed',
-      fix: 'Run: npm install -g @jeffpecky/ccs --force',
-    };
-  }
-
-  const { DelegationValidator } = require('../../utils/delegation-validator');
-  const readyProfiles: string[] = [];
-
-  for (const profile of ['glm', 'kimi']) {
-    const validation = DelegationValidator.validate(profile);
-    if (validation.valid) {
-      readyProfiles.push(profile);
-    }
-  }
-
-  if (readyProfiles.length === 0) {
-    return {
-      id: 'delegation',
-      name: 'Delegation',
-      status: 'warning',
-      message: 'No profiles ready',
-      fix: 'Configure profiles with valid API keys',
-    };
-  }
-
-  return {
-    id: 'delegation',
-    name: 'Delegation',
-    status: 'ok',
-    message: `${readyProfiles.length} profiles ready`,
-    details: readyProfiles.join(', '),
   };
 }

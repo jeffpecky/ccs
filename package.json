@@ -48,7 +48,7 @@
     "ui:preview": "cd ui && bun run preview",
     "ui:validate": "cd ui && bun run validate",
     "start": "node dist/ccs.js",
-    "dev": "bun run build && node dist/ccs.js"
+    "dev": "bun run build && cd ui && npm run build && cd .. && node dist/ccs.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

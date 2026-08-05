@@ -89,25 +89,6 @@ const resources = {
         failedUpdateDefaultTarget: 'Failed to update default target to {{target}}{{suffix}}',
         resourcesUpdated: 'Shared resources updated',
       },
-      modelTierMapping: {
-        title: 'Model Tier Mapping',
-        advanced: 'Advanced',
-        description: "Configure different models for Claude Code's opus/sonnet/haiku tiers.",
-        autoSuggest: 'Auto-suggest based on {{provider}}',
-        opusPlaceholder: 'e.g., anthropic/claude-opus-4',
-        sonnetPlaceholder: 'e.g., anthropic/claude-sonnet-4',
-        haikuPlaceholder: 'e.g., anthropic/claude-3.5-haiku',
-        footer:
-          'These set ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_HAIKU_MODEL.',
-      },
-      envEditor: {
-        sensitive: 'sensitive',
-        none: 'No environment variables configured.',
-        noneHint: 'Add variables using the input below or edit the JSON directly.',
-        addVariable: 'Add Environment Variable',
-        keyPlaceholder: 'VARIABLE_NAME',
-        valuePlaceholder: 'value',
-      },
       setupVariant: {
         using: 'Using:',
         variantNameRequired: 'Runtime Variant Name *',
@@ -217,21 +198,6 @@ const resources = {
         selectModel: 'Select a model',
         noModelsAvailable: 'No models available',
         modelPlaceholder: 'Model...',
-      },
-      alibabaCodingPlanQuickStart: {
-        recommended: 'Recommended',
-        title: 'Try Alibaba Coding Plan',
-        description:
-          'Use Alibaba Cloud Coding Plan through an Anthropic-compatible endpoint for coding workloads.',
-        featureEndpoint: 'Anthropic-compatible endpoint',
-        featureKeyFormat: 'Dedicated sk-sp API keys',
-        createAlibabaProfile: 'Create Alibaba Coding Plan Profile',
-        readGuideAt: 'Read setup guide at',
-      },
-      alibabaCodingPlanPromo: {
-        title: 'Alibaba Coding Plan',
-        subtitle: 'Model Studio Coding Plan via Anthropic endpoint',
-        add: 'Add',
       },
       credentialHealth: {
         title: 'Credential Health',
@@ -353,23 +319,6 @@ const resources = {
         success: 'Success',
         failed: 'Failed',
         successRate: 'Success Rate',
-      },
-      antigravityChecklist: {
-        title: 'Antigravity OAuth Responsibility',
-        subtitle: 'Complete all 4 steps before you can authenticate.',
-        mandatory: 'Mandatory',
-        completion: 'Completion',
-        stepsCount: '{{current}}/4 steps',
-      },
-      accountSafetyWarning: {
-        title: 'OAuth Account Safety Warning',
-        subtitle: 'Issue #509 · Gemini + AGY OAuth risk',
-        firstLine:
-          'Issue #509 documents suspension/ban reports tied to ccs agy and shared-account usage between ccs gemini and ccs agy.',
-        secondLine:
-          'Continue only if you accept full responsibility for OAuth and account-access risk.',
-        issueLabel: 'Read issue #509',
-        proxySettingsLabel: 'Gemini + AGY controls: Settings > Proxy',
       },
       cliproxyDialog: {
         name: 'Name',
@@ -820,12 +769,6 @@ const resources = {
         title: 'CCS Config',
         subtitle: 'Claude Code Switch Dashboard',
       },
-      hubFooter: {
-        logs: 'Logs',
-        settings: 'Settings',
-        github: 'GitHub',
-        copyright: '© {{year}} kaitranntt',
-      },
       themeToggle: {
         srLabel: 'Toggle theme',
       },
@@ -833,29 +776,11 @@ const resources = {
         alt: 'CCS Logo',
         text: 'CCS Config',
       },
-      claudekitBadge: {
-        title: 'Powered by ClaudeKit Framework',
-        alt: 'ClaudeKit',
-        poweredBy: 'Powered by',
-        claudekit: 'ClaudeKit',
-      },
       codeEditor: {
         revealSensitive: 'Reveal sensitive values',
         maskSensitive: 'Mask sensitive values',
         valid: 'Valid {{language}}',
         readOnly: '(Read-only)',
-      },
-      commandBuilder: {
-        title: 'Command Builder',
-        searchPlaceholder: 'Type or select a command...',
-        copy: 'Copy',
-        run: 'Run',
-        cmdConfig: 'Open configuration interface',
-        cmdCreateProfile: 'Create a new profile',
-        cmdSwitchProfile: 'Switch to a profile',
-        cmdDoctor: 'Check system health',
-        cmdListProviders: 'List available CLIProxy providers',
-        cmdAddProvider: 'Add CLIProxy provider',
       },
       confirmDialog: {
         confirm: 'Confirm',
@@ -915,17 +840,6 @@ const resources = {
         codeCopied: 'Code copied',
         copyVerificationCode: 'Copy verification code',
       },
-      quickCommands: {
-        title: 'Quick Commands',
-        startDefault: 'Start Default',
-        startDefaultDesc: 'Launch Claude with default profile',
-        glmProfile: 'GLM Profile',
-        glmProfileDesc: 'Switch to GLM model',
-        healthCheck: 'Health Check',
-        healthCheckDesc: 'Run system diagnostics',
-        delegateTask: 'Delegate Task',
-        delegateTaskDesc: 'Delegate to GLM profile',
-      },
       quotaTooltip: {
         loadingQuota: 'Loading quota...',
         failedLoadQuota: 'Failed to load quota',
@@ -967,26 +881,6 @@ const resources = {
         codexAdditionalWeekly: '{{name}} (weekly)',
         codexAdditional: '{{name}}',
       },
-      sponsorButton: {
-        title: 'Sponsor this project on GitHub',
-        sponsor: 'Sponsor',
-      },
-      valueMetrics: {
-        apiCostSaved: 'API Cost Saved',
-        tokensSaved: 'Tokens Saved',
-        queriesFaster: 'Queries Faster',
-        errorsReduced: 'Errors Reduced',
-        vsLastMonth: 'vs last month',
-        throughCaching: 'through caching',
-        averageSpeedup: 'average speedup',
-        withRetryLogic: 'with retry logic',
-        performanceMetrics: 'Performance Metrics',
-        monthlySummary: 'Monthly Summary',
-        totalSaved: 'Total Saved',
-        tokensProcessed: 'Tokens Processed',
-        queriesHandled: 'Queries Handled',
-        uptime: 'Uptime',
-      },
       deviceCodeDialog: {
         authorize: 'Authorize {{provider}}',
         enterCodeAtPage: 'Enter the code below at the authorization page.',
@@ -999,30 +893,6 @@ const resources = {
         openProviderPage: 'Open {{provider}}',
         copyCodeAria: 'Copy verification code',
         codeCopiedAria: 'Code copied',
-      },
-      settingsDialog: {
-        editProfile: 'Edit Profile: {{name}}',
-        description: 'Configure environment variables and settings for this profile.',
-        loadingSettings: 'Loading settings...',
-        envTab: 'Environment',
-        rawJsonTab: 'Raw JSON',
-        generalTab: 'General',
-        noEnvVars: 'No environment variables configured.',
-        noEnvVarsHint: 'Add variables in your settings.json file.',
-        loadingEditor: 'Loading editor...',
-        profileInfo: 'Profile Information',
-        profileInfoDesc: 'Details about this configuration file.',
-        path: 'Path',
-        lastModified: 'Last Modified',
-        cancel: 'Cancel',
-        saving: 'Saving...',
-        saveChanges: 'Save Changes',
-        conflictTitle: 'File Modified Externally',
-        conflictDesc:
-          'This settings file was modified by another process. Overwrite with your changes or discard?',
-        overwrite: 'Overwrite',
-        invalidJson: 'Invalid JSON',
-        failedSave: 'Failed to save',
       },
 
       // ========================================
@@ -1124,15 +994,8 @@ const resources = {
           done: 'Done',
         },
       },
-      userMenu: {
-        signedInAs: 'Signed in as {{username}}',
-      },
       providerCard: {
         missingProjectIdAria: 'Missing Project ID',
-      },
-      loginPage: {
-        showPassword: 'Show password',
-        hidePassword: 'Hide password',
       },
 
       // ========================================
@@ -1264,26 +1127,8 @@ const resources = {
         createVariant: 'Create CLIProxy Variant',
         agyDenylist: 'Antigravity denylist: Claude Opus 4.5 and Claude Sonnet 4.5 are deprecated.',
       },
-      providerEditorAccountItem: {
-        modelsUsed: 'Models Used',
-      },
-      bulkActionBar: {
-        applyPreset: 'Apply preset',
-      },
-      modelConfigSection: {
-        defaultModel: 'Default Model',
-      },
       rawEditorSection: {
         rawConfig: 'Raw Configuration',
-      },
-      providerEditorHeader: {
-        connectorName: 'Connector Name',
-      },
-      aiProvidersFamilyRail: {
-        current: 'Current',
-      },
-      aiProvidersEntryCard: {
-        apiKeys: 'API Keys',
       },
       aiProvidersEntryDialog: {
         connectorName: 'Connector Name',
@@ -1301,9 +1146,6 @@ const resources = {
       // ========================================
       // Domain 4: Compatible CLI Tabs
       // ========================================
-      rawJsonSettingsEditor: {
-        title: 'Raw Settings Editor',
-      },
       copilotConfigForm: {
         copilotConfiguration: 'Copilot Configuration',
         deprecatedModels: 'Deprecated Copilot models detected',
@@ -1319,11 +1161,6 @@ const resources = {
         modelMapping: 'Model Mapping',
         quickUsage: 'Quick Usage',
         noPremiumUsage: 'No premium usage count',
-      },
-      copilotPresets: {
-        gpt5Codex: 'GPT-5.3 Codex',
-        claude46: 'Claude 4.6',
-        gemini3: 'Gemini 3',
       },
 
       // ========================================
@@ -1348,30 +1185,8 @@ const resources = {
       dateRangeFilter: {
         pickADate: 'Pick a date',
       },
-      logsConfig: {
-        level: 'Lvl',
-        message: 'Message',
-        source: 'Source',
-        time: 'Time',
-        proc: 'Proc',
-        open: 'Open',
-        run: 'Run',
-        refreshEntries: 'Refresh Entries',
-      },
-      logsDetailPanel: {
-        details: 'Details',
-      },
-      logsFilters: {
-        filters: 'Filters',
-      },
-      logsOverviewCards: {
-        overview: 'Overview',
-      },
       logsPageSkeleton: {
         loadingLogs: 'Loading logs...',
-      },
-      monitoringErrorLogs: {
-        logContent: 'Log Content',
       },
       analyticsPages: {
         chartsGrid: 'Charts',
@@ -1485,46 +1300,6 @@ const resources = {
       // ========================================
       // Domain 7: Profiles / Settings / Pages
       // ========================================
-      openrouterBadge: {
-        new: 'NEW',
-        integration: 'OpenRouter Integration',
-      },
-      openrouterBanner: {
-        accessModels: 'Access {{count}}+ models via OpenRouter',
-        add: 'Add',
-      },
-      openrouterModelPicker: {
-        searchModels: 'Search Models',
-        newestModels: 'Newest Models',
-      },
-      openrouterPromoCard: {
-        title: 'OpenRouter',
-        description: 'Access hundreds of models from one API endpoint.',
-      },
-      supportEntryCard: {
-        actionRequired: 'Action Required',
-      },
-      settingsPage: {
-        title: 'Settings',
-        loading: 'Loading...',
-        failedLoad: 'Failed to load settings.',
-        tabs: {
-          web: 'Web',
-          env: 'Env',
-          think: 'Think',
-          proxy: 'Proxy',
-          auth: 'Auth',
-          backup: 'Backup',
-        },
-        thinkingSection: {
-          title: 'Thinking',
-          description: 'Configure extended thinking/reasoning for supported models.',
-        },
-        proxySection: {
-          title: 'Proxy',
-          loadingImageSettings: 'Loading image settings...',
-        },
-      },
       homePageV2: {
         title: 'Home',
         logsMoved: 'Logs moved to a dedicated workspace',
@@ -1532,18 +1307,6 @@ const resources = {
         cliproxy: 'CLIProxy',
         accounts: 'Accounts',
         health: 'Health',
-      },
-      analyticsPageV2: {
-        title: 'Analytics',
-        subtitle: 'Usage analytics and insights.',
-      },
-      logsPageV2: {
-        title: 'Logs',
-        subtitle: 'View and manage system logs.',
-      },
-      healthPageV2: {
-        title: 'Health',
-        subtitle: 'System health monitoring.',
       },
       aiProvidersPage: {
         title: 'AI Providers',
@@ -1631,25 +1394,6 @@ const resources = {
         defaultTargetUpdated: '默认目标已更新',
         failedUpdateDefaultTarget: '更新默认目标到 {{target}} 失败{{suffix}}',
         resourcesUpdated: '共享资源已更新',
-      },
-      modelTierMapping: {
-        title: '模型档位映射',
-        advanced: '高级',
-        description: '为 Claude Code 的 opus/sonnet/haiku 档位配置不同模型。',
-        autoSuggest: '基于 {{provider}} 自动建议',
-        opusPlaceholder: '例如：anthropic/claude-opus-4',
-        sonnetPlaceholder: '例如：anthropic/claude-sonnet-4',
-        haikuPlaceholder: '例如：anthropic/claude-3.5-haiku',
-        footer:
-          '这些字段对应 ANTHROPIC_DEFAULT_OPUS_MODEL、ANTHROPIC_DEFAULT_SONNET_MODEL、ANTHROPIC_DEFAULT_HAIKU_MODEL。',
-      },
-      envEditor: {
-        sensitive: '敏感',
-        none: '尚未配置环境变量。',
-        noneHint: '可在下方输入添加，或直接编辑 JSON。',
-        addVariable: '添加环境变量',
-        keyPlaceholder: 'VARIABLE_NAME',
-        valuePlaceholder: 'value',
       },
       setupVariant: {
         using: '当前使用：',
@@ -1758,20 +1502,6 @@ const resources = {
         selectModel: '选择模型',
         noModelsAvailable: '暂无可用模型',
         modelPlaceholder: '模型...',
-      },
-      alibabaCodingPlanQuickStart: {
-        recommended: '推荐',
-        title: '试用阿里云 Coding Plan',
-        description: '通过 Anthropic 兼容端点接入阿里云 Model Studio Coding Plan。',
-        featureEndpoint: 'Anthropic 兼容端点',
-        featureKeyFormat: '专用 sk-sp API Key',
-        createAlibabaProfile: '创建 Alibaba Coding Plan 配置',
-        readGuideAt: '查看配置文档：',
-      },
-      alibabaCodingPlanPromo: {
-        title: 'Alibaba Coding Plan',
-        subtitle: '通过 Anthropic 端点接入 Model Studio Coding Plan',
-        add: '添加',
       },
       credentialHealth: {
         title: '凭据健康状态',
@@ -1887,22 +1617,6 @@ const resources = {
         success: '成功',
         failed: '失败',
         successRate: '成功率',
-      },
-      antigravityChecklist: {
-        title: 'Antigravity OAuth 责任须知',
-        subtitle: '认证前请完成全部 4 步。',
-        mandatory: '必读',
-        completion: '完成度',
-        stepsCount: '{{current}}/4 步',
-      },
-      accountSafetyWarning: {
-        title: 'OAuth 账号安全提示',
-        subtitle: 'Issue #509 · Gemini + AGY OAuth 风险',
-        firstLine:
-          'Issue #509 记录了与 ccs agy 及 ccs gemini 与 ccs agy 共享账号使用相关的封禁/停用报告。',
-        secondLine: '仅在您愿意承担 OAuth 与账号访问风险的前提下继续。',
-        issueLabel: '查看 issue #509',
-        proxySettingsLabel: 'Gemini + AGY 控制：设置 > 代理',
       },
       cliproxyDialog: {
         name: '名称',
@@ -2339,12 +2053,6 @@ const resources = {
         title: 'CCS Config',
         subtitle: 'Claude Code Switch Dashboard',
       },
-      hubFooter: {
-        logs: '日志',
-        settings: '设置',
-        github: 'GitHub',
-        copyright: '© {{year}} kaitranntt',
-      },
       themeToggle: {
         srLabel: '切换主题',
       },
@@ -2352,29 +2060,11 @@ const resources = {
         alt: 'CCS Logo',
         text: 'CCS Config',
       },
-      claudekitBadge: {
-        title: 'Powered by ClaudeKit Framework',
-        alt: 'ClaudeKit',
-        poweredBy: 'Powered by',
-        claudekit: 'ClaudeKit',
-      },
       codeEditor: {
         revealSensitive: '显示敏感值',
         maskSensitive: '隐藏敏感值',
         valid: '有效的 {{language}}',
         readOnly: '（只读）',
-      },
-      commandBuilder: {
-        title: '命令构建器',
-        searchPlaceholder: '输入或选择命令...',
-        copy: '复制',
-        run: '运行',
-        cmdConfig: '打开配置界面',
-        cmdCreateProfile: '创建新配置',
-        cmdSwitchProfile: '切换到指定配置',
-        cmdDoctor: '检查系统健康',
-        cmdListProviders: '列出可用 CLIProxy 提供商',
-        cmdAddProvider: '添加 CLIProxy 提供商',
       },
       confirmDialog: {
         confirm: '确认',
@@ -2432,17 +2122,6 @@ const resources = {
         codeCopied: '验证码已复制',
         copyVerificationCode: '复制验证码',
       },
-      quickCommands: {
-        title: '快捷命令',
-        startDefault: '启动默认',
-        startDefaultDesc: '使用默认配置启动 Claude',
-        glmProfile: 'GLM 配置',
-        glmProfileDesc: '切换到 GLM 模型',
-        healthCheck: '健康检查',
-        healthCheckDesc: '运行系统诊断',
-        delegateTask: '委托任务',
-        delegateTaskDesc: '委托到 GLM 配置',
-      },
       quotaTooltip: {
         loadingQuota: '加载配额中...',
         failedLoadQuota: '加载配额失败',
@@ -2484,26 +2163,6 @@ const resources = {
         codexAdditionalWeekly: '{{name}}（每周）',
         codexAdditional: '{{name}}',
       },
-      sponsorButton: {
-        title: '在 GitHub 上赞助此项目',
-        sponsor: '赞助',
-      },
-      valueMetrics: {
-        apiCostSaved: 'API 成本节省',
-        tokensSaved: 'Token 节省',
-        queriesFaster: '查询加速',
-        errorsReduced: '错误减少',
-        vsLastMonth: '对比上月',
-        throughCaching: '通过缓存',
-        averageSpeedup: '平均加速',
-        withRetryLogic: '通过重试逻辑',
-        performanceMetrics: '性能指标',
-        monthlySummary: '月度概览',
-        totalSaved: '总节省',
-        tokensProcessed: '处理 Token 数',
-        queriesHandled: '处理请求数',
-        uptime: '正常运行时间',
-      },
       deviceCodeDialog: {
         authorize: '授权 {{provider}}',
         enterCodeAtPage: '在授权页面输入下方验证码。',
@@ -2516,29 +2175,6 @@ const resources = {
         openProviderPage: '打开 {{provider}}',
         copyCodeAria: '复制验证码',
         codeCopiedAria: '验证码已复制',
-      },
-      settingsDialog: {
-        editProfile: '编辑配置：{{name}}',
-        description: '为此配置设置环境变量和其他设置。',
-        loadingSettings: '加载设置中...',
-        envTab: '环境变量',
-        rawJsonTab: '原始 JSON',
-        generalTab: '常规',
-        noEnvVars: '尚未配置环境变量。',
-        noEnvVarsHint: '在 settings.json 文件中添加变量。',
-        loadingEditor: '加载编辑器中...',
-        profileInfo: '配置信息',
-        profileInfoDesc: '此配置文件的详细信息。',
-        path: '路径',
-        lastModified: '最后修改',
-        cancel: '取消',
-        saving: '保存中...',
-        saveChanges: '保存更改',
-        conflictTitle: '文件被外部修改',
-        conflictDesc: '此设置文件已被其他进程修改。用你的更改覆盖还是丢弃？',
-        overwrite: '覆盖',
-        invalidJson: 'JSON 无效',
-        failedSave: '保存失败',
       },
       addAccountDialog: {
         title: '添加 {{displayName}} 账号',
@@ -2626,15 +2262,8 @@ const resources = {
           done: '完成',
         },
       },
-      userMenu: {
-        signedInAs: '已登录为 {{username}}',
-      },
       providerCard: {
         missingProjectIdAria: '缺少项目 ID',
-      },
-      loginPage: {
-        showPassword: '显示密码',
-        hidePassword: '隐藏密码',
       },
       cliproxyStatsOverview: {
         sessionStatistics: '会话统计',
@@ -2760,26 +2389,8 @@ const resources = {
         createVariant: '创建 CLIProxy 变体',
         agyDenylist: 'Antigravity 禁用列表：Claude Opus 4.5 和 Claude Sonnet 4.5 已弃用。',
       },
-      providerEditorAccountItem: {
-        modelsUsed: '使用模型数',
-      },
-      bulkActionBar: {
-        applyPreset: '应用预设',
-      },
-      modelConfigSection: {
-        defaultModel: '默认模型',
-      },
       rawEditorSection: {
         rawConfig: '原始配置',
-      },
-      providerEditorHeader: {
-        connectorName: '连接器名称',
-      },
-      aiProvidersFamilyRail: {
-        current: '当前',
-      },
-      aiProvidersEntryCard: {
-        apiKeys: 'API Key',
       },
       aiProvidersEntryDialog: {
         connectorName: '连接器名称',
@@ -2792,9 +2403,6 @@ const resources = {
         modelMappings: '模型映射',
         requiredSetup: '必要设置',
         optionalRouting: '可选路由',
-      },
-      rawJsonSettingsEditor: {
-        title: '原始设置编辑器',
       },
       copilotConfigForm: {
         copilotConfiguration: 'Copilot 配置',
@@ -2811,11 +2419,6 @@ const resources = {
         modelMapping: '模型映射',
         quickUsage: '快速使用',
         noPremiumUsage: '无高级用量',
-      },
-      copilotPresets: {
-        gpt5Codex: 'GPT-5.3 Codex',
-        claude46: 'Claude 4.6',
-        gemini3: 'Gemini 3',
       },
       healthCard: {
         allSystemsNominal: '所有系统正常',
@@ -2836,30 +2439,8 @@ const resources = {
       dateRangeFilter: {
         pickADate: '选择日期',
       },
-      logsConfig: {
-        level: '级别',
-        message: '消息',
-        source: '来源',
-        time: '时间',
-        proc: '进程',
-        open: '打开',
-        run: '运行',
-        refreshEntries: '刷新条目',
-      },
-      logsDetailPanel: {
-        details: '详情',
-      },
-      logsFilters: {
-        filters: '筛选',
-      },
-      logsOverviewCards: {
-        overview: '概览',
-      },
       logsPageSkeleton: {
         loadingLogs: '加载日志中...',
-      },
-      monitoringErrorLogs: {
-        logContent: '日志内容',
       },
       analyticsPages: {
         chartsGrid: '图表',
@@ -2962,46 +2543,6 @@ const resources = {
         sectionPlusHint: '仍然受支持，但目前与默认后端分开显示',
         plusTrackNote: '需要可选的 Plus 后端；当前这条线路由社区维护。',
       },
-      openrouterBadge: {
-        new: '新',
-        integration: 'OpenRouter 集成',
-      },
-      openrouterBanner: {
-        accessModels: '通过 OpenRouter 访问 {{count}}+ 模型',
-        add: '添加',
-      },
-      openrouterModelPicker: {
-        searchModels: '搜索模型',
-        newestModels: '最新模型',
-      },
-      openrouterPromoCard: {
-        title: 'OpenRouter',
-        description: '通过一个 API 端点访问数百个模型。',
-      },
-      supportEntryCard: {
-        actionRequired: '待处理',
-      },
-      settingsPage: {
-        title: '设置',
-        loading: '加载中...',
-        failedLoad: '加载设置失败。',
-        tabs: {
-          web: '网页',
-          env: '环境',
-          think: '思考',
-          proxy: '代理',
-          auth: '认证',
-          backup: '备份',
-        },
-        thinkingSection: {
-          title: '思考',
-          description: '为支持的模型配置扩展思考/推理。',
-        },
-        proxySection: {
-          title: '代理',
-          loadingImageSettings: '加载图片设置中...',
-        },
-      },
       homePageV2: {
         title: '首页',
         logsMoved: '日志已移至专用工作区',
@@ -3009,18 +2550,6 @@ const resources = {
         cliproxy: 'CLIProxy',
         accounts: '账号',
         health: '健康',
-      },
-      analyticsPageV2: {
-        title: '分析',
-        subtitle: '使用分析与洞察。',
-      },
-      logsPageV2: {
-        title: '日志',
-        subtitle: '查看和管理系统日志。',
-      },
-      healthPageV2: {
-        title: '健康',
-        subtitle: '系统健康监控。',
       },
       aiProvidersPage: {
         title: 'AI 提供商',
@@ -3115,26 +2644,6 @@ const resources = {
         failedUpdateDefaultTarget:
           'Không cập nhật được mục tiêu mặc định thành {{target}}{{suffix}}',
         resourcesUpdated: 'Đã cập nhật tài nguyên dùng chung',
-      },
-      modelTierMapping: {
-        title: 'Ánh xạ tầng mô hình',
-        advanced: 'Nâng cao',
-        description:
-          'Định cấu hình các mô hình khác nhau cho các cấp độ opus/sonnet/haiku của Claude Code.',
-        autoSuggest: 'Tự động đề xuất dựa trên {{provider}}',
-        opusPlaceholder: 'vd: anthropic/claude-opus-4',
-        sonnetPlaceholder: 'ví dụ: anthropic/claude-sonnet-4',
-        haikuPlaceholder: 'vd: anthropic/claude-3.5-haiku',
-        footer:
-          'Các biến này thiết lập ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_HAIKU_MODEL.',
-      },
-      envEditor: {
-        sensitive: 'nhạy cảm',
-        none: 'Không có biến môi trường nào được cấu hình.',
-        noneHint: 'Thêm biến bằng ô nhập bên dưới hoặc chỉnh sửa trực tiếp JSON.',
-        addVariable: 'Thêm biến môi trường',
-        keyPlaceholder: 'VARIABLE_NAME',
-        valuePlaceholder: 'giá trị',
       },
       setupVariant: {
         using: 'Sử dụng:',
@@ -3244,21 +2753,6 @@ const resources = {
         selectModel: 'Chọn mô hình',
         noModelsAvailable: 'Không có mô hình khả dụng',
         modelPlaceholder: 'Mô hình...',
-      },
-      alibabaCodingPlanQuickStart: {
-        recommended: 'Đề xuất',
-        title: 'Dùng thử Alibaba Coding Plan',
-        description:
-          'Sử dụng Alibaba Cloud Coding Plan qua endpoint tương thích Anthropic cho tác vụ lập trình.',
-        featureEndpoint: 'Endpoint tương thích Anthropic',
-        featureKeyFormat: 'Khóa API sk-sp chuyên dụng',
-        createAlibabaProfile: 'Tạo hồ sơ Alibaba Coding Plan',
-        readGuideAt: 'Xem hướng dẫn tại',
-      },
-      alibabaCodingPlanPromo: {
-        title: 'Alibaba Coding Plan',
-        subtitle: 'Model Studio Coding Plan qua endpoint Anthropic',
-        add: 'Thêm',
       },
       credentialHealth: {
         title: 'Tình trạng thông tin xác thực',
@@ -3382,23 +2876,6 @@ const resources = {
         success: 'Thành công',
         failed: 'Thất bại',
         successRate: 'Tỷ lệ thành công',
-      },
-      antigravityChecklist: {
-        title: 'Trách nhiệm OAuth Antigravity',
-        subtitle: 'Hoàn thành tất cả 4 bước trước khi bạn có thể xác thực.',
-        mandatory: 'Bắt buộc',
-        completion: 'Hoàn thành',
-        stepsCount: '{{current}}/4 bước',
-      },
-      accountSafetyWarning: {
-        title: 'Cảnh báo an toàn tài khoản OAuth',
-        subtitle: 'Vấn đề #509 · Rủi ro Gemini + AGY OAuth',
-        firstLine:
-          'Issue #509 ghi nhận các trường hợp bị đình chỉ/cấm liên quan đến ccs agy và việc dùng chung tài khoản giữa ccs gemini và ccs agy.',
-        secondLine:
-          'Chỉ tiếp tục nếu bạn chấp nhận hoàn toàn trách nhiệm về OAuth và rủi ro truy cập tài khoản.',
-        issueLabel: 'Đọc vấn đề #509',
-        proxySettingsLabel: 'Điều khiển Gemini + AGY: Cài đặt > Proxy',
       },
       cliproxyDialog: {
         name: 'Tên',
@@ -3849,12 +3326,6 @@ const resources = {
         title: 'CCS Config',
         subtitle: 'Bảng điều khiển Claude Code Switch',
       },
-      hubFooter: {
-        logs: 'Nhật ký',
-        settings: 'Cài đặt',
-        github: 'GitHub',
-        copyright: '© {{year}} kaitranntt',
-      },
       themeToggle: {
         srLabel: 'Chuyển đổi giao diện',
       },
@@ -3862,29 +3333,11 @@ const resources = {
         alt: 'Logo CCS',
         text: 'CCS Config',
       },
-      claudekitBadge: {
-        title: 'Được vận hành bởi ClaudeKit Framework',
-        alt: 'ClaudeKit',
-        poweredBy: 'Được vận hành bởi',
-        claudekit: 'ClaudeKit',
-      },
       codeEditor: {
         revealSensitive: 'Hiện giá trị nhạy cảm',
         maskSensitive: 'Ẩn giá trị nhạy cảm',
         valid: '{{language}} hợp lệ',
         readOnly: '(Chỉ đọc)',
-      },
-      commandBuilder: {
-        title: 'Trình tạo lệnh',
-        searchPlaceholder: 'Gõ hoặc chọn lệnh...',
-        copy: 'Sao chép',
-        run: 'Chạy',
-        cmdConfig: 'Mở giao diện cấu hình',
-        cmdCreateProfile: 'Tạo hồ sơ mới',
-        cmdSwitchProfile: 'Chuyển sang hồ sơ',
-        cmdDoctor: 'Kiểm tra sức khỏe hệ thống',
-        cmdListProviders: 'Liệt kê nhà cung cấp CLIProxy',
-        cmdAddProvider: 'Thêm nhà cung cấp CLIProxy',
       },
       confirmDialog: {
         confirm: 'Xác nhận',
@@ -3944,17 +3397,6 @@ const resources = {
         codeCopied: 'Đã sao chép mã',
         copyVerificationCode: 'Sao chép mã xác minh',
       },
-      quickCommands: {
-        title: 'Lệnh nhanh',
-        startDefault: 'Khởi chạy mặc định',
-        startDefaultDesc: 'Chạy Claude với hồ sơ mặc định',
-        glmProfile: 'Hồ sơ GLM',
-        glmProfileDesc: 'Chuyển sang mô hình GLM',
-        healthCheck: 'Kiểm tra sức khỏe',
-        healthCheckDesc: 'Chạy chẩn đoán hệ thống',
-        delegateTask: 'Giao việc',
-        delegateTaskDesc: 'Giao việc cho hồ sơ GLM',
-      },
       quotaTooltip: {
         loadingQuota: 'Đang tải quota...',
         failedLoadQuota: 'Không tải được quota',
@@ -3996,26 +3438,6 @@ const resources = {
         codexAdditionalWeekly: '{{name}} (hàng tuần)',
         codexAdditional: '{{name}}',
       },
-      sponsorButton: {
-        title: 'Tài trợ dự án này trên GitHub',
-        sponsor: 'Tài trợ',
-      },
-      valueMetrics: {
-        apiCostSaved: 'Chi phí API tiết kiệm',
-        tokensSaved: 'Token tiết kiệm',
-        queriesFaster: 'Truy vấn nhanh hơn',
-        errorsReduced: 'Lỗi giảm',
-        vsLastMonth: 'so với tháng trước',
-        throughCaching: 'thông qua cache',
-        averageSpeedup: 'tăng tốc trung bình',
-        withRetryLogic: 'với logic thử lại',
-        performanceMetrics: 'Chỉ số hiệu suất',
-        monthlySummary: 'Tổng kết hàng tháng',
-        totalSaved: 'Tổng tiết kiệm',
-        tokensProcessed: 'Token đã xử lý',
-        queriesHandled: 'Truy vấn đã xử lý',
-        uptime: 'Thời gian hoạt động',
-      },
       deviceCodeDialog: {
         authorize: 'Xác thực {{provider}}',
         enterCodeAtPage: 'Nhập mã bên dưới tại trang xác thực.',
@@ -4028,30 +3450,6 @@ const resources = {
         openProviderPage: 'Mở {{provider}}',
         copyCodeAria: 'Sao chép mã xác minh',
         codeCopiedAria: 'Đã sao chép mã',
-      },
-      settingsDialog: {
-        editProfile: 'Chỉnh sửa hồ sơ: {{name}}',
-        description: 'Cấu hình biến môi trường và cài đặt cho hồ sơ này.',
-        loadingSettings: 'Đang tải cài đặt...',
-        envTab: 'Môi trường',
-        rawJsonTab: 'JSON thô',
-        generalTab: 'Chung',
-        noEnvVars: 'Không có biến môi trường nào được cấu hình.',
-        noEnvVarsHint: 'Thêm biến trong tệp settings.json của bạn.',
-        loadingEditor: 'Đang tải trình soạn thảo...',
-        profileInfo: 'Thông tin hồ sơ',
-        profileInfoDesc: 'Chi tiết về tệp cấu hình này.',
-        path: 'Đường dẫn',
-        lastModified: 'Sửa đổi lần cuối',
-        cancel: 'Hủy',
-        saving: 'Đang lưu...',
-        saveChanges: 'Lưu thay đổi',
-        conflictTitle: 'Tệp đã bị thay đổi bên ngoài',
-        conflictDesc:
-          'Tệp cài đặt này đã bị thay đổi bởi một tiến trình khác. Ghi đè thay đổi của bạn hay hủy?',
-        overwrite: 'Ghi đè',
-        invalidJson: 'JSON không hợp lệ',
-        failedSave: 'Không lưu được',
       },
       addAccountDialog: {
         title: 'Thêm tài khoản {{displayName}}',
@@ -4152,15 +3550,8 @@ const resources = {
           done: 'Xong',
         },
       },
-      userMenu: {
-        signedInAs: 'Đăng nhập sebagai {{username}}',
-      },
       providerCard: {
         missingProjectIdAria: 'Thiếu Project ID',
-      },
-      loginPage: {
-        showPassword: 'Hiện mật khẩu',
-        hidePassword: 'Ẩn mật khẩu',
       },
       cliproxyStatsOverview: {
         sessionStatistics: 'Thống kê phiên',
@@ -4289,26 +3680,8 @@ const resources = {
         agyDenylist:
           'Danh sách loại trừ Antigravity: Claude Opus 4.5 và Claude Sonnet 4.5 đã bị loại bỏ.',
       },
-      providerEditorAccountItem: {
-        modelsUsed: 'Mô hình đã dùng',
-      },
-      bulkActionBar: {
-        applyPreset: 'Áp dụng preset',
-      },
-      modelConfigSection: {
-        defaultModel: 'Mô hình mặc định',
-      },
       rawEditorSection: {
         rawConfig: 'Cấu hình thô',
-      },
-      providerEditorHeader: {
-        connectorName: 'Tên connector',
-      },
-      aiProvidersFamilyRail: {
-        current: 'Hiện tại',
-      },
-      aiProvidersEntryCard: {
-        apiKeys: 'Khóa API',
       },
       aiProvidersEntryDialog: {
         connectorName: 'Tên connector',
@@ -4321,9 +3694,6 @@ const resources = {
         modelMappings: 'Ánh xạ mô hình',
         requiredSetup: 'Cài đặt cần thiết',
         optionalRouting: 'Định tuyến tùy chọn',
-      },
-      rawJsonSettingsEditor: {
-        title: 'Trình soạn thảo cài đặt thô',
       },
       copilotConfigForm: {
         copilotConfiguration: 'Cấu hình Copilot',
@@ -4340,11 +3710,6 @@ const resources = {
         modelMapping: 'Ánh xạ mô hình',
         quickUsage: 'Sử dụng nhanh',
         noPremiumUsage: 'Không có số liệu sử dụng premium',
-      },
-      copilotPresets: {
-        gpt5Codex: 'GPT-5.3 Codex',
-        claude46: 'Claude 4.6',
-        gemini3: 'Gemini 3',
       },
       healthCard: {
         allSystemsNominal: 'Tất cả hệ thống hoạt động bình thường',
@@ -4365,30 +3730,8 @@ const resources = {
       dateRangeFilter: {
         pickADate: 'Chọn ngày',
       },
-      logsConfig: {
-        level: 'Mức',
-        message: 'Thông điệp',
-        source: 'Nguồn',
-        time: 'Thời gian',
-        proc: 'Tiến trình',
-        open: 'Mở',
-        run: 'Chạy',
-        refreshEntries: 'Làm mới mục',
-      },
-      logsDetailPanel: {
-        details: 'Chi tiết',
-      },
-      logsFilters: {
-        filters: 'Bộ lọc',
-      },
-      logsOverviewCards: {
-        overview: 'Tổng quan',
-      },
       logsPageSkeleton: {
         loadingLogs: 'Đang tải nhật ký...',
-      },
-      monitoringErrorLogs: {
-        logContent: 'Nội dung nhật ký',
       },
       analyticsPages: {
         chartsGrid: 'Biểu đồ',
@@ -4493,46 +3836,6 @@ const resources = {
         sectionPlusHint: 'Vẫn được hỗ trợ nhưng hiện được tách khỏi backend mặc định',
         plusTrackNote: 'Cần backend Plus tùy chọn; hiện tại nhánh này do cộng đồng duy trì.',
       },
-      openrouterBadge: {
-        new: 'MỚI',
-        integration: 'Tích hợp OpenRouter',
-      },
-      openrouterBanner: {
-        accessModels: 'Truy cập {{count}}+ mô hình qua OpenRouter',
-        add: 'Thêm',
-      },
-      openrouterModelPicker: {
-        searchModels: 'Tìm kiếm mô hình',
-        newestModels: 'Mô hình mới nhất',
-      },
-      openrouterPromoCard: {
-        title: 'OpenRouter',
-        description: 'Truy cập hàng trăm mô hình qua một API endpoint.',
-      },
-      supportEntryCard: {
-        actionRequired: 'Cần hành động',
-      },
-      settingsPage: {
-        title: 'Cài đặt',
-        loading: 'Đang tải...',
-        failedLoad: 'Không tải được cài đặt.',
-        tabs: {
-          web: 'Web',
-          env: 'Env',
-          think: 'Tư duy',
-          proxy: 'Proxy',
-          auth: 'Xác thực',
-          backup: 'Sao lưu',
-        },
-        thinkingSection: {
-          title: 'Tư duy',
-          description: 'Cấu hình tư duy/lý luận mở rộng cho các mô hình được hỗ trợ.',
-        },
-        proxySection: {
-          title: 'Proxy',
-          loadingImageSettings: 'Đang tải cài đặt hình ảnh...',
-        },
-      },
       homePageV2: {
         title: 'Trang chủ',
         logsMoved: 'Nhật ký đã chuyển sang workspace riêng',
@@ -4540,18 +3843,6 @@ const resources = {
         cliproxy: 'CLIProxy',
         accounts: 'Tài khoản',
         health: 'Sức khỏe',
-      },
-      analyticsPageV2: {
-        title: 'Phân tích',
-        subtitle: 'Phân tích sử dụng và thông tin chi tiết.',
-      },
-      logsPageV2: {
-        title: 'Nhật ký',
-        subtitle: 'Xem và quản lý nhật ký hệ thống.',
-      },
-      healthPageV2: {
-        title: 'Sức khỏe',
-        subtitle: 'Giám sát sức khỏe hệ thống.',
       },
       aiProvidersPage: {
         title: 'AI Providers',
@@ -4646,25 +3937,6 @@ const resources = {
         failedUpdateDefaultTarget:
           'デフォルトターゲットを {{target}}{{suffix}} に更新できませんでした',
         resourcesUpdated: '共有リソースを更新しました',
-      },
-      modelTierMapping: {
-        title: 'モデルティアマッピング',
-        advanced: '詳細',
-        description: 'Claude Code の opus/sonnet/haiku ティアごとに別のモデルを設定します。',
-        autoSuggest: '{{provider}} に基づいて自動提案',
-        opusPlaceholder: '例: anthropic/claude-opus-4',
-        sonnetPlaceholder: '例: anthropic/claude-sonnet-4',
-        haikuPlaceholder: '例: anthropic/claude-3.5-haiku',
-        footer:
-          'これにより ANTHROPIC_DEFAULT_OPUS_MODEL、ANTHROPIC_DEFAULT_SONNET_MODEL、ANTHROPIC_DEFAULT_HAIKU_MODEL を設定します。',
-      },
-      envEditor: {
-        sensitive: '機密',
-        none: '環境変数は設定されていません。',
-        noneHint: '下の入力から追加するか、JSON を直接編集してください。',
-        addVariable: '環境変数を追加',
-        keyPlaceholder: 'VARIABLE_NAME',
-        valuePlaceholder: '値',
       },
       setupVariant: {
         using: '使用中:',
@@ -4775,21 +4047,6 @@ const resources = {
         selectModel: 'モデルを選択',
         noModelsAvailable: '利用可能なモデルはありません',
         modelPlaceholder: 'モデル...',
-      },
-      alibabaCodingPlanQuickStart: {
-        recommended: '推奨',
-        title: 'Alibaba Coding Plan を試す',
-        description:
-          'コーディング用途向けに、Anthropic 互換エンドポイント経由で Alibaba Cloud Coding Plan を利用します。',
-        featureEndpoint: 'Anthropic 互換エンドポイント',
-        featureKeyFormat: '専用の sk-sp API キー',
-        createAlibabaProfile: 'Alibaba Coding Plan プロファイルを作成',
-        readGuideAt: 'セットアップガイド:',
-      },
-      alibabaCodingPlanPromo: {
-        title: 'Alibaba Coding Plan',
-        subtitle: 'Anthropic エンドポイント経由の Model Studio Coding Plan',
-        add: '追加',
       },
       credentialHealth: {
         title: '認証情報の状態',
@@ -4913,23 +4170,6 @@ const resources = {
         success: '成功',
         failed: '失敗',
         successRate: '成功率',
-      },
-      antigravityChecklist: {
-        title: 'Antigravity OAuth の責任確認',
-        subtitle: '認証する前に 4 ステップすべて完了してください。',
-        mandatory: '必須',
-        completion: '完了状況',
-        stepsCount: '{{current}}/4 ステップ',
-      },
-      accountSafetyWarning: {
-        title: 'OAuth アカウント安全性の警告',
-        subtitle: 'Issue #509 · Gemini + AGY OAuth リスク',
-        firstLine:
-          'Issue #509 では、CCS AGY と、CCS Gemini と CCS AGY 間での共有アカウント利用に関連する停止・BAN 報告がまとめられています。',
-        secondLine:
-          'OAuth とアカウントアクセスのリスクをすべて自己責任で負う場合のみ続行してください。',
-        issueLabel: 'Issue #509 を読む',
-        proxySettingsLabel: 'Gemini + AGY の設定: 設定 > プロキシ',
       },
       cliproxyDialog: {
         name: '名前',
@@ -5386,9 +4626,6 @@ const resources = {
         refreshConfiguration: 'Cursor の設定を更新',
       },
 
-      aiProvidersEntryCard: {
-        apiKeys: 'API Keys',
-      },
       aiProvidersEntryDialog: {
         connectorName: 'コネクタ名',
         baseUri: 'ベース URL',
@@ -5400,9 +4637,6 @@ const resources = {
         modelMappings: 'モデルマッピング',
         requiredSetup: '必要なセットアップ',
         optionalRouting: 'オプションのルーティング',
-      },
-      aiProvidersFamilyRail: {
-        current: '現在',
       },
       aiProvidersPage: {
         title: 'AI プロバイダー',
@@ -5421,26 +4655,13 @@ const resources = {
         totalTokens: '合計トークン',
         usageInsights: '利用インサイト',
       },
-      analyticsPageV2: {
-        title: '分析',
-        subtitle: '利用分析とインサイト。',
-      },
       analyticsPages: {
         chartsGrid: 'チャート',
         costByModel: 'モデル別コスト',
       },
-      bulkActionBar: {
-        applyPreset: 'プリセットを適用',
-      },
       ccsLogo: {
         alt: 'CCS ロゴ',
         text: 'CCS Config',
-      },
-      claudekitBadge: {
-        title: 'Powered by ClaudeKit Framework',
-        alt: 'ClaudeKit',
-        poweredBy: 'Powered by',
-        claudekit: 'ClaudeKit',
       },
       cliproxyConfig: {
         unsavedChanges: '未保存の変更',
@@ -5495,18 +4716,6 @@ const resources = {
         valid: '有効な {{language}}',
         readOnly: '（読み取り専用）',
       },
-      commandBuilder: {
-        title: 'コマンドビルダー',
-        searchPlaceholder: 'コマンドを入力または選択...',
-        copy: 'コピー',
-        run: '実行',
-        cmdConfig: '設定画面を開く',
-        cmdCreateProfile: '新しいプロファイルを作成',
-        cmdSwitchProfile: 'プロファイルを切り替え',
-        cmdDoctor: 'システムヘルスチェック',
-        cmdListProviders: '利用可能な CLIProxy プロバイダーを一覧表示',
-        cmdAddProvider: 'CLIProxy プロバイダーを追加',
-      },
       confirmDialog: {
         confirm: '確認',
         cancel: 'キャンセル',
@@ -5533,11 +4742,6 @@ const resources = {
         modelMapping: 'モデルマッピング',
         quickUsage: 'クイック実行',
         noPremiumUsage: 'プレミアム利用回数なし',
-      },
-      copilotPresets: {
-        gpt5Codex: 'GPT-5.3 Codex',
-        claude46: 'Claude 4.6',
-        gemini3: 'Gemini 3',
       },
       dateRangeFilter: {
         pickADate: '日付を選択',
@@ -5575,10 +4779,6 @@ const resources = {
         allSystemsNominal: 'すべてのシステムが正常です',
         machineChecks: 'マシンチェック',
       },
-      healthPageV2: {
-        title: 'ヘルス',
-        subtitle: 'システムヘルスの監視。',
-      },
       heroSection: {
         title: 'CCS Config',
         subtitle: 'Claude Code Switch Dashboard',
@@ -5590,12 +4790,6 @@ const resources = {
         cliproxy: 'CLIProxy',
         accounts: 'アカウント',
         health: 'ヘルス',
-      },
-      hubFooter: {
-        logs: 'ログ',
-        settings: '設定',
-        github: 'GitHub',
-        copyright: '\u00a9 {{year}} kaitranntt',
       },
       localhostDisclaimer: {
         remoteReadonlyAuthDisabledLong:
@@ -5611,57 +4805,8 @@ const resources = {
         localShort: 'ローカルダッシュボード - データはお使いのデバイスに保存されます。',
         dismiss: '免責事項を閉じる',
       },
-      loginPage: {
-        showPassword: 'パスワードを表示',
-        hidePassword: 'パスワードを隠す',
-      },
-      logsConfig: {
-        level: 'レベル',
-        message: 'メッセージ',
-        source: 'ソース',
-        time: '時刻',
-        proc: 'プロセス',
-        open: '開く',
-        run: '実行',
-        refreshEntries: 'エントリを更新',
-      },
-      logsDetailPanel: {
-        details: '詳細',
-      },
-      logsFilters: {
-        filters: 'フィルター',
-      },
-      logsOverviewCards: {
-        overview: '概要',
-      },
       logsPageSkeleton: {
         loadingLogs: 'ログを読み込み中...',
-      },
-      logsPageV2: {
-        title: 'ログ',
-        subtitle: 'システムログの表示と管理。',
-      },
-      modelConfigSection: {
-        defaultModel: 'デフォルトモデル',
-      },
-      monitoringErrorLogs: {
-        logContent: 'ログ内容',
-      },
-      openrouterBadge: {
-        new: 'NEW',
-        integration: 'OpenRouter 連携',
-      },
-      openrouterBanner: {
-        accessModels: 'OpenRouter で {{count}}+ のモデルにアクセス',
-        add: '追加',
-      },
-      openrouterModelPicker: {
-        searchModels: 'モデルを検索',
-        newestModels: '最新モデル',
-      },
-      openrouterPromoCard: {
-        title: 'OpenRouter',
-        description: '1つの API エンドポイントで数百のモデルにアクセス。',
       },
       privacyToggle: {
         modeOn: 'プライバシーモード ON - クリックしてデータを表示',
@@ -5724,23 +4869,6 @@ const resources = {
         agyDenylist:
           'Antigravity ブロックリスト: Claude Opus 4.5 と Claude Sonnet 4.5 は非推奨です。',
       },
-      providerEditorAccountItem: {
-        modelsUsed: '使用モデル',
-      },
-      providerEditorHeader: {
-        connectorName: 'コネクタ名',
-      },
-      quickCommands: {
-        title: 'クイックコマンド',
-        startDefault: 'デフォルトで起動',
-        startDefaultDesc: 'デフォルトプロファイルで Claude を起動',
-        glmProfile: 'GLM プロファイル',
-        glmProfileDesc: 'GLM モデルに切り替え',
-        healthCheck: 'ヘルスチェック',
-        healthCheckDesc: 'システム診断を実行',
-        delegateTask: 'タスクを委譲',
-        delegateTaskDesc: 'GLM プロファイルに委譲',
-      },
       quotaTooltip: {
         loadingQuota: 'クォータを読み込み中...',
         failedLoadQuota: 'クォータの読み込みに失敗しました',
@@ -5785,9 +4913,6 @@ const resources = {
       rawEditorSection: {
         rawConfig: 'Raw 設定',
       },
-      rawJsonSettingsEditor: {
-        title: 'Raw 設定エディター',
-      },
       routingGuidance: {
         roundRobin: 'ラウンドロビンで利用を分散します。',
         fillFirst: 'Fill first は、バックアップアカウントが必要になるまで待機させます。',
@@ -5823,51 +4948,6 @@ const resources = {
         sessionRecognitionTitle: 'セッション認識',
         sessionRecognitionDescription:
           'CCS はすべてのバックエンドで同一の優先順位を保証しません。一般に上流バックエンドは明示的なセッション / スレッド ID を優先し、その後にメタデータ、最後に冒頭プロンプト履歴のハッシュへフォールバックします。',
-      },
-      settingsDialog: {
-        editProfile: 'プロファイルを編集: {{name}}',
-        description: 'このプロファイルの環境変数と設定を構成します。',
-        loadingSettings: '設定を読み込み中...',
-        envTab: '環境変数',
-        rawJsonTab: 'Raw JSON',
-        generalTab: '全般',
-        noEnvVars: '環境変数は設定されていません。',
-        noEnvVarsHint: 'settings.json ファイルで変数を追加してください。',
-        loadingEditor: 'エディターを読み込み中...',
-        profileInfo: 'プロファイル情報',
-        profileInfoDesc: 'この設定ファイルの詳細情報。',
-        path: 'パス',
-        lastModified: '最終更新',
-        cancel: 'キャンセル',
-        saving: '保存中...',
-        saveChanges: '変更を保存',
-        conflictTitle: 'ファイルが外部で変更されました',
-        conflictDesc:
-          'この設定ファイルは別のプロセスで変更されました。変更で上書きしますか？それとも破棄しますか？',
-        overwrite: '上書き',
-        invalidJson: '無効な JSON です',
-        failedSave: '保存に失敗しました',
-      },
-      settingsPage: {
-        title: '設定',
-        loading: '読み込み中...',
-        failedLoad: '設定の読み込みに失敗しました。',
-        tabs: {
-          web: 'Web',
-          env: '環境変数',
-          think: '思考',
-          proxy: 'プロキシ',
-          auth: '認証',
-          backup: 'バックアップ',
-        },
-        thinkingSection: {
-          title: '思考',
-          description: '対応モデルの高度な思考 / 推論設定。',
-        },
-        proxySection: {
-          title: 'プロキシ',
-          loadingImageSettings: '画像設定を読み込み中...',
-        },
       },
       addAccountDialog: {
         title: '{{displayName}} アカウントを追加',
@@ -5969,17 +5049,10 @@ const resources = {
           done: '完了',
         },
       },
-      sponsorButton: {
-        title: 'GitHub でこのプロジェクトをスポンサー',
-        sponsor: 'スポンサー',
-      },
       ccsBarButton: {
         title: 'CCS Bar ドキュメントを開く',
         label: 'CCS Bar',
         tooltip: 'macOS メニューバーでクォータ、コスト、アカウントを確認',
-      },
-      supportEntryCard: {
-        actionRequired: '対応が必要',
       },
       themeToggle: {
         srLabel: 'テーマを切り替え',
@@ -6087,25 +5160,6 @@ const resources = {
         plusTrackNote:
           'このトラックはオプションの Plus backend が必要で、現在はコミュニティ保守です。',
       },
-      userMenu: {
-        signedInAs: '{{username}} としてサインイン中',
-      },
-      valueMetrics: {
-        apiCostSaved: 'API コスト削減',
-        tokensSaved: '節約トークン',
-        queriesFaster: '高速化されたクエリ',
-        errorsReduced: '削減されたエラー',
-        vsLastMonth: '前月比',
-        throughCaching: 'キャッシュによる',
-        averageSpeedup: '平均高速化',
-        withRetryLogic: 'リトライロジックによる',
-        performanceMetrics: 'パフォーマンス指標',
-        monthlySummary: '月間サマリー',
-        totalSaved: '合計節約額',
-        tokensProcessed: '処理トークン数',
-        queriesHandled: '処理クエリ数',
-        uptime: '稼働時間',
-      },
     },
   },
   ko: {
@@ -6193,25 +5247,6 @@ const resources = {
         defaultTargetUpdated: '기본 대상이 업데이트되었습니다',
         failedUpdateDefaultTarget: '기본 대상을 {{target}}{{suffix}}(으)로 업데이트하지 못했습니다',
         resourcesUpdated: '공유 리소스가 업데이트되었습니다',
-      },
-      modelTierMapping: {
-        title: '모델 티어 매핑',
-        advanced: '고급',
-        description: 'Claude Code의 opus/sonnet/haiku 티어에 대해 서로 다른 모델을 구성합니다.',
-        autoSuggest: '{{provider}} 기반 자동 추천',
-        opusPlaceholder: '예: anthropic/claude-opus-4',
-        sonnetPlaceholder: '예: anthropic/claude-sonnet-4',
-        haikuPlaceholder: '예: anthropic/claude-3.5-haiku',
-        footer:
-          '이들은 ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_HAIKU_MODEL을 설정합니다.',
-      },
-      envEditor: {
-        sensitive: '민감',
-        none: '환경 변수가 구성되지 않았습니다.',
-        noneHint: '아래 입력란을 사용하여 변수를 추가하거나 JSON을 직접 편집하십시오.',
-        addVariable: '환경 변수 추가',
-        keyPlaceholder: 'VARIABLE_NAME',
-        valuePlaceholder: '값',
       },
       setupVariant: {
         using: '사용 중:',
@@ -6322,21 +5357,6 @@ const resources = {
         selectModel: '모델 선택',
         noModelsAvailable: '사용 가능한 모델이 없습니다',
         modelPlaceholder: '모델...',
-      },
-      alibabaCodingPlanQuickStart: {
-        recommended: '추천',
-        title: 'Alibaba Coding Plan 사용해보기',
-        description:
-          '코딩 워크로드에 Anthropic 호환 엔드포인트를 통해 Alibaba Cloud Coding Plan을 사용하십시오.',
-        featureEndpoint: 'Anthropic 호환 엔드포인트',
-        featureKeyFormat: '전용 sk-sp API 키',
-        createAlibabaProfile: 'Alibaba Coding Plan 프로필 생성',
-        readGuideAt: '설정 가이드 읽기:',
-      },
-      alibabaCodingPlanPromo: {
-        title: 'Alibaba Coding Plan',
-        subtitle: 'Anthropic 엔드포인트를 통한 Model Studio Coding Plan',
-        add: '추가',
       },
       credentialHealth: {
         title: '자격 증명 상태',
@@ -6458,23 +5478,6 @@ const resources = {
         success: '성공',
         failed: '실패',
         successRate: '성공률',
-      },
-      antigravityChecklist: {
-        title: 'Antigravity OAuth 책임',
-        subtitle: '인증하기 전에 4단계를 모두 완료하십시오.',
-        mandatory: '필수',
-        completion: '완료',
-        stepsCount: '{{current}}/4 단계',
-      },
-      accountSafetyWarning: {
-        title: 'OAuth 계정 안전 경고',
-        subtitle: '이슈 #509 · Gemini + AGY OAuth 위험',
-        firstLine:
-          '이슈 #509는 ccs agy와 ccs gemini 및 ccs agy 간의 계정 공유 사용과 관련된 정지/차단 보고를 문서화합니다.',
-        secondLine:
-          'OAuth 및 계정 액세스 위험에 대한 전적인 책임을 수락하는 경우에만 계속하십시오.',
-        issueLabel: '이슈 #509 읽기',
-        proxySettingsLabel: 'Gemini + AGY 제어: 설정 > 프록시',
       },
       cliproxyDialog: {
         name: '이름',
@@ -6929,12 +5932,6 @@ const resources = {
         title: 'CCS Config',
         subtitle: 'Claude Code Switch 대시보드',
       },
-      hubFooter: {
-        logs: '로그',
-        settings: '설정',
-        github: 'GitHub',
-        copyright: '© {{year}} kaitranntt',
-      },
       themeToggle: {
         srLabel: '테마 전환',
       },
@@ -6942,29 +5939,11 @@ const resources = {
         alt: 'CCS 로고',
         text: 'CCS Config',
       },
-      claudekitBadge: {
-        title: 'ClaudeKit 프레임워크 기반',
-        alt: 'ClaudeKit',
-        poweredBy: 'Powered by',
-        claudekit: 'ClaudeKit',
-      },
       codeEditor: {
         revealSensitive: '민감한 값 표시',
         maskSensitive: '민감한 값 마스킹',
         valid: '유효한 {{language}}',
         readOnly: '(읽기 전용)',
-      },
-      commandBuilder: {
-        title: '명령 빌더',
-        searchPlaceholder: '명령을 입력하거나 선택...',
-        copy: '복사',
-        run: '실행',
-        cmdConfig: '구성 인터페이스 열기',
-        cmdCreateProfile: '새 프로필 생성',
-        cmdSwitchProfile: '프로필로 전환',
-        cmdDoctor: '시스템 헬스 확인',
-        cmdListProviders: '사용 가능한 CLIProxy 프로바이더 나열',
-        cmdAddProvider: 'CLIProxy 프로바이더 추가',
       },
       confirmDialog: {
         confirm: '확인',
@@ -7024,17 +6003,6 @@ const resources = {
         codeCopied: '코드 복사됨',
         copyVerificationCode: '검증 코드 복사',
       },
-      quickCommands: {
-        title: '빠른 명령',
-        startDefault: '기본값 시작',
-        startDefaultDesc: '기본 프로필로 Claude 실행',
-        glmProfile: 'GLM 프로필',
-        glmProfileDesc: 'GLM 모델로 전환',
-        healthCheck: '헬스 체크',
-        healthCheckDesc: '시스템 진단 실행',
-        delegateTask: '작업 위임',
-        delegateTaskDesc: 'GLM 프로필에 위임',
-      },
       quotaTooltip: {
         loadingQuota: '쿼터 로드 중...',
         failedLoadQuota: '쿼터를 로드하지 못했습니다',
@@ -7076,26 +6044,6 @@ const resources = {
         codexAdditionalWeekly: '{{name}} (주간)',
         codexAdditional: '{{name}}',
       },
-      sponsorButton: {
-        title: 'GitHub에서 이 프로젝트 후원',
-        sponsor: '후원',
-      },
-      valueMetrics: {
-        apiCostSaved: '절약된 API 비용',
-        tokensSaved: '절약된 토큰',
-        queriesFaster: '쿼리 가속',
-        errorsReduced: '오류 감소',
-        vsLastMonth: '지난 달 대비',
-        throughCaching: '캐싱을 통해',
-        averageSpeedup: '평균 가속',
-        withRetryLogic: '재시도 로직 포함',
-        performanceMetrics: '성능 지표',
-        monthlySummary: '월간 요약',
-        totalSaved: '총 절약',
-        tokensProcessed: '처리된 토큰',
-        queriesHandled: '처리된 쿼리',
-        uptime: '가동 시간',
-      },
       deviceCodeDialog: {
         authorize: '{{provider}} 인증',
         enterCodeAtPage: '인증 페이지에서 아래 코드를 입력하십시오.',
@@ -7108,30 +6056,6 @@ const resources = {
         openProviderPage: '{{provider}} 열기',
         copyCodeAria: '검증 코드 복사',
         codeCopiedAria: '코드 복사됨',
-      },
-      settingsDialog: {
-        editProfile: '프로필 편집: {{name}}',
-        description: '이 프로필의 환경 변수 및 설정을 구성합니다.',
-        loadingSettings: '설정 로드 중...',
-        envTab: '환경 변수',
-        rawJsonTab: '원시 JSON',
-        generalTab: '일반',
-        noEnvVars: '구성된 환경 변수가 없습니다.',
-        noEnvVarsHint: 'settings.json 파일에 변수를 추가하십시오.',
-        loadingEditor: '편집기 로드 중...',
-        profileInfo: '프로필 정보',
-        profileInfoDesc: '이 구성 파일에 대한 세부 정보.',
-        path: '경로',
-        lastModified: '마지막 수정',
-        cancel: '취소',
-        saving: '저장 중...',
-        saveChanges: '변경 사항 저장',
-        conflictTitle: '파일이 외부에서 수정됨',
-        conflictDesc:
-          '이 설정 파일이 다른 프로세스에 의해 수정되었습니다. 변경 사항으로 덮어쓰시겠습니까, 폐기하시겠습니까?',
-        overwrite: '덮어쓰기',
-        invalidJson: '잘못된 JSON',
-        failedSave: '저장 실패',
       },
       addAccountDialog: {
         title: '{{displayName}} 계정 추가',
@@ -7232,15 +6156,8 @@ const resources = {
           done: '완료',
         },
       },
-      userMenu: {
-        signedInAs: '{{username}}(으)로 로그인됨',
-      },
       providerCard: {
         missingProjectIdAria: '프로젝트 ID 누락',
-      },
-      loginPage: {
-        showPassword: '비밀번호 표시',
-        hidePassword: '비밀번호 숨기기',
       },
 
       // ========================================
@@ -7373,26 +6290,8 @@ const resources = {
         agyDenylist:
           'Antigravity 거부 목록: Claude Opus 4.5 및 Claude Sonnet 4.5는 지원 중단되었습니다.',
       },
-      providerEditorAccountItem: {
-        modelsUsed: '사용된 모델',
-      },
-      bulkActionBar: {
-        applyPreset: '프리셋 적용',
-      },
-      modelConfigSection: {
-        defaultModel: '기본 모델',
-      },
       rawEditorSection: {
         rawConfig: '원시 구성',
-      },
-      providerEditorHeader: {
-        connectorName: '커넥터 이름',
-      },
-      aiProvidersFamilyRail: {
-        current: '현재',
-      },
-      aiProvidersEntryCard: {
-        apiKeys: 'API 키',
       },
       aiProvidersEntryDialog: {
         connectorName: '커넥터 이름',
@@ -7410,9 +6309,6 @@ const resources = {
       // ========================================
       // Domain 4: Compatible CLI Tabs
       // ========================================
-      rawJsonSettingsEditor: {
-        title: '원시 설정 편집기',
-      },
       copilotConfigForm: {
         copilotConfiguration: 'Copilot 구성',
         deprecatedModels: '지원 중단된 Copilot 모델이 감지되었습니다',
@@ -7428,11 +6324,6 @@ const resources = {
         modelMapping: '모델 매핑',
         quickUsage: '빠른 사용',
         noPremiumUsage: '프리미엄 사용량 개수 없음',
-      },
-      copilotPresets: {
-        gpt5Codex: 'GPT-5.3 Codex',
-        claude46: 'Claude 4.6',
-        gemini3: 'Gemini 3',
       },
 
       // ========================================
@@ -7457,30 +6348,8 @@ const resources = {
       dateRangeFilter: {
         pickADate: '날짜 선택',
       },
-      logsConfig: {
-        level: '수준',
-        message: '메시지',
-        source: '소스',
-        time: '시간',
-        proc: '프로세스',
-        open: '열기',
-        run: '실행',
-        refreshEntries: '항목 새로 고침',
-      },
-      logsDetailPanel: {
-        details: '상세',
-      },
-      logsFilters: {
-        filters: '필터',
-      },
-      logsOverviewCards: {
-        overview: '개요',
-      },
       logsPageSkeleton: {
         loadingLogs: '로그 로드 중...',
-      },
-      monitoringErrorLogs: {
-        logContent: '로그 내용',
       },
       analyticsPages: {
         chartsGrid: '차트',
@@ -7595,46 +6464,6 @@ const resources = {
       // ========================================
       // Domain 7: Profiles / Settings / Pages
       // ========================================
-      openrouterBadge: {
-        new: '신규',
-        integration: 'OpenRouter 통합',
-      },
-      openrouterBanner: {
-        accessModels: 'OpenRouter를 통해 {{count}}+ 모델 액세스',
-        add: '추가',
-      },
-      openrouterModelPicker: {
-        searchModels: '모델 검색',
-        newestModels: '최신 모델',
-      },
-      openrouterPromoCard: {
-        title: 'OpenRouter',
-        description: '하나의 API 엔드포인트에서 수백 개의 모델에 액세스하십시오.',
-      },
-      supportEntryCard: {
-        actionRequired: '작업 필요',
-      },
-      settingsPage: {
-        title: '설정',
-        loading: '로드 중...',
-        failedLoad: '설정을 로드하지 못했습니다.',
-        tabs: {
-          web: '웹',
-          env: '환경 변수',
-          think: '사고',
-          proxy: '프록시',
-          auth: '인증',
-          backup: '백업',
-        },
-        thinkingSection: {
-          title: '사고',
-          description: '지원되는 모델에 대해 확장 사고/추론을 구성합니다.',
-        },
-        proxySection: {
-          title: '프록시',
-          loadingImageSettings: '이미지 설정 로드 중...',
-        },
-      },
       homePageV2: {
         title: '홈',
         logsMoved: '로그가 전용 워크스페이스로 이동되었습니다',
@@ -7642,18 +6471,6 @@ const resources = {
         cliproxy: 'CLIProxy',
         accounts: '계정',
         health: '헬스',
-      },
-      analyticsPageV2: {
-        title: '분석',
-        subtitle: '사용량 분석 및 인사이트.',
-      },
-      logsPageV2: {
-        title: '로그',
-        subtitle: '시스템 로그를 보고 관리합니다.',
-      },
-      healthPageV2: {
-        title: '헬스',
-        subtitle: '시스템 헬스 모니터링.',
       },
       aiProvidersPage: {
         title: 'AI 프로바이더',
