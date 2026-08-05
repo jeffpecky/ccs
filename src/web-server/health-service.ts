@@ -109,12 +109,13 @@ export async function runHealthChecks(): Promise<HealthReport> {
   // Flatten all checks for backward compatibility
   const allChecks = groups.flatMap((g) => g.checks);
 
-  // Calculate summary
+  // Calculate summary (exclude 'info' from total — they're not actionable)
+  const actionableChecks = allChecks.filter((c) => c.status !== 'info');
   const summary = {
-    total: allChecks.length,
-    passed: allChecks.filter((c) => c.status === 'ok').length,
-    warnings: allChecks.filter((c) => c.status === 'warning').length,
-    errors: allChecks.filter((c) => c.status === 'error').length,
+    total: actionableChecks.length,
+    passed: actionableChecks.filter((c) => c.status === 'ok').length,
+    warnings: actionableChecks.filter((c) => c.status === 'warning').length,
+    errors: actionableChecks.filter((c) => c.status === 'error').length,
     info: allChecks.filter((c) => c.status === 'info').length,
   };
 
