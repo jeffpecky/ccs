@@ -682,10 +682,6 @@ router.put('/', (req: Request, res: Response): void => {
         currentConfig.preferences = config.preferences;
       }
 
-      if (config.websearch !== undefined) {
-        currentConfig.websearch = config.websearch;
-      }
-
       if (config.continuity !== undefined) {
         currentConfig.continuity = config.continuity;
       }
@@ -704,10 +700,6 @@ router.put('/', (req: Request, res: Response): void => {
 
       if (config.thinking !== undefined) {
         currentConfig.thinking = config.thinking;
-      }
-
-      if (config.image_analysis !== undefined) {
-        currentConfig.image_analysis = config.image_analysis;
       }
 
       if (config.global_env !== undefined) {

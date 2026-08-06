@@ -86,7 +86,6 @@ describe('config-loader-facade', () => {
     it('should export all section getters', async () => {
       const facade = await importFacade();
 
-      expect(typeof facade.getWebSearchConfig).toBe('function');
       expect(typeof facade.getGlobalEnvConfig).toBe('function');
       expect(typeof facade.getContinuityInheritanceMap).toBe('function');
       expect(typeof facade.getCliproxySafetyConfig).toBe('function');
@@ -95,7 +94,6 @@ describe('config-loader-facade', () => {
       expect(typeof facade.isDashboardAuthEnabled).toBe('function');
       expect(typeof facade.getDashboardAuthConfig).toBe('function');
       expect(typeof facade.getBrowserConfig).toBe('function');
-      expect(typeof facade.getImageAnalysisConfig).toBe('function');
       expect(typeof facade.getLoggingConfig).toBe('function');
       expect(typeof facade.getCursorConfig).toBe('function');
     });

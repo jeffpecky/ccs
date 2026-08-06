@@ -7,7 +7,6 @@
 import { spawn, spawnSync, ChildProcess, type SpawnOptions } from 'child_process';
 import * as path from 'path';
 import { ErrorManager } from './error-manager';
-import { getWebSearchHookEnv } from './websearch-manager';
 import { wireChildProcessSignals } from './signal-forwarder';
 import {
   isClaudeSubcommandInvocation,
@@ -264,7 +263,6 @@ export function execClaude(
   const needsShell = isWindows && /\.(cmd|bat)$/i.test(claudeCli);
 
   // Get WebSearch hook config env vars
-  const webSearchEnv = getWebSearchHookEnv();
   const claudeLaunchEnv = getClaudeLaunchEnvOverrides();
 
   // Strip inherited ANTHROPIC_* when the launch should not reuse parent routing.
@@ -284,8 +282,8 @@ export function execClaude(
 
   // Prepare environment (merge with base env if envVars provided)
   const mergedEnv = envVars
-    ? { ...baseEnv, ...claudeLaunchEnv, ...envVars, ...webSearchEnv }
-    : { ...baseEnv, ...claudeLaunchEnv, ...webSearchEnv };
+    ? { ...baseEnv, ...claudeLaunchEnv, ...envVars }
+    : { ...baseEnv, ...claudeLaunchEnv };
   const effectiveMergedEnv = stripInheritedAnthropicRoutingEnv
     ? stripAnthropicRoutingEnv(mergedEnv, envVars ?? undefined)
     : mergedEnv;

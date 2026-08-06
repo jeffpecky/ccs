@@ -31,7 +31,6 @@ export {
   isUnifiedMode,
   getDefaultProfile,
   setDefaultProfile,
-  getWebSearchConfig,
   getGlobalEnvConfig,
   getContinuityInheritanceMap,
   getCliproxySafetyConfig,
@@ -40,13 +39,11 @@ export {
   isDashboardAuthEnabled,
   getDashboardAuthConfig,
   getBrowserConfig,
-  getImageAnalysisConfig,
   getLoggingConfig,
   getCursorConfig,
 } from './unified-config-loader';
 
 // Re-export types from unified-config-loader
-export type { GeminiWebSearchInfo } from './unified-config-loader';
 
 // Re-export selected functions from config-manager
 export { loadSettings, loadConfigSafe, readConfig, getCcsDir } from '../utils/config-manager';

@@ -14,13 +14,6 @@ import { expandPath } from '../../utils/helpers';
 import { getClaudeEnvVars, CLIPROXY_DEFAULT_PORT } from '../config/config-generator';
 import { CLIProxyProvider } from '../types';
 import { CompositeTierConfig } from '../../config/unified-config-types';
-import { ensureWebSearchMcpOrThrow } from '../../utils/websearch-manager';
-import { ensureImageAnalysisMcpOrThrow } from '../../utils/image-analysis';
-import {
-  ensureProfileHooks as ensureImageAnalyzerHooks,
-  removeImageAnalysisProfileHook,
-} from '../../utils/hooks/image-analyzer-profile-hook-injector';
-import { prepareImageAnalysisFallbackHook } from '../../utils/hooks';
 import { getEffectiveApiKey } from '../auth/auth-token-manager';
 import { warn } from '../../utils/ui';
 import { normalizeModelIdForProvider } from '../ai-providers/model-id-normalizer';
@@ -97,21 +90,6 @@ function writeSettings(filePath: string, settings: SettingsFile): void {
   fs.renameSync(tempPath, filePath);
 }
 
-function rollbackSettingsFile(
-  filePath: string,
-  previousContent: string | null,
-  existedBefore: boolean
-): void {
-  if (existedBefore && previousContent !== null) {
-    fs.writeFileSync(filePath, previousContent, 'utf8');
-    return;
-  }
-
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-  }
-}
-
 /**
  * Get settings file path for a variant
  */
@@ -150,30 +128,8 @@ export function createSettingsFile(
     env: buildSettingsEnv(provider, model, port),
   };
 
-  const settingsExisted = fs.existsSync(settingsPath);
-  const previousSettingsContent = settingsExisted ? fs.readFileSync(settingsPath, 'utf8') : null;
   ensureDir(ccsDir);
   writeSettings(settingsPath, settings);
-
-  try {
-    ensureWebSearchMcpOrThrow();
-    const imageAnalysisMcpReady = ensureImageAnalysisMcpOrThrow();
-    if (imageAnalysisMcpReady) {
-      removeImageAnalysisProfileHook(`${provider}-${name}`, settingsPath);
-    } else {
-      const imageAnalysisFallbackHookReady = prepareImageAnalysisFallbackHook();
-      ensureImageAnalyzerHooks({
-        profileName: `${provider}-${name}`,
-        profileType: 'cliproxy',
-        cliproxyProvider: provider,
-        settingsPath,
-        sharedHookInstalled: imageAnalysisFallbackHookReady,
-      });
-    }
-  } catch (error) {
-    rollbackSettingsFile(settingsPath, previousSettingsContent, settingsExisted);
-    throw error;
-  }
 
   return settingsPath;
 }
@@ -194,30 +150,8 @@ export function createSettingsFileUnified(
     env: buildSettingsEnv(provider, model, port),
   };
 
-  const settingsExisted = fs.existsSync(settingsPath);
-  const previousSettingsContent = settingsExisted ? fs.readFileSync(settingsPath, 'utf8') : null;
   ensureDir(ccsDir);
   writeSettings(settingsPath, settings);
-
-  try {
-    ensureWebSearchMcpOrThrow();
-    const imageAnalysisMcpReady = ensureImageAnalysisMcpOrThrow();
-    if (imageAnalysisMcpReady) {
-      removeImageAnalysisProfileHook(`${provider}-${name}`, settingsPath);
-    } else {
-      const imageAnalysisFallbackHookReady = prepareImageAnalysisFallbackHook();
-      ensureImageAnalyzerHooks({
-        profileName: `${provider}-${name}`,
-        profileType: 'cliproxy',
-        cliproxyProvider: provider,
-        settingsPath,
-        sharedHookInstalled: imageAnalysisFallbackHookReady,
-      });
-    }
-  } catch (error) {
-    rollbackSettingsFile(settingsPath, previousSettingsContent, settingsExisted);
-    throw error;
-  }
 
   return settingsPath;
 }
@@ -301,33 +235,8 @@ export function createCompositeSettingsFile(
     }
   }
 
-  const settingsExisted = fs.existsSync(settingsPath);
-  const previousSettingsContent = settingsExisted ? fs.readFileSync(settingsPath, 'utf8') : null;
   ensureDir(settingsDir);
   writeSettings(settingsPath, settings);
-
-  if (path.resolve(settingsPath) === path.resolve(defaultSettingsPath)) {
-    try {
-      ensureWebSearchMcpOrThrow();
-      const imageAnalysisMcpReady = ensureImageAnalysisMcpOrThrow();
-      if (imageAnalysisMcpReady) {
-        removeImageAnalysisProfileHook(`composite-${name}`, settingsPath);
-      } else {
-        const imageAnalysisFallbackHookReady = prepareImageAnalysisFallbackHook();
-        ensureImageAnalyzerHooks({
-          profileName: `composite-${name}`,
-          profileType: 'cliproxy',
-          cliproxyProvider: tiers[defaultTier].provider,
-          isComposite: true,
-          settingsPath,
-          sharedHookInstalled: imageAnalysisFallbackHookReady,
-        });
-      }
-    } catch (error) {
-      rollbackSettingsFile(settingsPath, previousSettingsContent, settingsExisted);
-      throw error;
-    }
-  }
 
   return settingsPath;
 }

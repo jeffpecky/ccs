@@ -44,16 +44,6 @@ import type {
   ThinkingConfig,
   OfficialChannelId,
   OfficialChannelsConfig,
-  DuckDuckGoWebSearchConfig,
-  BraveWebSearchConfig,
-  ExaWebSearchConfig,
-  TavilyWebSearchConfig,
-  SearxngWebSearchConfig,
-  GeminiWebSearchConfig,
-  GrokWebSearchConfig,
-  OpenCodeWebSearchConfig,
-  WebSearchProvidersConfig,
-  WebSearchConfig,
   BrowserToolPolicy,
   BrowserEvalMode,
   BrowserClaudeConfig,
@@ -73,7 +63,6 @@ import type {
   CliproxyServerConfig,
   GlobalEnvConfig,
   ContinuityConfig,
-  ImageAnalysisConfig,
 } from '../../unified-config-types';
 
 describe('config schemas backward compatibility', () => {
@@ -111,7 +100,6 @@ describe('config schemas backward compatibility', () => {
     'DEFAULT_CLIPROXY_SERVER_CONFIG',
     'DEFAULT_OPENAI_COMPAT_PROXY_CONFIG',
     'DEFAULT_GLOBAL_ENV',
-    'DEFAULT_IMAGE_ANALYSIS_CONFIG',
   ] as const;
 
   for (const name of defaultConstants) {
@@ -138,7 +126,6 @@ describe('config schemas backward compatibility', () => {
     expect(config.logging).toBeDefined();
     expect(config.preferences).toBeDefined();
     expect(config.browser).toBeDefined();
-    expect(config.image_analysis).toBeDefined();
     expect(config.quota_management).toBeDefined();
     expect(config.thinking).toBeDefined();
     expect(config.channels).toBeDefined();
@@ -146,7 +133,6 @@ describe('config schemas backward compatibility', () => {
     expect(config.copilot).toBeDefined();
     expect(config.cursor).toBeDefined();
     expect(config.cliproxy_server).toBeDefined();
-    expect(config.websearch).toBeDefined();
   });
 
   it('re-exports isUnifiedConfig', () => {

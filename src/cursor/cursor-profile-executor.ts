@@ -2,33 +2,12 @@ import { spawn } from 'child_process';
 
 import type { CursorConfig } from '../config/unified-config-types';
 
-import { ensureCliproxyService } from '../cliproxy';
-import { resolveLifecyclePort } from '../cliproxy/config/port-manager';
 import { fail, info, ok } from '../utils/ui';
-import {
-  appendThirdPartyWebSearchToolArgs,
-  createWebSearchTraceContext,
-  getWebSearchHookEnv,
-  syncWebSearchMcpToConfigDir,
-} from '../utils/websearch-manager';
-import { getImageAnalysisHookEnv, resolveImageAnalysisRuntimeStatus } from '../utils/hooks';
 import { stripClaudeCodeEnv } from '../utils/shell-executor';
 import { checkAuthStatus } from './cursor-auth';
 import { isDaemonRunning, startDaemon } from './cursor-daemon';
 import { getCursorDaemonToken } from './cursor-daemon-auth';
 import { getGlobalEnvConfig } from '../config/config-loader-facade';
-
-interface CursorImageAnalysisResolution {
-  env: Record<string, string>;
-  warning: string | null;
-}
-
-interface CursorImageAnalysisDeps {
-  getImageAnalysisHookEnv?: typeof getImageAnalysisHookEnv;
-  resolveImageAnalysisRuntimeStatus?: typeof resolveImageAnalysisRuntimeStatus;
-  ensureCliproxyService?: typeof ensureCliproxyService;
-  resolveLifecyclePort?: typeof resolveLifecyclePort;
-}
 
 export function generateCursorEnv(
   config: CursorConfig,
@@ -51,58 +30,6 @@ export function generateCursorEnv(
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     ...(claudeConfigDir ? { CLAUDE_CONFIG_DIR: claudeConfigDir } : {}),
   };
-}
-
-export async function resolveCursorImageAnalysisEnv(
-  verbose = false,
-  deps: CursorImageAnalysisDeps = {}
-): Promise<CursorImageAnalysisResolution> {
-  const getImageAnalysisHookEnvFn = deps.getImageAnalysisHookEnv ?? getImageAnalysisHookEnv;
-  const resolveImageAnalysisRuntimeStatusFn =
-    deps.resolveImageAnalysisRuntimeStatus ?? resolveImageAnalysisRuntimeStatus;
-  const ensureCliproxyServiceFn = deps.ensureCliproxyService ?? ensureCliproxyService;
-  const resolveLifecyclePortFn = deps.resolveLifecyclePort ?? resolveLifecyclePort;
-
-  const env = getImageAnalysisHookEnvFn({
-    profileName: 'cursor',
-    profileType: 'cursor',
-  });
-  const provider = env['CCS_CURRENT_PROVIDER'];
-  if (env['CCS_IMAGE_ANALYSIS_SKIP'] === '1' || !provider) {
-    return { env, warning: null };
-  }
-
-  const status = await resolveImageAnalysisRuntimeStatusFn({
-    profileName: 'cursor',
-    profileType: 'cursor',
-  });
-
-  if (status.effectiveRuntimeMode === 'native-read') {
-    return {
-      env: {
-        ...env,
-        CCS_CURRENT_PROVIDER: '',
-        CCS_IMAGE_ANALYSIS_SKIP: '1',
-      },
-      warning: `${status.effectiveRuntimeReason || `Image analysis via ${provider} is unavailable.`} This session will use native Read.`,
-    };
-  }
-
-  if (status.proxyReadiness === 'stopped') {
-    const ensureServiceResult = await ensureCliproxyServiceFn(resolveLifecyclePortFn(), verbose);
-    if (!ensureServiceResult.started) {
-      return {
-        env: {
-          ...env,
-          CCS_CURRENT_PROVIDER: '',
-          CCS_IMAGE_ANALYSIS_SKIP: '1',
-        },
-        warning: `Image analysis via ${provider} is unavailable because CCS could not start the local CLIProxy service. This session will use native Read.`,
-      };
-    }
-  }
-
-  return { env, warning: null };
 }
 
 export async function executeCursorProfile(
@@ -162,39 +89,20 @@ export async function executeCursorProfile(
   const cursorEnv = generateCursorEnv(config, daemonToken, claudeConfigDir);
   const globalEnvConfig = getGlobalEnvConfig();
   const globalEnv = globalEnvConfig.enabled ? globalEnvConfig.env : {};
-  const webSearchEnv = getWebSearchHookEnv();
-  const { env: imageAnalysisEnv, warning: imageAnalysisWarning } =
-    await resolveCursorImageAnalysisEnv();
   const env = stripClaudeCodeEnv({
     ...process.env,
     ...globalEnv,
     ...cursorEnv,
-    ...webSearchEnv,
-    ...imageAnalysisEnv,
     CCS_PROFILE_TYPE: 'cursor',
   });
 
   console.log(info(`Using Cursor proxy (model: ${config.model})`));
-  if (imageAnalysisWarning) {
-    console.log(info(imageAnalysisWarning));
-  }
   console.log('');
 
-  syncWebSearchMcpToConfigDir(claudeConfigDir);
-
   return new Promise((resolve) => {
-    const launchArgs = appendThirdPartyWebSearchToolArgs(claudeArgs);
-    const traceEnv = createWebSearchTraceContext({
-      launcher: 'cursor.executor',
-      args: launchArgs,
-      profile: 'cursor',
-      profileType: 'cursor',
-      claudeConfigDir,
-    });
-
-    const proc = spawn(claudeCliPath, launchArgs, {
+    const proc = spawn(claudeCliPath, claudeArgs, {
       stdio: 'inherit',
-      env: { ...env, ...traceEnv },
+      env,
       shell: process.platform === 'win32',
     });
 

@@ -44,6 +44,5 @@ export {
 } from './cursor-models';
 
 // Executor
-export { CursorExecutor } from './cursor-executor';
 export { executeCursorProfile, generateCursorEnv } from './cursor-profile-executor';
 export { probeCursorRuntime } from './cursor-runtime-probe';

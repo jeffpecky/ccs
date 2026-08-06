@@ -24,15 +24,12 @@ import {
   DEFAULT_QUOTA_MANAGEMENT_CONFIG,
   DEFAULT_THINKING_CONFIG,
   DEFAULT_DASHBOARD_AUTH_CONFIG,
-  DEFAULT_IMAGE_ANALYSIS_CONFIG,
   DEFAULT_LOGGING_CONFIG,
 } from '../unified-config-types';
 import type { UnifiedConfig } from '../unified-config-types';
 import { canonicalizeBrowserConfig, normalizeSessionAffinityTtl } from './normalizers';
 import { normalizeContinuityConfig, normalizeOfficialChannelsConfig } from './normalizers';
 import type { LegacyDiscordChannelsConfig } from './normalizers';
-import { canonicalizeImageAnalysisConfig } from '../../utils/hooks/image-analysis-backend-resolver';
-import { normalizeSearxngBaseUrl } from '../../utils/websearch/types';
 
 // ---------------------------------------------------------------------------
 // mergeWithDefaults
@@ -135,54 +132,6 @@ export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfi
     preferences: {
       ...defaults.preferences,
       ...partial.preferences,
-    },
-    websearch: {
-      enabled: partial.websearch?.enabled ?? defaults.websearch?.enabled ?? true,
-      providers: {
-        exa: {
-          enabled: partial.websearch?.providers?.exa?.enabled ?? false,
-          max_results: partial.websearch?.providers?.exa?.max_results ?? 5,
-        },
-        tavily: {
-          enabled: partial.websearch?.providers?.tavily?.enabled ?? false,
-          max_results: partial.websearch?.providers?.tavily?.max_results ?? 5,
-        },
-        brave: {
-          enabled: partial.websearch?.providers?.brave?.enabled ?? false,
-          max_results: partial.websearch?.providers?.brave?.max_results ?? 5,
-        },
-        searxng: {
-          enabled: partial.websearch?.providers?.searxng?.enabled ?? false,
-          url: normalizeSearxngBaseUrl(partial.websearch?.providers?.searxng?.url) ?? '',
-          max_results: partial.websearch?.providers?.searxng?.max_results ?? 5,
-        },
-        duckduckgo: {
-          enabled: partial.websearch?.providers?.duckduckgo?.enabled ?? true,
-          max_results: partial.websearch?.providers?.duckduckgo?.max_results ?? 5,
-        },
-        gemini: {
-          enabled:
-            partial.websearch?.providers?.gemini?.enabled ??
-            partial.websearch?.gemini?.enabled ?? // Legacy fallback
-            false,
-          model: partial.websearch?.providers?.gemini?.model ?? 'gemini-2.5-flash',
-          timeout:
-            partial.websearch?.providers?.gemini?.timeout ??
-            partial.websearch?.gemini?.timeout ?? // Legacy fallback
-            55,
-        },
-        opencode: {
-          enabled: partial.websearch?.providers?.opencode?.enabled ?? false,
-          model: partial.websearch?.providers?.opencode?.model ?? 'opencode/grok-code',
-          timeout: partial.websearch?.providers?.opencode?.timeout ?? 90,
-        },
-        grok: {
-          enabled: partial.websearch?.providers?.grok?.enabled ?? false,
-          timeout: partial.websearch?.providers?.grok?.timeout ?? 55,
-        },
-      },
-      // Legacy fields (keep for backwards compatibility during read)
-      gemini: partial.websearch?.gemini,
     },
     // Copilot config - strictly opt-in, merge with defaults
     copilot: {
@@ -320,16 +269,5 @@ export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfi
         DEFAULT_DASHBOARD_AUTH_CONFIG.session_timeout_hours,
     },
     browser: canonicalizeBrowserConfig(partial.browser),
-    // Image analysis config - enabled by default for CLIProxy providers
-    image_analysis: canonicalizeImageAnalysisConfig({
-      enabled: partial.image_analysis?.enabled ?? DEFAULT_IMAGE_ANALYSIS_CONFIG.enabled,
-      timeout: partial.image_analysis?.timeout ?? DEFAULT_IMAGE_ANALYSIS_CONFIG.timeout,
-      provider_models:
-        partial.image_analysis?.provider_models ?? DEFAULT_IMAGE_ANALYSIS_CONFIG.provider_models,
-      fallback_backend:
-        partial.image_analysis?.fallback_backend ?? DEFAULT_IMAGE_ANALYSIS_CONFIG.fallback_backend,
-      profile_backends:
-        partial.image_analysis?.profile_backends ?? DEFAULT_IMAGE_ANALYSIS_CONFIG.profile_backends,
-    }),
   };
 }

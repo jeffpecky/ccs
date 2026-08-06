@@ -15,7 +15,6 @@ import {
 import { getPortProcess, isCLIProxyProcess } from '../../utils/port-utils';
 import { killProcessOnPort, getPlatformName } from '../../utils/platform-commands';
 import { createSpinner } from '../checks/types';
-import { fixImageAnalysisConfig } from '../checks/image-analysis-check';
 import { getCcsDir } from '../../config/config-loader-facade';
 
 const ora = createSpinner();
@@ -130,20 +129,6 @@ export async function runAutoRepair(): Promise<void> {
     }
   } catch (err) {
     symlinkSpinner.fail(`${fail('Error')} Could not fix symlink: ${(err as Error).message}`);
-  }
-
-  // Fix 5: Image analysis config validation
-  const imageSpinner = ora('Checking image analysis config').start();
-  try {
-    const imageFixed = await fixImageAnalysisConfig();
-    if (imageFixed) {
-      imageSpinner.succeed(`${ok('Fixed')} Repaired image analysis configuration`);
-      fixed++;
-    } else {
-      imageSpinner.succeed(`${ok('OK')} Image analysis config is valid`);
-    }
-  } catch (err) {
-    imageSpinner.fail(`${fail('Error')} Could not fix image config: ${(err as Error).message}`);
   }
 
   // Summary

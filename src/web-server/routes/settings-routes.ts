@@ -18,12 +18,9 @@ import {
   resetAuthToDefaults,
 } from '../../cliproxy';
 import { regenerateConfig } from '../../cliproxy/config/config-generator';
-import { deduplicateCcsHooks } from '../../utils/websearch/hook-utils';
-import { removeCcsImageAnalyzerHooks } from '../../utils/hooks/image-analyzer-hook-utils';
 import { resolveCliproxyBridgeMetadata } from '../../api/services';
 
 import {
-  isLoopbackRemoteAddress,
   requireLocalAccessWhenAuthDisabled,
 } from '../middleware/auth-middleware';
 import type { Settings } from '../../types/config';
@@ -38,15 +35,7 @@ import {
 } from '../../cliproxy/ai-providers/model-id-normalizer';
 import { createRouteErrorHelpers } from './route-helpers';
 import {
-  getImageAnalysisProfileSettingsPath,
-  hasImageAnalysisProfileHook,
-} from '../../utils/hooks/image-analyzer-profile-hook-injector';
-import { hasImageAnalyzerHook } from '../../utils/hooks/image-analyzer-hook-installer';
-import { resolveImageAnalysisRuntimeStatus } from '../../utils/hooks';
-import {
   getCcsDir,
-  getImageAnalysisConfig,
-  isDashboardAuthEnabled,
   loadConfigSafe,
   loadOrCreateUnifiedConfig,
   loadSettings,
@@ -157,14 +146,6 @@ function requireSensitiveLocalAccess(req: Request, res: Response): boolean {
     res,
     'Sensitive settings endpoints require localhost access when dashboard auth is disabled.'
   );
-}
-
-function canResolveSensitiveRuntimeStatus(req: Request): boolean {
-  if (isDashboardAuthEnabled()) {
-    return true;
-  }
-
-  return isLoopbackRemoteAddress(req.socket.remoteAddress);
 }
 
 function classifyConfigSaveFailure(error: unknown): { statusCode: number; message: string } {
@@ -376,47 +357,6 @@ function canonicalizeProfileSettings(profileOrVariant: string, settings: Setting
   return changed ? next : settings;
 }
 
-async function resolveImageAnalysisStatusForProfile(
-  profileOrVariant: string,
-  settings: Settings,
-  settingsPath: string
-): Promise<Awaited<ReturnType<typeof resolveImageAnalysisRuntimeStatus>>> {
-  const variants = listVariants();
-  const variant = variants[profileOrVariant];
-  const cliproxyProvider = resolveProviderForProfile(profileOrVariant);
-  const cliproxyBridge = resolveCliproxyBridgeMetadata(settings);
-  const status = await resolveImageAnalysisRuntimeStatus(
-    {
-      profileName: profileOrVariant,
-      profileType: cliproxyProvider ? 'cliproxy' : 'settings',
-      cliproxyProvider,
-      isComposite: Boolean(
-        variant && 'type' in variant && (variant as { type?: string }).type === 'composite'
-      ),
-      settingsPath,
-      settings,
-      cliproxyBridge,
-      hookInstalled: hasImageAnalysisProfileHook(profileOrVariant, settingsPath),
-      sharedHookInstalled: hasImageAnalyzerHook(),
-    },
-    getImageAnalysisConfig()
-  );
-
-  return {
-    ...status,
-    persistencePath: status.shouldPersistHook
-      ? getImageAnalysisProfileSettingsPath(profileOrVariant, settingsPath)
-      : null,
-  };
-}
-
-async function resolvePreviewImageAnalysisStatus(profileOrVariant: string, settings: Settings) {
-  const normalizedSettings = canonicalizeProfileSettings(profileOrVariant, settings);
-  const settingsPath = resolveSettingsPath(profileOrVariant);
-
-  return resolveImageAnalysisStatusForProfile(profileOrVariant, normalizedSettings, settingsPath);
-}
-
 function writeSettingsAtomically(settingsPath: string, settings: Settings): void {
   requireWritableSettingsPathWithinCcs(settingsPath);
   const tempPath = `${settingsPath}.tmp.${process.pid}`;
@@ -510,17 +450,12 @@ router.get('/:profile', async (req: Request, res: Response): Promise<void> => {
     const stat = fs.statSync(settingsPath);
     const masked = maskApiKeys(settings);
 
-    const imageAnalysisStatus = canResolveSensitiveRuntimeStatus(req)
-      ? await resolveImageAnalysisStatusForProfile(profile, settings, settingsPath)
-      : null;
-
     res.json({
       profile,
       settings: masked,
       mtime: stat.mtime.getTime(),
       path: settingsPath,
       cliproxyBridge: resolveCliproxyBridgeMetadata(settings),
-      imageAnalysisStatus,
     });
   } catch (error) {
     respondInternalError(res, error, 'Internal server error.');
@@ -530,7 +465,7 @@ router.get('/:profile', async (req: Request, res: Response): Promise<void> => {
 /**
  * GET /api/settings/:profile/raw - Get full settings (for editing)
  */
-router.get('/:profile/raw', async (req: Request, res: Response): Promise<void> => {
+router.get('/:profile/raw', (req: Request, res: Response): void => {
   if (!requireSensitiveLocalAccess(req, res)) return;
 
   try {
@@ -551,42 +486,11 @@ router.get('/:profile/raw', async (req: Request, res: Response): Promise<void> =
       mtime: stat.mtime.getTime(),
       path: settingsPath,
       cliproxyBridge: resolveCliproxyBridgeMetadata(settings),
-      imageAnalysisStatus: await resolveImageAnalysisStatusForProfile(
-        profile,
-        settings,
-        settingsPath
-      ),
     });
   } catch (error) {
     respondInternalError(res, error, 'Internal server error.');
   }
 });
-
-/**
- * POST /api/settings/:profile/image-analysis-status - Preview image analysis status from editor JSON
- */
-router.post(
-  '/:profile/image-analysis-status',
-  async (req: Request, res: Response): Promise<void> => {
-    if (!requireSensitiveLocalAccess(req, res)) return;
-
-    try {
-      const { profile } = req.params;
-      const { settings } = req.body;
-
-      if (!settings || typeof settings !== 'object') {
-        res.status(400).json({ error: 'settings object is required in request body' });
-        return;
-      }
-
-      res.json({
-        imageAnalysisStatus: await resolvePreviewImageAnalysisStatus(profile, settings as Settings),
-      });
-    } catch (error) {
-      respondInternalError(res, error, 'Internal server error.');
-    }
-  }
-);
 
 /** Required env vars for CLIProxy providers to function */
 const REQUIRED_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN'] as const;
@@ -623,11 +527,6 @@ router.put('/:profile', (req: Request, res: Response): void => {
     }
 
     const normalizedSettings = canonicalizeProfileSettings(profile, settings as Settings);
-
-    // Deduplicate CCS hooks to prevent accumulation (fixes #450)
-    // This handles cases where duplicate hooks were added by previous versions
-    deduplicateCcsHooks(normalizedSettings as Record<string, unknown>);
-    removeCcsImageAnalyzerHooks(normalizedSettings as Record<string, unknown>);
 
     const ccsDir = getCcsDir();
 

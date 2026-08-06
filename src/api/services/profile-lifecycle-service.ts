@@ -10,8 +10,6 @@ import type { Config, Settings } from '../../types';
 import type { TargetType } from '../../targets/target-adapter';
 import { getPersistedTargetChoices, isPersistedTargetType } from '../../targets/target-metadata';
 import { getConfigPath } from '../../utils/config-manager';
-import { ensureWebSearchMcpOrThrow } from '../../utils/websearch-manager';
-import { ensureImageAnalysisMcpOrThrow } from '../../utils/image-analysis';
 import { isSensitiveKey } from '../../utils/sensitive-keys';
 import { isReservedName } from '../../config/reserved-names';
 
@@ -224,10 +222,6 @@ export function registerApiProfileOrphans(options?: {
     }
 
     try {
-      if (orphan.validation.valid) {
-        ensureWebSearchMcpOrThrow();
-        ensureImageAnalysisMcpOrThrow();
-      }
       registerApiProfileInConfig(orphan.name, options?.target || 'claude', options?.force || false);
       result.registered.push(orphan.name);
     } catch (error) {
@@ -275,13 +269,6 @@ export function copyApiProfile(
       : null;
 
     writeJsonObjectAtomically(destinationSettingsPath, sourceSettings);
-    try {
-      ensureWebSearchMcpOrThrow();
-      ensureImageAnalysisMcpOrThrow();
-    } catch (hookError) {
-      rollbackSettingsFile(destinationSettingsPath, previousDestinationContent, destinationExisted);
-      throw hookError;
-    }
     try {
       registerApiProfileInConfig(
         destination,
@@ -401,13 +388,6 @@ export function importApiProfileBundle(
     const previousSettingsContent = settingsExisted ? fs.readFileSync(settingsPath, 'utf8') : null;
 
     writeJsonObjectAtomically(settingsPath, settings);
-    try {
-      ensureWebSearchMcpOrThrow();
-      ensureImageAnalysisMcpOrThrow();
-    } catch (hookError) {
-      rollbackSettingsFile(settingsPath, previousSettingsContent, settingsExisted);
-      throw hookError;
-    }
     try {
       registerApiProfileInConfig(name, options?.target || bundleTarget || 'claude', options?.force);
     } catch (registrationError) {

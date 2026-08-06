@@ -17,7 +17,6 @@ import {
   stripClaudeCodeEnv,
 } from '../utils/shell-executor';
 import { ErrorManager } from '../utils/error-manager';
-import { getWebSearchHookEnv } from '../utils/websearch-manager';
 import { appendBrowserToolArgs } from '../utils/browser';
 import { wireChildProcessSignals } from '../utils/signal-forwarder';
 import { runCleanup } from '../errors';
@@ -55,8 +54,6 @@ export class ClaudeAdapter implements TargetAdapter {
   }
 
   buildEnv(creds: TargetCredentials, profileType: ProfileType): NodeJS.ProcessEnv {
-    const webSearchEnv = getWebSearchHookEnv();
-
     // For account/default profiles, strip ANTHROPIC_* from parent env to prevent
     // stale proxy config from interfering with native Claude API routing.
     const baseEnv =
@@ -64,7 +61,7 @@ export class ClaudeAdapter implements TargetAdapter {
         ? stripAnthropicEnv(process.env)
         : process.env;
 
-    const env: NodeJS.ProcessEnv = { ...stripBrowserEnv(baseEnv), ...webSearchEnv };
+    const env: NodeJS.ProcessEnv = { ...stripBrowserEnv(baseEnv) };
 
     if (creds.envVars) {
       Object.assign(env, stripBrowserEnv(creds.envVars));

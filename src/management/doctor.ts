@@ -13,7 +13,6 @@ import {
   runSymlinkChecks,
   runCLIProxyChecks,
   runOAuthChecks,
-  runImageAnalysisCheck,
 } from './checks';
 import { runAutoRepair } from './repair';
 import { getDockerKeyRotationStatus } from '../docker/docker-key-rotation';
@@ -78,11 +77,6 @@ class Doctor {
     // Group 7: OAuth Readiness (port availability)
     console.log(header('OAUTH READINESS'));
     await runOAuthChecks(this.results);
-    console.log('');
-
-    // Group 8: Image Analysis Config
-    console.log(header('IMAGE ANALYSIS'));
-    await runImageAnalysisCheck(this.results);
     console.log('');
 
     this.showReport();

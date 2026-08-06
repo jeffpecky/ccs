@@ -11,7 +11,6 @@ import type { CLIProxyConfig } from './cliproxy';
 import { CLIPROXY_SUPPORTED_PROVIDERS, DEFAULT_CLIPROXY_SAFETY_CONFIG } from './cliproxy';
 import type { LoggingConfig, PreferencesConfig } from './logging';
 import { DEFAULT_LOGGING_CONFIG } from './logging';
-import type { WebSearchConfig } from './websearch';
 import type {
   GlobalEnvConfig,
   ContinuityConfig,
@@ -19,14 +18,12 @@ import type {
   CursorConfig,
   CliproxyServerConfig,
   OpenAICompatProxyConfig,
-  ImageAnalysisConfig,
 } from './providers';
 import {
   DEFAULT_COPILOT_CONFIG,
   DEFAULT_CURSOR_CONFIG,
   DEFAULT_CLIPROXY_SERVER_CONFIG,
   DEFAULT_OPENAI_COMPAT_PROXY_CONFIG,
-  DEFAULT_IMAGE_ANALYSIS_CONFIG,
   DEFAULT_GLOBAL_ENV,
 } from './providers';
 import { UNIFIED_CONFIG_VERSION } from './version';
@@ -62,8 +59,6 @@ export interface UnifiedConfig {
   logging?: LoggingConfig;
   /** User preferences */
   preferences: PreferencesConfig;
-  /** WebSearch configuration */
-  websearch?: WebSearchConfig;
   /** Global environment variables for all non-Claude subscription profiles */
   global_env?: GlobalEnvConfig;
   /** Cross-profile continuity inheritance mapping */
@@ -84,8 +79,6 @@ export interface UnifiedConfig {
   dashboard_auth?: DashboardAuthConfig;
   /** Browser automation configuration */
   browser?: BrowserConfig;
-  /** Image analysis configuration (vision via CLIProxy) */
-  image_analysis?: ImageAnalysisConfig;
 }
 
 /**
@@ -127,46 +120,6 @@ export function createEmptyUnifiedConfig(): UnifiedConfig {
       telemetry: false,
       auto_update: true,
     },
-    websearch: {
-      enabled: true,
-      providers: {
-        exa: {
-          enabled: false,
-          max_results: 5,
-        },
-        tavily: {
-          enabled: false,
-          max_results: 5,
-        },
-        brave: {
-          enabled: false,
-          max_results: 5,
-        },
-        searxng: {
-          enabled: false,
-          url: '',
-          max_results: 5,
-        },
-        duckduckgo: {
-          enabled: true,
-          max_results: 5,
-        },
-        gemini: {
-          enabled: false,
-          model: 'gemini-2.5-flash',
-          timeout: 55,
-        },
-        opencode: {
-          enabled: false,
-          model: 'opencode/grok-code',
-          timeout: 90,
-        },
-        grok: {
-          enabled: false,
-          timeout: 55,
-        },
-      },
-    },
     global_env: {
       enabled: true,
       env: { ...DEFAULT_GLOBAL_ENV },
@@ -182,7 +135,6 @@ export function createEmptyUnifiedConfig(): UnifiedConfig {
       claude: { ...DEFAULT_BROWSER_CONFIG.claude },
       codex: { ...DEFAULT_BROWSER_CONFIG.codex },
     },
-    image_analysis: { ...DEFAULT_IMAGE_ANALYSIS_CONFIG },
   };
 }
 

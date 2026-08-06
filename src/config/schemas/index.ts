@@ -55,20 +55,6 @@ export type { ThinkingMode, ThinkingTierDefaults, ThinkingConfig } from './think
 export { DEFAULT_OFFICIAL_CHANNELS_CONFIG } from './channels';
 export type { OfficialChannelId, OfficialChannelsConfig } from './channels';
 
-// WebSearch backend types
-export type {
-  DuckDuckGoWebSearchConfig,
-  BraveWebSearchConfig,
-  ExaWebSearchConfig,
-  TavilyWebSearchConfig,
-  SearxngWebSearchConfig,
-  GeminiWebSearchConfig,
-  GrokWebSearchConfig,
-  OpenCodeWebSearchConfig,
-  WebSearchProvidersConfig,
-  WebSearchConfig,
-} from './websearch';
-
 // Browser automation types and defaults
 export { DEFAULT_BROWSER_CONFIG } from './browser';
 export type {

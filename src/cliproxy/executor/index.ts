@@ -12,7 +12,7 @@
 
 import { ChildProcess } from 'child_process';
 import * as fs from 'fs';
-import { fail, info, warn } from '../../utils/ui';
+import { fail, warn } from '../../utils/ui';
 import {
   generateConfig,
   getProviderConfig,
@@ -23,11 +23,7 @@ import { supportsModelConfig } from '../model-catalog';
 import { CLIProxyProvider, ExecutorConfig } from '../types';
 import { CodexReasoningProxy } from '../ai-providers/codex-reasoning-proxy';
 import { ToolSanitizationProxy } from '../proxy/tool-sanitization-proxy';
-import { ensureWebSearchMcpOrThrow, displayWebSearchStatus } from '../../utils/websearch-manager';
-import {
-  ensureImageAnalysisMcpOrThrow,
-  syncImageAnalysisMcpToConfigDir,
-} from '../../utils/image-analysis';
+
 import { loadOrCreateUnifiedConfig, getThinkingConfig } from '../../config/config-loader-facade';
 import { HttpsTunnelProxy } from '../proxy/https-tunnel-proxy';
 import { resolveProfileContinuityInheritance } from '../../auth/profile-continuity-inheritance';
@@ -39,13 +35,8 @@ import {
   resolveAccounts,
 } from './account-resolution';
 import { waitForProxyReadyWithSpinner, spawnProxy } from './lifecycle-manager';
-import {
-  buildClaudeEnvironment,
-  logEnvironment,
-  resolveCliproxyImageAnalysisEnv,
-} from './env-resolver';
+import { buildClaudeEnvironment, logEnvironment } from './env-resolver';
 import { checkOrJoinProxy, registerProxySession } from './session-bridge';
-import { getWebSearchHookEnv } from '../../utils/websearch-manager';
 import {
   handleLogout,
   handleImport,
@@ -153,11 +144,6 @@ export async function execClaudeWithCLIProxy(
       cfg,
       log,
     });
-
-  // Setup first-class CCS WebSearch runtime
-  ensureWebSearchMcpOrThrow();
-  const imageAnalysisMcpReady = ensureImageAnalysisMcpOrThrow();
-  displayWebSearchStatus();
 
   const providerConfig = getProviderConfig(provider);
   log(`Provider: ${providerConfig.displayName}`);
@@ -341,7 +327,7 @@ export async function execClaudeWithCLIProxy(
     }
   }
 
-  // 8. Setup HTTPS tunnel if needed (tunnelPort used by imageAnalysisProxyTarget below)
+  // 8. Setup HTTPS tunnel if needed
   let httpsTunnel: HttpsTunnelProxy | null = null;
   let tunnelPort: number | null = null;
 
@@ -375,42 +361,6 @@ export async function execClaudeWithCLIProxy(
     log('HTTPS tunnel skipped for Codex; local proxy chain will connect to remote HTTPS directly');
   }
 
-  const imageAnalysisProxyTarget =
-    useRemoteProxy && proxyConfig.host
-      ? {
-          host: proxyConfig.host,
-          port: proxyConfig.port,
-          protocol: proxyConfig.protocol,
-          authToken: proxyConfig.authToken,
-          managementKey: proxyConfig.managementKey,
-          allowSelfSigned: proxyConfig.allowSelfSigned,
-          isRemote: true as const,
-        }
-      : {
-          host: '127.0.0.1',
-          port: cfg.port,
-          protocol: 'http' as const,
-          isRemote: false as const,
-        };
-  const imageAnalysisResolution = await resolveCliproxyImageAnalysisEnv({
-    profileName: cfg.profileName || provider,
-    provider,
-    profileSettingsPath: cfg.customSettingsPath,
-    isComposite: cfg.isComposite,
-    proxyTarget: imageAnalysisProxyTarget,
-    tunnelPort,
-    proxyReachable: true,
-  });
-  const imageAnalysisProvisioningFailed =
-    !imageAnalysisMcpReady && imageAnalysisResolution.env.CCS_IMAGE_ANALYSIS_ENABLED === '1';
-  const imageAnalysisEnv = {
-    ...imageAnalysisResolution.env,
-    CCS_IMAGE_ANALYSIS_SKIP_HOOK: imageAnalysisMcpReady ? '1' : '0',
-  };
-  const imageAnalysisWarning = imageAnalysisProvisioningFailed
-    ? 'ImageAnalysis MCP provisioning failed. This session will use compatibility fallback when available.'
-    : imageAnalysisResolution.warning;
-
   // 9. Resolve config dir + browser runtime (needed before proxy chain)
   let toolSanitizationProxy: ToolSanitizationProxy | null = null;
   let toolSanitizationPort: number | null = null;
@@ -431,8 +381,6 @@ export async function execClaudeWithCLIProxy(
       );
     }
   }
-
-  syncImageAnalysisMcpToConfigDir(inheritedClaudeConfigDir);
 
   // Resolve browser attach runtime and sync browser MCP (needs inheritedClaudeConfigDir)
   const { browserRuntimeEnv } = await resolveBrowserRuntime(
@@ -463,7 +411,6 @@ export async function execClaudeWithCLIProxy(
     compositeTiers: cfg.compositeTiers,
     compositeDefaultTier: cfg.compositeDefaultTier,
     claudeConfigDir: inheritedClaudeConfigDir,
-    imageAnalysisEnv,
   });
 
   // 9b. Build env-dependent proxy chain (tool-sanitization + codex-reasoning)
@@ -507,7 +454,6 @@ export async function execClaudeWithCLIProxy(
     compositeTiers: cfg.compositeTiers,
     compositeDefaultTier: cfg.compositeDefaultTier,
     claudeConfigDir: inheritedClaudeConfigDir,
-    imageAnalysisEnv,
     browserRuntimeEnv,
   });
 
@@ -523,7 +469,6 @@ export async function execClaudeWithCLIProxy(
     );
   }
 
-  const webSearchEnv = getWebSearchHookEnv();
   if (process.env.CCS_DEBUG) {
     console.error(
       `[cliproxy-browser-debug] keys=${Object.keys(env)
@@ -532,10 +477,7 @@ export async function execClaudeWithCLIProxy(
         .join(',')} ws=${env.CCS_BROWSER_DEVTOOLS_WS_URL || ''}`
     );
   }
-  logEnvironment(env, webSearchEnv, verbose);
-  if (imageAnalysisWarning) {
-    console.error(info(imageAnalysisWarning));
-  }
+  logEnvironment(env, verbose);
 
   // 11b. Print thinking status feedback (TTY only, non-piped sessions)
   if (process.stderr.isTTY) {
@@ -560,7 +502,6 @@ export async function execClaudeWithCLIProxy(
     compositeProviders,
     skipLocalAuth,
     sessionId,
-    imageAnalysisMcpReady,
     browserRuntimeEnv,
     inheritedClaudeConfigDir,
     codexReasoningProxy,

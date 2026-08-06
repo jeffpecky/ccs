@@ -112,7 +112,7 @@ export {
   execClaudeWithCLIProxy,
   isPortAvailable,
   findAvailablePort,
-} from './executor/cliproxy-executor';
+} from './executor';
 
 // Authentication
 export type { AuthStatus } from './auth/auth-handler';

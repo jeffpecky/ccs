@@ -14,7 +14,6 @@ import {
   DEFAULT_CLIPROXY_SAFETY_CONFIG,
   DEFAULT_CURSOR_CONFIG,
   DEFAULT_GLOBAL_ENV,
-  DEFAULT_IMAGE_ANALYSIS_CONFIG,
   DEFAULT_LOGGING_CONFIG,
   DEFAULT_OFFICIAL_CHANNELS_CONFIG,
   DEFAULT_THINKING_CONFIG,
@@ -25,15 +24,12 @@ import type {
   CursorConfig,
   DashboardAuthConfig,
   GlobalEnvConfig,
-  ImageAnalysisConfig,
   LoggingConfig,
   OfficialChannelsConfig,
   ThinkingConfig,
 } from '../unified-config-types';
 import { canonicalizeBrowserConfig } from './normalizers';
-import { canonicalizeImageAnalysisConfig } from '../../utils/hooks/image-analysis-backend-resolver';
 import { normalizeOfficialChannelIds } from '../../channels/official-channels-ids';
-import { normalizeSearxngBaseUrl } from '../../utils/websearch/types';
 
 // ---------------------------------------------------------------------------
 // Circular-import safety: loadOrCreateUnifiedConfig lives in
@@ -53,118 +49,8 @@ function getConfig(): import('../unified-config-types').UnifiedConfig {
 }
 
 // ---------------------------------------------------------------------------
-// GeminiWebSearchInfo interface
-// ---------------------------------------------------------------------------
-
-/**
- * Gemini CLI WebSearch configuration
- */
-export interface GeminiWebSearchInfo {
-  enabled: boolean;
-  model: string;
-  timeout: number;
-}
-
-// ---------------------------------------------------------------------------
 // Accessor functions
 // ---------------------------------------------------------------------------
-
-/**
- * Get websearch configuration.
- * Returns defaults if not configured.
- * Supports deterministic providers and optional Gemini/OpenCode/Grok CLI fallbacks.
- */
-export function getWebSearchConfig(): {
-  enabled: boolean;
-  providers?: {
-    exa?: { enabled?: boolean; max_results?: number };
-    tavily?: { enabled?: boolean; max_results?: number };
-    brave?: { enabled?: boolean; max_results?: number };
-    searxng?: { enabled?: boolean; url?: string; max_results?: number };
-    duckduckgo?: { enabled?: boolean; max_results?: number };
-    gemini?: GeminiWebSearchInfo;
-    opencode?: { enabled?: boolean; model?: string; timeout?: number };
-    grok?: { enabled?: boolean; timeout?: number };
-  };
-  // Legacy fields (deprecated)
-  gemini?: { enabled?: boolean; timeout?: number };
-} {
-  const config = getConfig();
-
-  // Build provider configs
-  const exaConfig = {
-    enabled: config.websearch?.providers?.exa?.enabled ?? false,
-    max_results: config.websearch?.providers?.exa?.max_results ?? 5,
-  };
-
-  const tavilyConfig = {
-    enabled: config.websearch?.providers?.tavily?.enabled ?? false,
-    max_results: config.websearch?.providers?.tavily?.max_results ?? 5,
-  };
-
-  const duckDuckGoConfig = {
-    enabled: config.websearch?.providers?.duckduckgo?.enabled ?? true,
-    max_results: config.websearch?.providers?.duckduckgo?.max_results ?? 5,
-  };
-
-  const braveConfig = {
-    enabled: config.websearch?.providers?.brave?.enabled ?? false,
-    max_results: config.websearch?.providers?.brave?.max_results ?? 5,
-  };
-
-  const searxngConfig = {
-    enabled: config.websearch?.providers?.searxng?.enabled ?? false,
-    url: normalizeSearxngBaseUrl(config.websearch?.providers?.searxng?.url) ?? '',
-    max_results: config.websearch?.providers?.searxng?.max_results ?? 5,
-  };
-
-  const geminiConfig: GeminiWebSearchInfo = {
-    enabled:
-      config.websearch?.providers?.gemini?.enabled ?? config.websearch?.gemini?.enabled ?? false,
-    model: config.websearch?.providers?.gemini?.model ?? 'gemini-2.5-flash',
-    timeout:
-      config.websearch?.providers?.gemini?.timeout ?? config.websearch?.gemini?.timeout ?? 55,
-  };
-
-  const opencodeConfig = {
-    enabled: config.websearch?.providers?.opencode?.enabled ?? false,
-    model: config.websearch?.providers?.opencode?.model ?? 'opencode/grok-code',
-    timeout: config.websearch?.providers?.opencode?.timeout ?? 90,
-  };
-
-  const grokConfig = {
-    enabled: config.websearch?.providers?.grok?.enabled ?? false,
-    timeout: config.websearch?.providers?.grok?.timeout ?? 55,
-  };
-
-  // Auto-enable master switch if ANY provider is enabled
-  const anyProviderEnabled =
-    exaConfig.enabled ||
-    tavilyConfig.enabled ||
-    braveConfig.enabled ||
-    searxngConfig.enabled ||
-    duckDuckGoConfig.enabled ||
-    geminiConfig.enabled ||
-    opencodeConfig.enabled ||
-    grokConfig.enabled;
-  const enabled = anyProviderEnabled && (config.websearch?.enabled ?? true);
-
-  return {
-    enabled,
-    providers: {
-      exa: exaConfig,
-      tavily: tavilyConfig,
-      brave: braveConfig,
-      searxng: searxngConfig,
-      duckduckgo: duckDuckGoConfig,
-      gemini: geminiConfig,
-      opencode: opencodeConfig,
-      grok: grokConfig,
-    },
-    // Legacy field for backwards compatibility
-    gemini: config.websearch?.gemini,
-  };
-}
 
 /**
  * Get global_env configuration.
@@ -291,25 +177,6 @@ export function getDashboardAuthConfig(): DashboardAuthConfig {
 export function getBrowserConfig(): BrowserConfig {
   const config = getConfig();
   return canonicalizeBrowserConfig(config.browser);
-}
-
-/**
- * Get image_analysis configuration.
- * Returns defaults if not configured.
- */
-export function getImageAnalysisConfig(): ImageAnalysisConfig {
-  const config = getConfig();
-
-  return canonicalizeImageAnalysisConfig({
-    enabled: config.image_analysis?.enabled ?? DEFAULT_IMAGE_ANALYSIS_CONFIG.enabled,
-    timeout: config.image_analysis?.timeout ?? DEFAULT_IMAGE_ANALYSIS_CONFIG.timeout,
-    provider_models:
-      config.image_analysis?.provider_models ?? DEFAULT_IMAGE_ANALYSIS_CONFIG.provider_models,
-    fallback_backend:
-      config.image_analysis?.fallback_backend ?? DEFAULT_IMAGE_ANALYSIS_CONFIG.fallback_backend,
-    profile_backends:
-      config.image_analysis?.profile_backends ?? DEFAULT_IMAGE_ANALYSIS_CONFIG.profile_backends,
-  });
 }
 
 /**

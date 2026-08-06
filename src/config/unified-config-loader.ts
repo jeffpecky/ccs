@@ -90,9 +90,7 @@ import { mergeWithDefaults } from './loader/defaults-merger';
 // Phase 5 re-exports: config-getters
 // ---------------------------------------------------------------------------
 
-export type { GeminiWebSearchInfo } from './loader/config-getters';
 export {
-  getWebSearchConfig,
   getGlobalEnvConfig,
   getContinuityInheritanceMap,
   getCliproxySafetyConfig,
@@ -101,7 +99,6 @@ export {
   isDashboardAuthEnabled,
   getDashboardAuthConfig,
   getBrowserConfig,
-  getImageAnalysisConfig,
   getLoggingConfig,
   getCursorConfig,
 } from './loader/config-getters';

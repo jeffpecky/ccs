@@ -10,12 +10,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as os from 'os';
 import { escapeShellArg, getWindowsEscapedCommandShell } from '../../utils/shell-executor';
 import { getProviderSettingsPath } from '../config/config-generator';
-import {
-  ensureWebSearchMcpOrThrow as _ensureWebSearchMcpOrThrow,
-  appendThirdPartyWebSearchToolArgs,
-  createWebSearchTraceContext,
-} from '../../utils/websearch-manager';
-import { appendThirdPartyImageAnalysisToolArgs } from '../../utils/image-analysis';
+
 import { appendBrowserToolArgs } from '../../utils/browser';
 import { getDefaultAccount } from '../accounts/account-manager';
 import { CLIProxyProvider, ExecutorConfig } from '../types';
@@ -48,8 +43,7 @@ export interface ClaudeLaunchContext {
   skipLocalAuth: boolean;
   /** Session ID for cleanup tracking */
   sessionId: string | undefined;
-  /** Whether image analysis MCP is ready */
-  imageAnalysisMcpReady: boolean;
+
   /** Browser runtime environment variables (undefined if browser not active) */
   browserRuntimeEnv: NodeJS.ProcessEnv | undefined;
   /** Inherited Claude config dir for continuity */
@@ -80,9 +74,7 @@ export async function launchClaude(context: ClaudeLaunchContext): Promise<ChildP
     compositeProviders,
     skipLocalAuth,
     sessionId,
-    imageAnalysisMcpReady,
     browserRuntimeEnv,
-    inheritedClaudeConfigDir,
     codexReasoningProxy,
     toolSanitizationProxy,
     httpsTunnel,
@@ -105,31 +97,19 @@ export async function launchClaude(context: ClaudeLaunchContext): Promise<ChildP
     ? stripClaudeSubcommandSessionArgs(claudeArgs)
     : claudeArgs;
 
-  // Assemble final args: image analysis tools → browser tools → web search tools → settings
-  const imageAnalysisArgs = imageAnalysisMcpReady
-    ? appendThirdPartyImageAnalysisToolArgs(claudeSessionArgs)
-    : claudeSessionArgs;
+  // Assemble final args: browser tools → settings
   const browserArgs = browserRuntimeEnv
-    ? appendBrowserToolArgs(imageAnalysisArgs)
-    : imageAnalysisArgs;
+    ? appendBrowserToolArgs(claudeSessionArgs)
+    : claudeSessionArgs;
   const launchArgs = isSubcommand
-    ? appendThirdPartyWebSearchToolArgs(browserArgs)
-    : ['--settings', settingsPath, ...appendThirdPartyWebSearchToolArgs(browserArgs)];
+    ? browserArgs
+    : ['--settings', settingsPath, ...browserArgs];
 
-  // Inject web search trace context into env
-  const traceEnv = createWebSearchTraceContext({
-    launcher: 'cliproxy.executor',
-    args: launchArgs,
-    profile: cfg.profileName || provider,
-    profileType: 'cliproxy',
-    settingsPath,
-    claudeConfigDir: inheritedClaudeConfigDir,
-  });
-  const baseTracedEnv = stripClaudeCodeFeatureBlockingEnv({ ...env, ...traceEnv });
+  let tracedEnv = stripClaudeCodeFeatureBlockingEnv({ ...env });
   // Strip telemetry-disable env vars for subcommands; otherwise Claude's
   // `agents`/`mcp`/... TUIs silently fall back to non-interactive list mode.
   // Issue #1218.
-  const tracedEnv = isSubcommand ? stripSubcommandBlockingEnv(baseTracedEnv) : baseTracedEnv;
+  if (isSubcommand) tracedEnv = stripSubcommandBlockingEnv(tracedEnv);
 
   // Spawn: Windows .cmd/.bat/.ps1 need shell escaping; all others spawn directly
   let claude: ChildProcess;
