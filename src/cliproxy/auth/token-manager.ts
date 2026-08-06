@@ -398,6 +398,47 @@ export function registerAccountFromToken(
       return null;
     }
 
+    // Delete older token files for the same email to prevent stale tokens from being
+    // used instead of the new one. Only delete if the existing file is older (lower mtime).
+    if (selectedCandidate.email) {
+      let newFileMtimeMs: number | null = null;
+      try {
+        const newFileStats = fs.statSync(selectedCandidate.filePath);
+        newFileMtimeMs = newFileStats.mtimeMs;
+      } catch (err) {
+        if (verbose) {
+          console.warn(
+            `[auth] Cannot stat new token file ${selectedCandidate.filePath}, skipping old file cleanup:`,
+            err
+          );
+        }
+      }
+
+      if (newFileMtimeMs !== null) {
+        for (const existing of existingAccounts) {
+          if (
+            existing.email === selectedCandidate.email &&
+            existing.tokenFile !== selectedCandidate.file
+          ) {
+            const existingPath = path.join(tokenDir, existing.tokenFile);
+            try {
+              const existingStats = fs.statSync(existingPath);
+              if (existingStats.mtimeMs < newFileMtimeMs) {
+                if (verbose) {
+                  console.log(
+                    `[auth] Removing older token file ${existing.tokenFile} for ${selectedCandidate.email}`
+                  );
+                }
+                deleteTokenFile(existing.tokenFile);
+              }
+            } catch {
+              // File may not exist or be unreadable - skip deletion
+            }
+          }
+        }
+      }
+    }
+
     const account = registerAccount(
       provider,
       selectedCandidate.file,
