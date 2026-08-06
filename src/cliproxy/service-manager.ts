@@ -291,7 +291,7 @@ export async function ensureCliproxyService(
 
     // 4. Wait for proxy to be ready
     log(`Waiting for CLIProxy on port ${port}...`);
-    const ready = await waitForPort(port, 5000);
+    const ready = await waitForPort(port, 30000);
 
     if (!ready) {
       if (proxyProcess && !proxyProcess.killed) {
@@ -310,7 +310,7 @@ export async function ensureCliproxyService(
         started: false,
         alreadyRunning: false,
         port,
-        error: `${backendLabel} failed to start within 5s on port ${port}`,
+        error: `${backendLabel} failed to start within 30s on port ${port}`,
       };
     }
 
