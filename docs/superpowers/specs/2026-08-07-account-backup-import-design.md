@@ -96,4 +96,4 @@ Existing settings.json backup/restore remains as separate functionality.
 - Safety backup creation fails → abort import, return error
 
 ### Safety Backup
-If import fails, current state can be manually restored from `~/.ccs/backups/pre-import-{timestamp}/`.
+After import, safety backup stays at `~/.ccs/backups/pre-import-{timestamp}/`. Old backups are auto-pruned — only the last 3 are kept. If import fails, current state can be manually restored from the safety backup.
