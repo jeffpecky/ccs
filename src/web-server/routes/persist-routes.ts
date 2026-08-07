@@ -7,6 +7,9 @@ import rateLimit from 'express-rate-limit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getClaudeSettingsPath } from '../../utils/claude-config-path';
+import { getAuthDir } from '../../cliproxy/config/path-resolver';
+import { getAccountsRegistryPath } from '../../cliproxy/accounts/token-file-ops';
+import { loadUnifiedConfig } from '../../config/unified-config-loader';
 
 const router = Router();
 
@@ -275,6 +278,60 @@ router.post('/restore', restoreRateLimiter, async (req: Request, res: Response):
     res.status(500).json({ error: (error as Error).message });
   } finally {
     restoreMutex.release();
+  }
+});
+
+/**
+ * GET /api/persist/export — Full CCS backup (auth + accounts + config)
+ */
+router.get('/export', (_req: Request, res: Response): void => {
+  try {
+    const authDir = getAuthDir();
+    const pausedDir = path.join(path.dirname(authDir), 'auth-paused');
+    const accountsPath = getAccountsRegistryPath();
+
+    // Read auth token files
+    const readTokenDir = (dir: string): Array<{ filename: string; content: unknown }> => {
+      if (!fs.existsSync(dir)) return [];
+      return fs.readdirSync(dir)
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => ({
+          filename: f,
+          content: JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8')),
+        }));
+    };
+
+    const activeTokens = readTokenDir(authDir);
+    const pausedTokens = readTokenDir(pausedDir);
+
+    // Read accounts.json
+    let accounts: unknown = {};
+    if (fs.existsSync(accountsPath)) {
+      accounts = JSON.parse(fs.readFileSync(accountsPath, 'utf-8'));
+    }
+
+    // Read config.yaml as JSON
+    let config: unknown = {};
+    try {
+      config = loadUnifiedConfig();
+    } catch {
+      // Config may not exist yet
+    }
+
+    const backup = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      auth: { active: activeTokens, paused: pausedTokens },
+      accounts,
+      config,
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="ccs-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json"`);
+    res.json(backup);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: `Export failed: ${message}` });
   }
 });
 
