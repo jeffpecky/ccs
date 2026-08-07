@@ -820,7 +820,7 @@ router.post('/auth/tokens/regenerate-secret', (_req: Request, res: Response): vo
   if (!requireSensitiveLocalAccess(_req, res)) return;
 
   try {
-    const newSecret = generateSecureToken(32);
+    const newSecret = `mgmt-${generateSecureToken(16)}`;
     setGlobalManagementSecret(newSecret);
 
     // Regenerate CLIProxy config to apply changes
@@ -830,6 +830,32 @@ router.post('/auth/tokens/regenerate-secret', (_req: Request, res: Response): vo
       success: true,
       managementSecret: {
         value: maskToken(newSecret),
+        isCustom: true,
+      },
+      message: 'Restart CLIProxy to apply changes',
+    });
+  } catch (error) {
+    respondInternalError(res, error, 'Internal server error.');
+  }
+});
+
+/**
+ * POST /api/settings/auth/tokens/regenerate-api-key - Generate new API key
+ */
+router.post('/auth/tokens/regenerate-api-key', (_req: Request, res: Response): void => {
+  if (!requireSensitiveLocalAccess(_req, res)) return;
+
+  try {
+    const newApiKey = `sk-${generateSecureToken(24)}`;
+    setGlobalApiKey(newApiKey);
+
+    // Regenerate CLIProxy config to apply changes
+    regenerateConfig();
+
+    res.json({
+      success: true,
+      apiKey: {
+        value: maskToken(newApiKey),
         isCustom: true,
       },
       message: 'Restart CLIProxy to apply changes',

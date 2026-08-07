@@ -158,6 +158,30 @@ export default function AuthSection() {
     }
   };
 
+  // Regenerate API key
+  const regenerateApiKey = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      const response = await fetch('/api/settings/auth/tokens/regenerate-api-key', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || t('settingsAuth.failedRegenerate'));
+      }
+
+      setSuccess(t('settingsAuth.apiKeyRegenerated'));
+      await fetchTokens();
+      await fetchRawConfig();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('settings.unknownError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Reset to defaults
   const resetToDefaults = async () => {
     try {
@@ -301,6 +325,15 @@ export default function AuthSection() {
                   </Button>
                 </div>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={regenerateApiKey}
+                disabled={saving}
+                title={t('settingsAuth.generateApiKey')}
+              >
+                <Sparkles className="w-4 h-4" />
+              </Button>
             </div>
           </div>
 

@@ -3,7 +3,7 @@ import * as path from 'path';
 import { loadOrCreateUnifiedConfig, getCcsDir } from '../config/config-loader-facade';
 
 export const DOCKER_BOOTSTRAP_STATE_FILENAME = '.docker-bootstrap-state.json';
-export const DOCKER_LEGACY_API_KEY = 'ccs-internal-managed';
+export const DOCKER_LEGACY_API_KEY = 'sk-45c9e789d78326c6b25e11879fc81602edc7228a4c594339';
 export const DEFAULT_DOCKER_LEGACY_KEY_GRACE_DAYS = 14;
 export const DOCKER_LEGACY_KEY_GRACE_ENV = 'CCS_DOCKER_LEGACY_KEY_GRACE_DAYS';
 export const DOCKER_RESTORE_LEGACY_KEY_ENV = 'CCS_DOCKER_RESTORE_LEGACY_API_KEY';

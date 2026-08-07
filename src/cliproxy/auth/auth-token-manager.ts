@@ -20,7 +20,7 @@ import { loadOrCreateUnifiedConfig, mutateConfig } from '../../config/config-loa
  * @returns Base64URL-encoded token (43 chars for 32 bytes)
  */
 export function generateSecureToken(length = 32): string {
-  return randomBytes(length).toString('base64url');
+  return randomBytes(length).toString('hex');
 }
 
 /**

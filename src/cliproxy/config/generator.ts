@@ -21,7 +21,7 @@ import { getActiveDockerLegacyApiKeys } from '../../docker/docker-key-rotation';
 export const CCS_INTERNAL_API_KEY = 'sk-45c9e789d78326c6b25e11879fc81602edc7228a4c594339';
 
 /** Secret key for Control Panel login (user-facing) */
-export const CCS_CONTROL_PANEL_SECRET = 'mgmt-491a8a82b58c41b43eaf43134a01a365';
+export const CCS_CONTROL_PANEL_SECRET = 'mgmt-f078070e88eadc04ff2688da7797b8be';
 
 /**
  * Config version - bump when config format changes to trigger regeneration
