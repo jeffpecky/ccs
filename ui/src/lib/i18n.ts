@@ -453,9 +453,6 @@ const resources = {
         failedFetch: 'Failed to fetch backups',
         failedRestore: 'Failed to restore backup',
         restoreSuccess: 'Backup restored successfully',
-        title: 'Settings Backups',
-        description:
-          'Restore previous versions of your settings.json file. Backups are created automatically when settings are modified.',
         none: 'No backups available',
         noneHint: 'Backups will appear here when you modify settings',
         latest: 'Latest',
@@ -465,22 +462,21 @@ const resources = {
         restoreConfirmPrefix: 'This will replace your current settings with backup from',
         restoreConfirmSuffix: 'This action cannot be undone.',
         cancel: 'Cancel',
-        fullBackup: 'Full Backup',
         exportTitle: 'Export CCS Configuration',
         exportDesc:
-          'Download all auth tokens, account data, and config as a single JSON file.',
+          'Download all auth tokens and account data as a single JSON file.',
         downloadBackup: 'Download Backup',
         exportSuccess: 'Backup downloaded successfully',
         exportFailed: 'Export failed',
         importTitle: 'Import CCS Configuration',
         importDesc:
-          'Restore from a backup file. This will replace ALL auth tokens, account data, and config.',
+          'Restore from a backup file. This will replace ALL auth tokens and account data.',
         importBackup: 'Import Backup',
         importSuccess: 'Import successful. Page will refresh.',
         importFailed: 'Import failed',
         importConfirmTitle: 'Replace All Data?',
         importConfirmDesc:
-          'This will delete ALL current auth tokens, account data, and config, then replace with the backup. A safety backup will be created before import. Continue?',
+          'This will delete ALL current auth tokens and account data, then replace with the backup. A safety backup will be created before import. Continue?',
         confirmImport: 'Yes, Import',
       },
       settingsProxy: {

@@ -260,23 +260,8 @@ export default function BackupsSection() {
       {/* Scrollable Content */}
       <ScrollArea className="flex-1">
         <div className="p-5 space-y-4">
-          {/* Header */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Archive className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">{t('settingsBackups.title')}</h2>
-            </div>
-            <p className="text-sm text-muted-foreground">{t('settingsBackups.description')}</p>
-          </div>
-
           {/* Export/Import */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Archive className="w-4 h-4" />
-              <h3 className="text-base font-medium">{t('settingsBackups.fullBackup')}</h3>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
               <Card className="p-4">
                 <div className="space-y-2">
                   <p className="text-sm font-medium">{t('settingsBackups.exportTitle')}</p>
@@ -308,7 +293,6 @@ export default function BackupsSection() {
                 </div>
               </Card>
             </div>
-          </div>
 
           {/* Backups List */}
           {backups.length === 0 ? (
