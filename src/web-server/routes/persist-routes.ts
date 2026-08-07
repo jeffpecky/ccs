@@ -295,10 +295,22 @@ router.get('/export', (_req: Request, res: Response): void => {
       if (!fs.existsSync(dir)) return [];
       return fs.readdirSync(dir)
         .filter((f) => f.endsWith('.json'))
-        .map((f) => ({
-          filename: f,
-          content: JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8')),
-        }));
+        .reduce<Array<{ filename: string; content: unknown }>>((acc, f) => {
+          const filePath = path.join(dir, f);
+          if (isSymlink(filePath)) {
+            console.warn(`[persist-routes] Skipping symlink in export: ${filePath}`);
+            return acc;
+          }
+          try {
+            acc.push({
+              filename: f,
+              content: JSON.parse(fs.readFileSync(filePath, 'utf-8')),
+            });
+          } catch (err) {
+            console.warn(`[persist-routes] Skipping invalid JSON file in export: ${filePath} - ${(err as Error).message}`);
+          }
+          return acc;
+        }, []);
     };
 
     const activeTokens = readTokenDir(authDir);
