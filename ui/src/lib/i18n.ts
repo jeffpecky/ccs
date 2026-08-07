@@ -457,7 +457,7 @@ const resources = {
         restoreSuccess: 'Backup restored successfully',
         title: 'Backups',
         none: 'No backups available',
-        noneHint: 'Backups will appear here when you modify settings',
+        noneHint: 'Import a backup to create a restore point',
         latest: 'Latest',
         restoring: 'Restoring...',
         restore: 'Restore',

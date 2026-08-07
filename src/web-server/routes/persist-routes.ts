@@ -6,7 +6,6 @@ import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getClaudeSettingsPath } from '../../utils/claude-config-path';
 import { getAuthDir } from '../../cliproxy/config/path-resolver';
 import { getCcsDir } from '../../config/config-loader-facade';
 import { getAccountsRegistryPath } from '../../cliproxy/accounts/token-file-ops';
@@ -101,51 +100,32 @@ function isSymlink(filePath: string): boolean {
   }
 }
 
-function parseBackupTimestamp(timestamp: string): Date | null {
-  const year = parseInt(timestamp.slice(0, 4), 10);
-  const month = parseInt(timestamp.slice(4, 6), 10);
-  const day = parseInt(timestamp.slice(6, 8), 10);
-  const hour = parseInt(timestamp.slice(9, 11), 10);
-  const minute = parseInt(timestamp.slice(11, 13), 10);
-  const second = parseInt(timestamp.slice(13, 15), 10);
-  const date = new Date(year, month - 1, day, hour, minute, second);
-
-  if (date.getFullYear() !== year) return null;
-  if (date.getMonth() !== month - 1) return null;
-  if (date.getDate() !== day) return null;
-  if (date.getHours() !== hour) return null;
-  if (date.getMinutes() !== minute) return null;
-  if (date.getSeconds() !== second) return null;
-
-  return date;
-}
-
 /** Get all backup files sorted by date (newest first) */
 function getBackupFiles(): BackupFile[] {
-  const settingsPath = getClaudeSettingsPath();
-  const dir = path.dirname(settingsPath);
-  if (!fs.existsSync(dir)) {
-    return [];
-  }
-  const backupPattern = /^settings\.json\.backup\.(\d{8}_\d{6})$/;
-  const files = fs
-    .readdirSync(dir)
-    .filter((f) => backupPattern.test(f))
-    .map((f) => {
-      const match = f.match(backupPattern);
-      if (!match) return null;
+  const backups: BackupFile[] = [];
+
+  // CCS import safety backups (~/.ccs/backups/pre-import-*)
+  const ccsDir = getCcsDir();
+  const backupsDir = path.join(ccsDir, 'backups');
+  if (fs.existsSync(backupsDir)) {
+    const entries = fs.readdirSync(backupsDir).filter((d) => d.startsWith('pre-import-'));
+    for (const entry of entries) {
+      const match = entry.match(/^pre-import-(\d+)$/);
+      if (!match) continue;
       const timestamp = match[1];
-      const date = parseBackupTimestamp(timestamp);
-      if (!date) return null;
-      return {
-        path: path.join(dir, f),
+      const dirPath = path.join(backupsDir, entry);
+      const date = new Date(fs.statSync(dirPath).mtimeMs);
+      backups.push({
+        path: dirPath,
         timestamp,
         date,
-      };
-    })
-    .filter((f): f is BackupFile => f !== null)
-    .sort((a, b) => b.date.getTime() - a.date.getTime());
-  return files;
+      });
+    }
+  }
+
+  // Sort by date (newest first)
+  backups.sort((a, b) => b.date.getTime() - a.date.getTime());
+  return backups;
 }
 
 /**
@@ -203,100 +183,77 @@ router.post('/restore', restoreRateLimiter, async (req: Request, res: Response):
 
     // Security: reject symlinks to prevent path traversal attacks
     if (isSymlink(backup.path)) {
-      res.status(400).json({ error: 'Backup file is a symlink - refusing for security' });
+      res.status(400).json({ error: 'Backup path is a symlink - refusing for security' });
       return;
     }
 
-    const settingsPath = getClaudeSettingsPath();
-    if (isSymlink(settingsPath)) {
-      res.status(400).json({ error: 'settings.json is a symlink - refusing for security' });
+    // Validate backup structure
+    if (!fs.existsSync(backup.path) || !fs.statSync(backup.path).isDirectory()) {
+      res.status(400).json({ error: 'Backup is not a valid directory' });
       return;
     }
 
-    // Read backup content securely using file descriptor to prevent TOCTOU
-    // Open with O_NOFOLLOW equivalent check then read atomically
-    let backupContent: string;
-    let fd: number | undefined;
-    try {
-      if (typeof fs.constants.O_NOFOLLOW !== 'number') {
-        res.status(500).json({ error: 'Secure restore unsupported on this platform' });
-        return;
-      }
-      // Open file descriptor for atomic read
-      const openFlags = fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW;
-      fd = fs.openSync(backup.path, openFlags);
-      const stats = fs.fstatSync(fd);
-      if (!stats.isFile()) {
-        res.status(400).json({ error: 'Backup path is not a regular file' });
-        return;
-      }
-      const buffer = Buffer.alloc(stats.size);
-      fs.readSync(fd, buffer, 0, stats.size, 0);
-      backupContent = buffer.toString('utf8');
+    const backupAuthDir = path.join(backup.path, 'auth');
+    const backupAccountsPath = path.join(backup.path, 'accounts.json');
 
-      const parsed = JSON.parse(backupContent);
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        res.status(400).json({ error: 'Backup file is corrupted' });
-        return;
-      }
-    } catch (err) {
-      const error = err as NodeJS.ErrnoException;
-      if (error.code === 'ELOOP') {
-        res.status(400).json({ error: 'Backup file is a symlink - refusing for security' });
-        return;
-      }
-      if (error.code === 'ENOENT') {
-        res.status(404).json({ error: 'Backup was deleted during restore' });
-        return;
-      }
-      res.status(400).json({ error: 'Backup file is corrupted or invalid JSON' });
+    if (!fs.existsSync(backupAuthDir)) {
+      res.status(400).json({ error: 'Backup is missing auth directory' });
       return;
-    } finally {
-      if (fd !== undefined) {
-        try {
-          fs.closeSync(fd);
-        } catch {
-          // Ignore close errors
+    }
+
+    // Restore with rollback on failure
+    const currentAuthDir = getAuthDir();
+    const rollbackAuthDir = path.join(path.dirname(currentAuthDir), 'auth-rollback-' + Date.now());
+
+    const clearDir = (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      for (const f of fs.readdirSync(dir)) {
+        const filePath = path.join(dir, f);
+        if (fs.lstatSync(filePath).isDirectory()) {
+          fs.rmSync(filePath, { recursive: true, force: true });
+        } else {
+          fs.unlinkSync(filePath);
         }
       }
-    }
+    };
 
-    // Atomic restore with rollback capability
-    const settingsDir = path.dirname(settingsPath);
-    const restoreNonce = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const tempPath = path.join(settingsDir, `settings.json.restore-${restoreNonce}.tmp`);
-    const rollbackPath = path.join(settingsDir, `settings.json.rollback-${restoreNonce}.tmp`);
+    const copyDir = (src: string, dest: string) => {
+      if (!fs.existsSync(src)) return;
+      fs.mkdirSync(dest, { recursive: true });
+      for (const f of fs.readdirSync(src)) {
+        const srcPath = path.join(src, f);
+        const destPath = path.join(dest, f);
+        if (fs.lstatSync(srcPath).isSymbolicLink()) continue;
+        fs.copyFileSync(srcPath, destPath);
+      }
+    };
 
     try {
-      // Step 1: Backup current settings for rollback
-      if (fs.existsSync(settingsPath)) {
-        fs.copyFileSync(settingsPath, rollbackPath, fs.constants.COPYFILE_EXCL);
+      // Step 1: Backup current auth for rollback
+      if (fs.existsSync(currentAuthDir)) {
+        fs.cpSync(currentAuthDir, rollbackAuthDir, { recursive: true });
       }
 
-      // Step 2: Write validated content to temp file
-      fs.writeFileSync(tempPath, backupContent, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+      // Step 2: Clear and restore auth directory
+      clearDir(currentAuthDir);
+      copyDir(backupAuthDir, currentAuthDir);
 
-      // Step 3: Atomic rename (replaces existing file)
-      fs.renameSync(tempPath, settingsPath);
-
-      // Step 4: Cleanup rollback backup on success
-      if (fs.existsSync(rollbackPath)) {
-        fs.unlinkSync(rollbackPath);
+      // Step 3: Restore accounts.json
+      if (fs.existsSync(backupAccountsPath)) {
+        const accountsPath = getAccountsRegistryPath();
+        fs.copyFileSync(backupAccountsPath, accountsPath);
       }
 
-      res.json({
-        success: true,
-        timestamp: backup.timestamp,
-        date: backup.date.toISOString(),
-      });
+      // Step 4: Cleanup rollback on success
+      if (fs.existsSync(rollbackAuthDir)) {
+        fs.rmSync(rollbackAuthDir, { recursive: true, force: true });
+      }
     } catch (error) {
       // Rollback on failure
       try {
-        if (fs.existsSync(rollbackPath)) {
-          fs.renameSync(rollbackPath, settingsPath);
-        }
-        if (fs.existsSync(tempPath)) {
-          fs.unlinkSync(tempPath);
+        if (fs.existsSync(rollbackAuthDir)) {
+          clearDir(currentAuthDir);
+          fs.cpSync(rollbackAuthDir, currentAuthDir, { recursive: true });
         }
       } catch (rollbackErr) {
         console.error('[persist-routes] Rollback failed:', rollbackErr);
@@ -307,6 +264,12 @@ router.post('/restore', restoreRateLimiter, async (req: Request, res: Response):
       }
       throw error;
     }
+
+    res.json({
+      success: true,
+      timestamp: backup.timestamp,
+      date: backup.date.toISOString(),
+    });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   } finally {
