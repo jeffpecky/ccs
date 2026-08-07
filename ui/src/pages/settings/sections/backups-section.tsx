@@ -23,6 +23,7 @@ import {
 import { RefreshCw, CheckCircle2, AlertCircle, RotateCcw, Clock, Archive } from 'lucide-react';
 import { useRawConfig } from '../hooks';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
 /** Duration in ms before success toast auto-dismisses */
 const SUCCESS_DISPLAY_DURATION_MS = 3000;
@@ -54,6 +55,10 @@ export default function BackupsSection() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [confirmRestore, setConfirmRestore] = useState<string | null>(null); // Confirmation dialog state
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [confirmImport, setConfirmImport] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   // Fetch backups
   const fetchBackups = useCallback(async () => {
@@ -112,6 +117,59 @@ export default function BackupsSection() {
         setError(err instanceof Error ? err.message : t('settings.unknownError'));
       } finally {
         setRestoring(null);
+      }
+    },
+    [fetchBackups, fetchRawConfig, t]
+  );
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const response = await fetch('/api/persist/export');
+      if (!response.ok) {
+        const data = (await response.json()) as { error?: string };
+        throw new Error(data.error || 'Export failed');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ccs-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(t('settingsBackups.exportSuccess'));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('settingsBackups.exportFailed'));
+    } finally {
+      setExporting(false);
+    }
+  }, [t]);
+
+  const handleImportFile = useCallback(
+    async (file: File) => {
+      setImporting(true);
+      try {
+        const text = await file.text();
+        const backup = JSON.parse(text);
+        const response = await fetch('/api/persist/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(backup),
+        });
+        const data = (await response.json()) as { error?: string; success?: boolean };
+        if (!response.ok) {
+          throw new Error(data.error || 'Import failed');
+        }
+        toast.success(t('settingsBackups.importSuccess'));
+        fetchBackups();
+        fetchRawConfig();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : t('settingsBackups.importFailed'));
+      } finally {
+        setImporting(false);
+        setConfirmImport(false);
       }
     },
     [fetchBackups, fetchRawConfig, t]
@@ -212,6 +270,47 @@ export default function BackupsSection() {
             <p className="text-sm text-muted-foreground">{t('settingsBackups.description')}</p>
           </div>
 
+          {/* Export/Import */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Archive className="w-4 h-4" />
+              <h3 className="text-base font-medium">{t('settingsBackups.fullBackup')}</h3>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Card className="p-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">{t('settingsBackups.exportTitle')}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('settingsBackups.exportDesc')}
+                  </p>
+                  <Button size="sm" onClick={handleExport} disabled={exporting}>
+                    {exporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    {t('settingsBackups.downloadBackup')}
+                  </Button>
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">{t('settingsBackups.importTitle')}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('settingsBackups.importDesc')}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setConfirmImport(true)}
+                    disabled={importing}
+                  >
+                    {importing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    {t('settingsBackups.importBackup')}
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          </div>
+
           {/* Backups List */}
           {backups.length === 0 ? (
             <Card className="p-8">
@@ -309,6 +408,35 @@ export default function BackupsSection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Confirmation Dialog */}
+      <AlertDialog open={confirmImport} onOpenChange={setConfirmImport}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('settingsBackups.importConfirmTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('settingsBackups.importConfirmDesc')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('settingsBackups.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => importFileRef.current?.click()}>
+              {t('settingsBackups.confirmImport')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <input
+        ref={importFileRef}
+        type="file"
+        accept=".json"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleImportFile(file);
+          e.target.value = '';
+        }}
+      />
     </>
   );
 }

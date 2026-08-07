@@ -465,6 +465,23 @@ const resources = {
         restoreConfirmPrefix: 'This will replace your current settings with backup from',
         restoreConfirmSuffix: 'This action cannot be undone.',
         cancel: 'Cancel',
+        fullBackup: 'Full Backup',
+        exportTitle: 'Export CCS Configuration',
+        exportDesc:
+          'Download all auth tokens, account data, and config as a single JSON file.',
+        downloadBackup: 'Download Backup',
+        exportSuccess: 'Backup downloaded successfully',
+        exportFailed: 'Export failed',
+        importTitle: 'Import CCS Configuration',
+        importDesc:
+          'Restore from a backup file. This will replace ALL auth tokens, account data, and config.',
+        importBackup: 'Import Backup',
+        importSuccess: 'Import successful. Page will refresh.',
+        importFailed: 'Import failed',
+        importConfirmTitle: 'Replace All Data?',
+        importConfirmDesc:
+          'This will delete ALL current auth tokens, account data, and config, then replace with the backup. A safety backup will be created before import. Continue?',
+        confirmImport: 'Yes, Import',
       },
       settingsProxy: {
         failedLoadAgyMode: 'Failed to load power user mode',
