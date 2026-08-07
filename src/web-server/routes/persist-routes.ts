@@ -67,6 +67,31 @@ class RestoreMutex {
 
 const restoreMutex = new RestoreMutex();
 
+/**
+ * Async mutex for import operations - prevents race conditions
+ *
+ * Design: Fast-fail lock.
+ * If an import is already running, callers immediately get `false`
+ * and the route returns HTTP 409. This avoids request pileup.
+ */
+class ImportMutex {
+  private locked = false;
+
+  async acquire(): Promise<boolean> {
+    if (this.locked) {
+      return false;
+    }
+    this.locked = true;
+    return true;
+  }
+
+  release(): void {
+    this.locked = false;
+  }
+}
+
+const importMutex = new ImportMutex();
+
 /** Check if path is a symlink (security check) */
 function isSymlink(filePath: string): boolean {
   try {
@@ -403,7 +428,14 @@ router.get('/export', (_req: Request, res: Response): void => {
 /**
  * POST /api/persist/import — Full CCS restore (wipe-and-replace)
  */
-router.post('/import', importLimiter, (req: Request, res: Response): void => {
+router.post('/import', importLimiter, async (req: Request, res: Response): Promise<void> => {
+  const acquired = await importMutex.acquire();
+  if (!acquired) {
+    res.status(409).json({ error: 'Import already in progress' });
+    return;
+  }
+
+  let safetyBackupPath: string | undefined;
   try {
     const backup = req.body as {
       version?: number;
@@ -422,7 +454,7 @@ router.post('/import', importLimiter, (req: Request, res: Response): void => {
     }
 
     // Create safety backup before wiping
-    const safetyBackupPath = createSafetyBackup();
+    safetyBackupPath = createSafetyBackup();
 
     const authDir = getAuthDir();
     const pausedDir = path.join(path.dirname(authDir), 'auth-paused');
@@ -468,10 +500,54 @@ router.post('/import', importLimiter, (req: Request, res: Response): void => {
     // Prune old safety backups
     pruneSafetyBackups(3);
 
-    res.json({ success: true, safetyBackup: safetyBackupPath });
+    const warnings: string[] = [];
+    if (backup.config !== undefined) {
+      warnings.push('config.yaml was not restored (not supported in wipe-and-replace)');
+    }
+
+    res.json({ success: true, safetyBackup: safetyBackupPath, warnings });
   } catch (error) {
+    // Rollback: restore from safety backup on partial failure
+    if (safetyBackupPath) {
+      try {
+        const authDir = getAuthDir();
+        const pausedDir = path.join(path.dirname(authDir), 'auth-paused');
+        const accountsPath = getAccountsRegistryPath();
+
+        const restoreDir = (src: string, dest: string) => {
+          if (!fs.existsSync(src)) return;
+          fs.mkdirSync(dest, { recursive: true });
+          for (const f of fs.readdirSync(dest)) {
+            const fp = path.join(dest, f);
+            if (!fs.lstatSync(fp).isSymbolicLink()) fs.unlinkSync(fp);
+          }
+          for (const f of fs.readdirSync(src)) {
+            const srcPath = path.join(src, f);
+            const destPath = path.join(dest, f);
+            if (!fs.lstatSync(srcPath).isSymbolicLink()) fs.copyFileSync(srcPath, destPath);
+          }
+        };
+
+        restoreDir(path.join(safetyBackupPath, 'auth'), authDir);
+        restoreDir(path.join(safetyBackupPath, 'auth-paused'), pausedDir);
+
+        const backupAccountsPath = path.join(safetyBackupPath, 'accounts.json');
+        if (fs.existsSync(backupAccountsPath)) {
+          fs.copyFileSync(backupAccountsPath, accountsPath);
+        }
+      } catch (rollbackErr) {
+        console.error('[persist-routes] Import rollback failed:', rollbackErr);
+        res.status(500).json({
+          error: 'Import failed and rollback unsuccessful - manual recovery may be needed',
+        });
+        return;
+      }
+    }
+
     const message = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: `Import failed: ${message}` });
+  } finally {
+    importMutex.release();
   }
 });
 
