@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getClaudeSettingsPath } from '../../utils/claude-config-path';
 import { getAuthDir } from '../../cliproxy/config/path-resolver';
+import { getCcsDir } from '../../config/config-loader-facade';
 import { getAccountsRegistryPath } from '../../cliproxy/accounts/token-file-ops';
 import { loadUnifiedConfig } from '../../config/unified-config-loader';
 
@@ -20,6 +21,14 @@ const restoreRateLimiter = rateLimit({
   message: { error: 'Too many restore attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+const importLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many import requests. Try again later.' },
 });
 
 interface BackupFile {
@@ -281,6 +290,50 @@ router.post('/restore', restoreRateLimiter, async (req: Request, res: Response):
   }
 });
 
+function createSafetyBackup(): string {
+  const ccsDir = getCcsDir();
+  const backupDir = path.join(ccsDir, 'backups', `pre-import-${Date.now()}`);
+  fs.mkdirSync(backupDir, { recursive: true });
+
+  const authDir = getAuthDir();
+  const pausedDir = path.join(path.dirname(authDir), 'auth-paused');
+  const accountsPath = getAccountsRegistryPath();
+
+  const copyDir = (src: string, dest: string) => {
+    if (!fs.existsSync(src)) return;
+    fs.mkdirSync(dest, { recursive: true });
+    for (const f of fs.readdirSync(src)) {
+      const srcPath = path.join(src, f);
+      const destPath = path.join(dest, f);
+      if (fs.lstatSync(srcPath).isSymbolicLink()) continue;
+      fs.copyFileSync(srcPath, destPath);
+    }
+  };
+
+  copyDir(authDir, path.join(backupDir, 'auth'));
+  copyDir(pausedDir, path.join(backupDir, 'auth-paused'));
+
+  if (fs.existsSync(accountsPath)) {
+    fs.copyFileSync(accountsPath, path.join(backupDir, 'accounts.json'));
+  }
+
+  return backupDir;
+}
+
+function pruneSafetyBackups(keepCount = 3): void {
+  const backupsDir = path.join(getCcsDir(), 'backups');
+  if (!fs.existsSync(backupsDir)) return;
+
+  const entries = fs.readdirSync(backupsDir)
+    .filter((d) => d.startsWith('pre-import-'))
+    .map((d) => ({ name: d, time: fs.statSync(path.join(backupsDir, d)).mtimeMs }))
+    .sort((a, b) => b.time - a.time);
+
+  for (const entry of entries.slice(keepCount)) {
+    fs.rmSync(path.join(backupsDir, entry.name), { recursive: true, force: true });
+  }
+}
+
 /**
  * GET /api/persist/export — Full CCS backup (auth + accounts + config)
  */
@@ -344,6 +397,81 @@ router.get('/export', (_req: Request, res: Response): void => {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ error: `Export failed: ${message}` });
+  }
+});
+
+/**
+ * POST /api/persist/import — Full CCS restore (wipe-and-replace)
+ */
+router.post('/import', importLimiter, (req: Request, res: Response): void => {
+  try {
+    const backup = req.body as {
+      version?: number;
+      auth?: { active?: Array<{ filename: string; content: unknown }>; paused?: Array<{ filename: string; content: unknown }> };
+      accounts?: unknown;
+      config?: unknown;
+    };
+
+    if (!backup || typeof backup !== 'object') {
+      res.status(400).json({ error: 'Invalid backup file' });
+      return;
+    }
+    if (backup.version !== 1) {
+      res.status(400).json({ error: 'Unrecognized backup format' });
+      return;
+    }
+
+    // Create safety backup before wiping
+    const safetyBackupPath = createSafetyBackup();
+
+    const authDir = getAuthDir();
+    const pausedDir = path.join(path.dirname(authDir), 'auth-paused');
+    const accountsPath = getAccountsRegistryPath();
+
+    // Clear existing auth directories
+    if (fs.existsSync(authDir)) {
+      for (const f of fs.readdirSync(authDir)) {
+        const fp = path.join(authDir, f);
+        if (!fs.lstatSync(fp).isSymbolicLink()) fs.unlinkSync(fp);
+      }
+    }
+    if (fs.existsSync(pausedDir)) {
+      for (const f of fs.readdirSync(pausedDir)) {
+        const fp = path.join(pausedDir, f);
+        if (!fs.lstatSync(fp).isSymbolicLink()) fs.unlinkSync(fp);
+      }
+    }
+
+    // Write imported auth files
+    const writeTokenFiles = (files: Array<{ filename: string; content: unknown }>, dir: string) => {
+      fs.mkdirSync(dir, { recursive: true });
+      for (const file of files) {
+        const safeName = path.basename(file.filename);
+        if (!safeName.endsWith('.json')) continue;
+        const dest = path.join(dir, safeName);
+        const tmp = `${dest}.tmp.${process.pid}`;
+        fs.writeFileSync(tmp, JSON.stringify(file.content, null, 2), { mode: 0o600 });
+        fs.renameSync(tmp, dest);
+      }
+    };
+
+    writeTokenFiles(backup.auth?.active ?? [], authDir);
+    writeTokenFiles(backup.auth?.paused ?? [], pausedDir);
+
+    // Overwrite accounts.json
+    if (backup.accounts) {
+      const tmp = `${accountsPath}.tmp.${process.pid}`;
+      fs.writeFileSync(tmp, JSON.stringify(backup.accounts, null, 2), { mode: 0o600 });
+      fs.renameSync(tmp, accountsPath);
+    }
+
+    // Prune old safety backups
+    pruneSafetyBackups(3);
+
+    res.json({ success: true, safetyBackup: safetyBackupPath });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: `Import failed: ${message}` });
   }
 });
 
