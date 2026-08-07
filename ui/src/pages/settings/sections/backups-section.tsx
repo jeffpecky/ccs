@@ -260,6 +260,12 @@ export default function BackupsSection() {
       {/* Scrollable Content */}
       <ScrollArea className="flex-1">
         <div className="p-5 space-y-4">
+          {/* Header */}
+          <div className="flex items-center gap-2 mb-2">
+            <Archive className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold">{t('settingsBackups.title')}</h2>
+          </div>
+
           {/* Export/Import */}
           <div className="grid gap-4 sm:grid-cols-2">
               <Card className="p-4">

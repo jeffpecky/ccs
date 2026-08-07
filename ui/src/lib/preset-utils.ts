@@ -10,7 +10,7 @@ import { CLIPROXY_DEFAULT_PORT } from './default-ports';
 export { CLIPROXY_DEFAULT_PORT } from './default-ports';
 
 /** Default fallback API key if fetch fails */
-const DEFAULT_API_KEY = 'ccs-internal-managed';
+const DEFAULT_API_KEY = 'sk-45c9e789d78326c6b25e11879fc81602edc7228a4c594339';
 
 /**
  * Fetch effective API key from backend

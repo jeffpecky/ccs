@@ -18,10 +18,10 @@ import { loadOrCreateUnifiedConfig } from '../../config/config-loader-facade';
 import { getActiveDockerLegacyApiKeys } from '../../docker/docker-key-rotation';
 
 /** Internal API key for CCS-managed requests */
-export const CCS_INTERNAL_API_KEY = 'ccs-internal-managed';
+export const CCS_INTERNAL_API_KEY = 'sk-45c9e789d78326c6b25e11879fc81602edc7228a4c594339';
 
-/** Simple secret key for Control Panel login (user-facing) */
-export const CCS_CONTROL_PANEL_SECRET = 'ccs';
+/** Secret key for Control Panel login (user-facing) */
+export const CCS_CONTROL_PANEL_SECRET = 'mgmt-491a8a82b58c41b43eaf43134a01a365';
 
 /**
  * Config version - bump when config format changes to trigger regeneration

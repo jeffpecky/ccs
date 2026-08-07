@@ -60,9 +60,9 @@ export type OAuthAccounts = Record<string, string>;
  * Allows customization of API key and management secret for CLIProxyAPI.
  */
 export interface CLIProxyAuthConfig {
-  /** API key for CCS-managed requests (default: 'ccs-internal-managed') */
+  /** API key for CCS-managed requests (default: 'sk-...') */
   api_key?: string;
-  /** Management secret for Control Panel login (default: 'ccs') */
+  /** Management secret for Control Panel login (default: 'mgmt-...') */
   management_secret?: string;
 }
 

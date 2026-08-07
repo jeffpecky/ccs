@@ -453,6 +453,7 @@ const resources = {
         failedFetch: 'Failed to fetch backups',
         failedRestore: 'Failed to restore backup',
         restoreSuccess: 'Backup restored successfully',
+        title: 'Backups',
         none: 'No backups available',
         noneHint: 'Backups will appear here when you modify settings',
         latest: 'Latest',
