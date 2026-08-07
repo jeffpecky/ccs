@@ -7,7 +7,7 @@
  * For Kiro: Also shows "Import from IDE" option.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, ExternalLink, User, Download, Copy, Check, ShieldAlert } from 'lucide-react';
+import { Loader2, ExternalLink, User, Download, Copy, Check } from 'lucide-react';
 import { useKiroImport } from '@/hooks/use-cliproxy';
 import { useCliproxyAuthFlow } from '@/hooks/use-cliproxy-auth-flow';
 import { applyDefaultPreset } from '@/lib/preset-utils';
@@ -56,11 +56,6 @@ interface AddAccountDialogProps {
   isFirstAccount?: boolean;
 }
 
-interface PowerUserModeSyncOptions {
-  pendingMessage?: string | null;
-  disabledMessage?: string | null;
-}
-
 export function AddAccountDialog({
   open,
   onClose,
@@ -74,8 +69,6 @@ export function AddAccountDialog({
   const [callbackUrl, setCallbackUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [powerUserModeEnabled, setPowerUserModeEnabled] = useState(false);
-  const [powerUserModeLoading, setPowerUserModeLoading] = useState(false);
   const [kiroAuthMethod, setKiroAuthMethod] = useState<KiroAuthMethod>(DEFAULT_KIRO_AUTH_METHOD);
   const [kiroIDCStartUrl, setKiroIDCStartUrl] = useState('');
   const [kiroIDCRegion, setKiroIDCRegion] = useState('');
@@ -85,15 +78,11 @@ export function AddAccountDialog({
   const [gitlabPersonalAccessToken, setGitlabPersonalAccessToken] = useState('');
   const { t } = useTranslation();
   const wasAuthenticatingRef = useRef(false);
-  const powerUserModeRequestIdRef = useRef(0);
-  const powerUserModeLoadErrorShownRef = useRef(false);
   const authFlow = useCliproxyAuthFlow();
   const kiroImportMutation = useKiroImport();
 
   const isKiro = provider === 'kiro';
   const isGitLab = provider === 'gitlab';
-  const supportsPowerUserMode = provider === 'agy' || provider === 'gemini';
-  const isPowerUserModePending = supportsPowerUserMode && powerUserModeLoading;
   const defaultDeviceCode = isDeviceCodeProvider(provider);
   const kiroMethodOption = getKiroAuthMethodOption(kiroAuthMethod);
   const isKiroIdc = isKiro && kiroAuthMethod === 'idc';
@@ -115,69 +104,11 @@ export function AddAccountDialog({
   const isReauth = Boolean(account);
   const accountLabel = account?.email || account?.nickname || account?.id || displayName;
 
-  const fetchPowerUserModeState = useCallback(async (): Promise<boolean> => {
-    const response = await fetch('/api/settings/auth/antigravity-risk');
-    if (!response.ok) {
-      throw new Error('Failed to load power user mode setting');
-    }
-    const data = (await response.json()) as { antigravityAckBypass?: boolean };
-    return data.antigravityAckBypass === true;
-  }, []);
-
-  const syncPowerUserModeState = useCallback(
-    async ({ pendingMessage = null, disabledMessage = null }: PowerUserModeSyncOptions = {}) => {
-      const requestId = ++powerUserModeRequestIdRef.current;
-      setPowerUserModeLoading(true);
-
-      if (pendingMessage !== null) {
-        setLocalError(pendingMessage);
-      }
-
-      try {
-        const enabled = await fetchPowerUserModeState();
-        if (powerUserModeRequestIdRef.current !== requestId) {
-          return enabled;
-        }
-
-        setPowerUserModeEnabled(enabled);
-
-        if (disabledMessage) {
-          setLocalError(enabled ? null : disabledMessage);
-        } else if (pendingMessage !== null) {
-          setLocalError(null);
-        }
-
-        return enabled;
-      } catch {
-        if (powerUserModeRequestIdRef.current !== requestId) {
-          return false;
-        }
-
-        setPowerUserModeEnabled(false);
-        setLocalError(disabledMessage ?? t('addAccountDialog.powerUserLoadFailed'));
-
-        if (!powerUserModeLoadErrorShownRef.current) {
-          powerUserModeLoadErrorShownRef.current = true;
-          toast.error(t('addAccountDialog.powerUserLoadFailed'));
-        }
-
-        return false;
-      } finally {
-        if (powerUserModeRequestIdRef.current === requestId) {
-          setPowerUserModeLoading(false);
-        }
-      }
-    },
-    [fetchPowerUserModeState, t]
-  );
-
   const resetAndClose = () => {
     setNickname('');
     setCallbackUrl('');
     setCopied(false);
     setLocalError(null);
-    setPowerUserModeEnabled(false);
-    setPowerUserModeLoading(false);
     setKiroAuthMethod(DEFAULT_KIRO_AUTH_METHOD);
     setKiroIDCStartUrl('');
     setKiroIDCRegion('');
@@ -185,8 +116,6 @@ export function AddAccountDialog({
     setGitlabAuthMode('oauth');
     setGitlabBaseUrl('');
     setGitlabPersonalAccessToken('');
-    powerUserModeRequestIdRef.current += 1;
-    powerUserModeLoadErrorShownRef.current = false;
     wasAuthenticatingRef.current = false;
     onClose();
   };
@@ -196,23 +125,6 @@ export function AddAccountDialog({
       setLocalError(null);
     }
   }, [provider, open]);
-
-  useEffect(() => {
-    return () => {
-      powerUserModeRequestIdRef.current += 1;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!open || !supportsPowerUserMode) {
-      powerUserModeRequestIdRef.current += 1;
-      setPowerUserModeEnabled(false);
-      setPowerUserModeLoading(false);
-      return;
-    }
-
-    void syncPowerUserModeState();
-  }, [open, provider, supportsPowerUserMode, syncPowerUserModeState]);
 
   // When authFlow completes successfully (polling detected success), apply preset and close
   useEffect(() => {
@@ -262,10 +174,6 @@ export function AddAccountDialog({
    * - Browser URL providers use /start-url and polling.
    */
   const handleAuthenticate = () => {
-    if (isPowerUserModePending) {
-      setLocalError(t('addAccountDialog.powerUserLoading'));
-      return;
-    }
     setLocalError(null);
     if (isKiroIdc && !kiroIDCStartUrlTrimmed) {
       setLocalError('IDC Start URL is required for Kiro IAM Identity Center login.');
@@ -346,16 +254,6 @@ export function AddAccountDialog({
         </DialogHeader>
 
         <div className="min-h-0 space-y-4 overflow-y-auto px-6 py-4">
-          {supportsPowerUserMode && powerUserModeEnabled && !showAuthUI && (
-            <div className="rounded-lg border border-amber-400/35 bg-amber-50/70 p-3 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/25 dark:text-amber-100">
-              <div className="mb-1.5 flex items-center gap-1.5 font-semibold">
-                <ShieldAlert className="h-3.5 w-3.5" />
-                {t('addAccountDialog.powerUserEnabled')}
-              </div>
-              {t('addAccountDialog.powerUserSkipped')}
-            </div>
-          )}
-
           {/* Kiro auth method */}
           {isKiro && !showAuthUI && (
             <div className="space-y-2">
@@ -711,10 +609,7 @@ export function AddAccountDialog({
               <Button
                 onClick={handleAuthenticate}
                 className="w-full sm:w-auto"
-                disabled={
-                  isPending ||
-                  isPowerUserModePending
-                }
+                disabled={isPending}
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
                 {isReauth ? 'Reauthenticate' : t('addAccountDialog.authenticate')}

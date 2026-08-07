@@ -5,8 +5,8 @@
  * Uses a simple Map-based cache with automatic expiration.
  */
 
-/** Default TTL for quota cache entries (2 minutes) */
-const DEFAULT_CACHE_TTL_MS = 2 * 60 * 1000;
+/** Default TTL for quota cache entries (0 = disabled, quota is real-time) */
+const DEFAULT_CACHE_TTL_MS = 0;
 
 /** Cache entry with timestamp */
 interface CacheEntry<T> {

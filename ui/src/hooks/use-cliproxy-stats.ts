@@ -334,15 +334,20 @@ async function fetchGhcpQuotaApi(accountId: string): Promise<GhcpQuotaResult> {
 // Re-export unified type from utils for consumers
 export type { UnifiedQuotaResult } from '@/lib/utils';
 
+const DEFAULT_QUOTA_REFRESH_MS = 60000;
+const CLAUDE_QUOTA_REFRESH_MS = 180000;
+
 function getAccountQuotaQueryOptions(provider: string, accountId: string, enabled = true) {
   const canonicalProvider = normalizeQuotaProvider(provider);
+  const refreshMs =
+    canonicalProvider === 'claude' ? CLAUDE_QUOTA_REFRESH_MS : DEFAULT_QUOTA_REFRESH_MS;
 
   return {
     queryKey: ['account-quota', canonicalProvider ?? provider, accountId],
     queryFn: () => fetchQuotaByProvider(canonicalProvider ?? provider, accountId),
     enabled: enabled && !!canonicalProvider && !!accountId,
-    staleTime: 60000,
-    refetchInterval: 60000,
+    staleTime: refreshMs,
+    refetchInterval: refreshMs,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     retry: 1 as const,

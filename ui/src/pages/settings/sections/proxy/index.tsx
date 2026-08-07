@@ -3,10 +3,9 @@
  * Settings section for CLIProxyAPI configuration (local/remote)
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -18,8 +17,6 @@ import {
   Bug,
   Box,
   AlertTriangle,
-  ShieldAlert,
-  ExternalLink,
 } from 'lucide-react';
 import { useProxyConfig, useRawConfig } from '../../hooks';
 import { useUpdateBackend, useProxyStatus } from '@/hooks/use-cliproxy';
@@ -28,7 +25,7 @@ import { RemoteProxyCard } from './remote-proxy-card';
 import { ProxyStatusWidget } from '@/components/monitoring/proxy-status-widget';
 import { api } from '@/lib/api-client';
 import { CLIPROXY_DEFAULT_PORT } from '@/lib/preset-utils';
-import { RISK_ACK_PHRASE } from '@/components/account/antigravity-responsibility-constants';
+
 import {
   CORE_CLIPROXY_PROVIDERS,
   PLUS_EXTRA_CLIPROXY_PROVIDERS,
@@ -40,10 +37,6 @@ import { useTranslation } from 'react-i18next';
 
 /** LocalStorage key for debug mode preference */
 const DEBUG_MODE_KEY = 'ccs_debug_mode';
-
-function normalizeRiskAckPhrase(value: string): string {
-  return value.trim().replace(/\s+/g, ' ').toUpperCase();
-}
 
 export default function ProxySection() {
   const { t } = useTranslation();
@@ -80,15 +73,6 @@ export default function ProxySection() {
       return false;
     }
   });
-  const [agyAckBypass, setAgyAckBypass] = useState(false);
-  const [agyAckBypassLoading, setAgyAckBypassLoading] = useState(true);
-  const [agyAckBypassSaving, setAgyAckBypassSaving] = useState(false);
-  const [showAgyEnableConfirm, setShowAgyEnableConfirm] = useState(false);
-  const [agyEnableConfirmPhrase, setAgyEnableConfirmPhrase] = useState('');
-  const agyAckBypassSavingRef = useRef(false);
-  const isAgyConfirmPhraseValid =
-    normalizeRiskAckPhrase(agyEnableConfirmPhrase) === RISK_ACK_PHRASE;
-
   const handleDebugModeChange = (enabled: boolean) => {
     setDebugMode(enabled);
     try {
@@ -97,101 +81,6 @@ export default function ProxySection() {
       // Ignore storage errors
     }
   };
-
-  const fetchAgyAckBypass = useCallback(async () => {
-    try {
-      setAgyAckBypassLoading(true);
-      const response = await fetch('/api/settings/auth/antigravity-risk');
-      if (!response.ok) {
-        throw new Error(t('settingsProxy.failedLoadAgyMode'));
-      }
-      const data = (await response.json()) as { antigravityAckBypass?: boolean };
-      setAgyAckBypass(data.antigravityAckBypass === true);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('settingsProxy.failedLoadAgyMode'));
-      setAgyAckBypass(false);
-    } finally {
-      setAgyAckBypassLoading(false);
-    }
-  }, [t]);
-
-  const persistAgyAckBypass = useCallback(
-    async (nextValue: boolean) => {
-      if (agyAckBypassSavingRef.current || agyAckBypassSaving || saving) return;
-
-      try {
-        agyAckBypassSavingRef.current = true;
-        setAgyAckBypassSaving(true);
-
-        const response = await fetch('/api/settings/auth/antigravity-risk', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ antigravityAckBypass: nextValue }),
-        });
-
-        const payload = (await response.json()) as {
-          antigravityAckBypass?: boolean;
-          error?: string;
-        };
-
-        if (!response.ok) {
-          throw new Error(payload.error || t('settingsProxy.failedUpdateAgyMode'));
-        }
-
-        const persistedValue = payload.antigravityAckBypass === true;
-
-        const verifyResponse = await fetch('/api/settings/auth/antigravity-risk', {
-          cache: 'no-store',
-        });
-        if (!verifyResponse.ok) {
-          throw new Error(t('settingsProxy.failedVerifyAgyMode'));
-        }
-        const verifyData = (await verifyResponse.json()) as { antigravityAckBypass?: boolean };
-        const verifiedValue = verifyData.antigravityAckBypass === true;
-        if (verifiedValue !== nextValue) {
-          throw new Error(t('settingsProxy.notPersistedAgyMode'));
-        }
-
-        setAgyAckBypass(verifiedValue && persistedValue);
-        setShowAgyEnableConfirm(false);
-        setAgyEnableConfirmPhrase('');
-        toast.success(
-          nextValue ? t('settingsProxy.agyModeEnabled') : t('settingsProxy.agyModeDisabled')
-        );
-        await fetchRawConfig();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : t('settingsProxy.failedUpdateAgyMode'));
-      } finally {
-        agyAckBypassSavingRef.current = false;
-        setAgyAckBypassSaving(false);
-      }
-    },
-    [agyAckBypassSaving, fetchRawConfig, saving, t]
-  );
-
-  const handleAgyAckBypassChange = useCallback(
-    (nextValue: boolean) => {
-      if (agyAckBypassSavingRef.current || agyAckBypassSaving || saving) return;
-
-      if (nextValue) {
-        setShowAgyEnableConfirm(true);
-        return;
-      }
-
-      setShowAgyEnableConfirm(false);
-      setAgyEnableConfirmPhrase('');
-      void persistAgyAckBypass(false);
-    },
-    [agyAckBypassSaving, persistAgyAckBypass, saving]
-  );
-
-  const confirmAgyEnable = useCallback(() => {
-    if (!isAgyConfirmPhraseValid) {
-      toast.error(t('settingsProxy.typePhraseToContinue', { value: RISK_ACK_PHRASE }));
-      return;
-    }
-    void persistAgyAckBypass(true);
-  }, [isAgyConfirmPhraseValid, persistAgyAckBypass, t]);
 
   // Backend state (loaded from API) + mutation hook for proper query invalidation
   const [backend, setBackend] = useState<'original' | 'plus'>('original');
@@ -258,13 +147,12 @@ export default function ProxySection() {
   // Load data on mount
   useEffect(() => {
     fetchConfig();
-    void fetchAgyAckBypass();
     fetchRawConfig();
 
     void fetchBackend();
 
     void checkPlusOnlyVariants();
-  }, [fetchConfig, fetchAgyAckBypass, fetchRawConfig, fetchBackend, checkPlusOnlyVariants]);
+  }, [fetchConfig, fetchRawConfig, fetchBackend, checkPlusOnlyVariants]);
 
   if (loading || !config) {
     return (
@@ -545,112 +433,6 @@ export default function ProxySection() {
             )}
           </div>
 
-          {/* Safety */}
-          <div className="space-y-3">
-            <h3 className="text-base font-medium flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-amber-700 dark:text-amber-300" />
-              {t('settingsProxy.safety')}
-            </h3>
-            <div className="space-y-3 rounded-lg border border-amber-400/35 bg-amber-50/70 p-4 dark:border-amber-800/60 dark:bg-amber-950/25">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <p className="font-medium text-sm">{t('settingsProxy.agyModeTitle')}</p>
-                  <p className="text-xs text-muted-foreground">{t('settingsProxy.agyModeDesc')}</p>
-                </div>
-                <Switch
-                  aria-labelledby="agy-power-user-mode-label"
-                  aria-describedby="agy-power-user-mode-description"
-                  checked={agyAckBypass}
-                  disabled={agyAckBypassLoading || agyAckBypassSaving || saving}
-                  onCheckedChange={handleAgyAckBypassChange}
-                />
-              </div>
-              <p
-                id="agy-power-user-mode-description"
-                className="text-xs text-amber-800/90 dark:text-amber-200/90"
-              >
-                {t('settingsProxy.agyWarning')}
-              </p>
-              {showAgyEnableConfirm && (
-                <div className="space-y-3 rounded-lg border border-rose-500/40 bg-rose-500/[0.08] p-3.5">
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-semibold tracking-wide text-rose-900 dark:text-rose-200">
-                      {t('settingsProxy.finalConfirm')}
-                    </p>
-                    <p className="text-xs leading-relaxed text-rose-800/95 dark:text-rose-200/90">
-                      {t('settingsProxy.finalConfirmDesc')}
-                    </p>
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <div className="rounded-md border border-rose-400/30 bg-rose-500/10 p-2.5">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-900 dark:text-rose-200">
-                        {t('settingsProxy.step1')}
-                      </p>
-                      <a
-                        href="https://github.com/kaitranntt/ccs/issues/509"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-rose-800 underline decoration-rose-500/60 underline-offset-2 transition-colors hover:text-rose-700 dark:text-rose-200"
-                      >
-                        {t('settingsProxy.readIssue')}
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    </div>
-                    <div className="rounded-md border border-rose-400/30 bg-rose-500/10 p-2.5">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-900 dark:text-rose-200">
-                        {t('settingsProxy.step2')}
-                      </p>
-                      <p className="mt-1 text-xs text-rose-800/95 dark:text-rose-200/90">
-                        {t('settingsProxy.typePrefix')}{' '}
-                        <code className="rounded bg-background/80 px-1 py-0.5 font-mono">
-                          {RISK_ACK_PHRASE}
-                        </code>{' '}
-                        {t('settingsProxy.typeSuffix')}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Input
-                      value={agyEnableConfirmPhrase}
-                      onChange={(e) => setAgyEnableConfirmPhrase(e.target.value)}
-                      placeholder={RISK_ACK_PHRASE}
-                      disabled={agyAckBypassSaving || saving}
-                      className="font-mono text-xs"
-                      aria-label={t('settingsProxy.typePhraseAria')}
-                    />
-                    <p className="text-[11px] text-rose-800/90 dark:text-rose-200/80">
-                      {t('settingsProxy.exactPhrase')}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setShowAgyEnableConfirm(false);
-                        setAgyEnableConfirmPhrase('');
-                      }}
-                      disabled={agyAckBypassSaving || saving}
-                    >
-                      {t('settingsBackups.cancel')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={confirmAgyEnable}
-                      disabled={!isAgyConfirmPhraseValid || agyAckBypassSaving || saving}
-                    >
-                      {t('settingsProxy.enableAgyMode')}
-                    </Button>
-                  </div>
-                </div>
-              )}
-              <span id="agy-power-user-mode-label" className="sr-only">
-                {t('settingsProxy.toggleAgyMode')}
-              </span>
-            </div>
-          </div>
-
           {/* Remote Settings - Show when remote mode is enabled */}
           {isRemoteMode && (
             <RemoteProxyCard
@@ -765,12 +547,11 @@ export default function ProxySection() {
           size="sm"
           onClick={() => {
             fetchConfig();
-            fetchAgyAckBypass();
             fetchRawConfig();
             fetchBackend();
             checkPlusOnlyVariants();
           }}
-          disabled={loading || saving || agyAckBypassSaving}
+          disabled={loading || saving}
           className="w-full"
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />

@@ -37,9 +37,7 @@ import { createRouteErrorHelpers } from './route-helpers';
 import {
   getCcsDir,
   loadConfigSafe,
-  loadOrCreateUnifiedConfig,
   loadSettings,
-  mutateConfig,
 } from '../../config/config-loader-facade';
 
 const router = Router();
@@ -146,22 +144,6 @@ function requireSensitiveLocalAccess(req: Request, res: Response): boolean {
     res,
     'Sensitive settings endpoints require localhost access when dashboard auth is disabled.'
   );
-}
-
-function classifyConfigSaveFailure(error: unknown): { statusCode: number; message: string } {
-  const message = error instanceof Error ? error.message.toLowerCase() : '';
-
-  if (message.includes('failed to acquire config lock')) {
-    return { statusCode: 409, message: 'Configuration is busy. Retry in a moment.' };
-  }
-  if (message.includes('eacces') || message.includes('eperm') || message.includes('permission')) {
-    return { statusCode: 403, message: 'Insufficient permission to update configuration.' };
-  }
-  if (message.includes('enospc') || message.includes('no space left')) {
-    return { statusCode: 507, message: 'Insufficient disk space to update configuration.' };
-  }
-
-  return { statusCode: 500, message: 'Failed to update Antigravity power user mode.' };
 }
 
 /**
@@ -740,55 +722,6 @@ router.delete('/:profile/presets/:name', (req: Request, res: Response): void => 
 });
 
 // ==================== Auth Tokens ====================
-
-/**
- * GET /api/settings/auth/antigravity-risk - Get shared power user bypass setting
- */
-router.get('/auth/antigravity-risk', (req: Request, res: Response): void => {
-  if (!requireSensitiveLocalAccess(req, res)) return;
-
-  try {
-    const config = loadOrCreateUnifiedConfig();
-    res.json({
-      antigravityAckBypass: config.cliproxy?.safety?.antigravity_ack_bypass === true,
-    });
-  } catch (error) {
-    respondInternalError(res, error, 'Failed to load power user mode.');
-  }
-});
-
-/**
- * PUT /api/settings/auth/antigravity-risk - Update shared power user bypass setting
- */
-router.put('/auth/antigravity-risk', (req: Request, res: Response): void => {
-  if (!requireSensitiveLocalAccess(req, res)) return;
-
-  try {
-    const body = req.body as { antigravityAckBypass?: unknown } | null | undefined;
-    const antigravityAckBypass =
-      body && typeof body === 'object' ? body.antigravityAckBypass : undefined;
-
-    if (typeof antigravityAckBypass !== 'boolean') {
-      res.status(400).json({ error: 'antigravityAckBypass must be a boolean' });
-      return;
-    }
-
-    const updatedConfig = mutateConfig((config) => {
-      config.cliproxy.safety = {
-        ...(config.cliproxy.safety ?? {}),
-        antigravity_ack_bypass: antigravityAckBypass,
-      };
-    });
-
-    res.json({
-      success: true,
-      antigravityAckBypass: updatedConfig.cliproxy?.safety?.antigravity_ack_bypass === true,
-    });
-  } catch (error) {
-    const classified = classifyConfigSaveFailure(error);
-    respondInternalError(res, error, classified.message, classified.statusCode);
-  }
-});
 
 /**
  * GET /api/settings/auth/tokens - Get current auth token status (masked)
