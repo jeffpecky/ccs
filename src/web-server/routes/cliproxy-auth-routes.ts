@@ -1202,6 +1202,8 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
         expectedAccountId: targetAccountId,
         knownTokenFiles: listProviderTokenSnapshots(localProvider),
       });
+    } else {
+      logger.warn('no-oauth-state', `No OAuth state received from CLIProxyAPI for provider=${provider}`, { provider });
     }
 
     res.json({
