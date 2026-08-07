@@ -23,7 +23,6 @@ import {
 import { RefreshCw, CheckCircle2, AlertCircle, RotateCcw, Clock, Archive } from 'lucide-react';
 import { useRawConfig } from '../hooks';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 
 /** Duration in ms before success toast auto-dismisses */
 const SUCCESS_DISPLAY_DURATION_MS = 3000;
@@ -139,9 +138,9 @@ export default function BackupsSection() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success(t('settingsBackups.exportSuccess'));
+      setSuccess(t('settingsBackups.exportSuccess'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('settingsBackups.exportFailed'));
+      setError(err instanceof Error ? err.message : t('settingsBackups.exportFailed'));
     } finally {
       setExporting(false);
     }
@@ -162,11 +161,11 @@ export default function BackupsSection() {
         if (!response.ok) {
           throw new Error(data.error || 'Import failed');
         }
-        toast.success(t('settingsBackups.importSuccess'));
+        setSuccess(t('settingsBackups.importSuccess'));
         fetchBackups();
         fetchRawConfig();
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : t('settingsBackups.importFailed'));
+        setError(err instanceof Error ? err.message : t('settingsBackups.importFailed'));
       } finally {
         setImporting(false);
         setConfirmImport(false);

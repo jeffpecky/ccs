@@ -10,7 +10,6 @@ import { getClaudeSettingsPath } from '../../utils/claude-config-path';
 import { getAuthDir } from '../../cliproxy/config/path-resolver';
 import { getCcsDir } from '../../config/config-loader-facade';
 import { getAccountsRegistryPath } from '../../cliproxy/accounts/token-file-ops';
-import { loadUnifiedConfig } from '../../config/unified-config-loader';
 
 const router = Router();
 
@@ -400,20 +399,11 @@ router.get('/export', (_req: Request, res: Response): void => {
       accounts = JSON.parse(fs.readFileSync(accountsPath, 'utf-8'));
     }
 
-    // Read config.yaml as JSON
-    let config: unknown = {};
-    try {
-      config = loadUnifiedConfig();
-    } catch {
-      // Config may not exist yet
-    }
-
     const backup = {
       version: 1,
       exportedAt: new Date().toISOString(),
       auth: { active: activeTokens, paused: pausedTokens },
       accounts,
-      config,
     };
 
     res.setHeader('Content-Type', 'application/json');
@@ -441,7 +431,6 @@ router.post('/import', importLimiter, async (req: Request, res: Response): Promi
       version?: number;
       auth?: { active?: Array<{ filename: string; content: unknown }>; paused?: Array<{ filename: string; content: unknown }> };
       accounts?: unknown;
-      config?: unknown;
     };
 
     if (!backup || typeof backup !== 'object') {
@@ -500,12 +489,7 @@ router.post('/import', importLimiter, async (req: Request, res: Response): Promi
     // Prune old safety backups
     pruneSafetyBackups(3);
 
-    const warnings: string[] = [];
-    if (backup.config !== undefined) {
-      warnings.push('config.yaml was not restored (not supported in wipe-and-replace)');
-    }
-
-    res.json({ success: true, safetyBackup: safetyBackupPath, warnings });
+    res.json({ success: true, safetyBackup: safetyBackupPath });
   } catch (error) {
     // Rollback: restore from safety backup on partial failure
     if (safetyBackupPath) {
