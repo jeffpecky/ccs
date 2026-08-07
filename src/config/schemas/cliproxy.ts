@@ -102,7 +102,6 @@ export interface CLIProxyLoggingConfig {
  * Controls high-risk flow safeguards for supported providers.
  */
 export interface CLIProxySafetyConfig {
-  /** Allow skipping AGY responsibility checks and Gemini dashboard typed acknowledgement */
   antigravity_ack_bypass?: boolean;
 }
 

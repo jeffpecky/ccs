@@ -69,6 +69,9 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
   lines.push(
     '# Optional: cliproxy.management_panel_repository overrides the generated CPAMC repo.'
   );
+  lines.push('#');
+  lines.push('# Token Refresh: Background worker refreshes OAuth tokens before expiry.');
+  lines.push('# Enabled by default. Set cliproxy.token_refresh.enabled: false to disable.');
   lines.push('# ----------------------------------------------------------------------------');
   lines.push(
     yaml.dump({ cliproxy: config.cliproxy }, { indent: 2, lineWidth: -1, quotingType: '"' }).trim()

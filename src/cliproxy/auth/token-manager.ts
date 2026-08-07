@@ -50,6 +50,7 @@ export type ProviderTokenSnapshot = {
   mtimeMs: number;
   accountId?: string;
   fingerprint?: string;
+  email?: string;
 };
 
 type TokenCandidate = {
@@ -154,13 +155,15 @@ export function listProviderTokenSnapshots(
     mtimeMs: candidate.mtimeMs,
     accountId: candidate.accountId,
     fingerprint: candidate.fingerprint,
+    email: candidate.email,
   }));
 }
 
 export function findNewTokenSnapshot(
   currentTokenFiles: ProviderTokenSnapshot[],
   knownTokenFiles: ProviderTokenSnapshot[],
-  expectedAccountId?: string
+  expectedAccountId?: string,
+  expectedEmail?: string
 ): ProviderTokenSnapshot | null {
   const knownSnapshotsByFile = new Map(
     knownTokenFiles.map((snapshot) => [snapshot.file, snapshot])
@@ -170,11 +173,28 @@ export function findNewTokenSnapshot(
     currentTokenFiles.find((snapshot) => {
       const knownSnapshot = knownSnapshotsByFile.get(snapshot.file);
       if (!expectedAccountId) {
-        return !knownSnapshot;
+        // New account: accept if file is new OR if known file was updated
+        if (!knownSnapshot) {
+          return true;
+        }
+        return (
+          snapshot.fingerprint !== knownSnapshot.fingerprint ||
+          snapshot.mtimeMs !== knownSnapshot.mtimeMs
+        );
       }
 
       const matchesExpectedAccount =
         snapshot.file === expectedAccountId || snapshot.accountId === expectedAccountId;
+      if (!matchesExpectedAccount && expectedEmail) {
+        const candidate = listTokenCandidatesFromSnapshots(
+          [snapshot],
+          knownTokenFiles
+        )[0];
+        if (candidate && candidate.email?.toLowerCase() === expectedEmail.toLowerCase()) {
+          return !knownSnapshot || snapshot.fingerprint !== knownSnapshot.fingerprint || snapshot.mtimeMs !== knownSnapshot.mtimeMs;
+        }
+        return false;
+      }
       if (!matchesExpectedAccount) {
         return false;
       }
@@ -191,16 +211,39 @@ export function findNewTokenSnapshot(
   );
 }
 
+function listTokenCandidatesFromSnapshots(
+  snapshots: ProviderTokenSnapshot[],
+  knownTokenFiles: ProviderTokenSnapshot[]
+): TokenCandidate[] {
+  return snapshots.map((s) => ({
+    file: s.file,
+    filePath: '',
+    accountId: s.accountId || s.file,
+    mtimeMs: s.mtimeMs,
+    alreadyRegistered: knownTokenFiles.some((k) => k.file === s.file),
+    fingerprint: s.fingerprint || '',
+    email: s.email,
+  }));
+}
+
 export function findNewTokenSnapshotForAuthAttempt(
   provider: CLIProxyProvider,
   tokenDir: string,
   knownTokenFiles: ProviderTokenSnapshot[],
   expectedAccountId?: string
 ): ProviderTokenSnapshot | null {
+  let expectedEmail: string | undefined;
+  if (expectedAccountId) {
+    const accounts = getProviderAccounts(provider);
+    const expectedAccount = accounts.find((a) => a.id === expectedAccountId);
+    expectedEmail = expectedAccount?.email;
+  }
+
   return findNewTokenSnapshot(
     listProviderTokenSnapshots(provider, tokenDir),
     knownTokenFiles,
-    expectedAccountId
+    expectedAccountId,
+    expectedEmail
   );
 }
 

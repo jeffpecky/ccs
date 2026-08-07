@@ -10,7 +10,7 @@ import { ok, fail, info, warn } from '../../utils/ui';
 import { killWithEscalation } from '../../utils/process-utils';
 import { tryKiroImport } from './kiro-import';
 import { CLIProxyProvider } from '../types';
-import { AccountInfo } from '../accounts/account-manager';
+import { AccountInfo, getProviderAccounts } from '../accounts/account-manager';
 import {
   parseProjectList,
   parseDefaultProject,
@@ -560,10 +560,18 @@ export function analyzeSuccessfulAuthExit(options: {
   stdoutData: string;
   stderrData: string;
 }): { tokenSnapshot: ProviderTokenSnapshot | null; failureReason: string | null } {
+  let expectedEmail: string | undefined;
+  if (options.expectedAccountId) {
+    const accounts = getProviderAccounts(options.provider);
+    const expectedAccount = accounts.find((a) => a.id === options.expectedAccountId);
+    expectedEmail = expectedAccount?.email;
+  }
+
   const tokenSnapshot = findNewTokenSnapshot(
     options.currentTokenFiles,
     options.knownTokenFiles,
-    options.expectedAccountId
+    options.expectedAccountId,
+    expectedEmail
   );
   const failureReason = extractLikelyAuthFailureFromLogs(
     options.provider,
@@ -957,7 +965,7 @@ export function executeOAuthProcess(options: OAuthProcessOptions): Promise<Accou
           }
 
           resolve(
-            registerAccountFromToken(provider, tokenDir, nickname, verbose, expectedAccountId)
+            registerAccountFromToken(provider, tokenDir, nickname, verbose, exitAnalysis.tokenSnapshot.file)
           );
         } else {
           // Emit device code failure event for UI

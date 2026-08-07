@@ -191,6 +191,7 @@ export function useCliproxyAuthFlow() {
           }
 
           stopPolling();
+          attemptIdRef.current += 1;
           queryClient.invalidateQueries({ queryKey: ['cliproxy-auth'] });
           queryClient.invalidateQueries({ queryKey: ['cliproxy-accounts'] });
           queryClient.invalidateQueries({ queryKey: ['account-quota'] });

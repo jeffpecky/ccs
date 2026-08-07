@@ -27,19 +27,6 @@ import type { UnifiedConfig } from '../../config/unified-config-types';
 import { PROXY_CLI_FLAGS } from '../proxy/proxy-config-resolver';
 import { parseThinkingOverride } from './thinking-arg-parser';
 
-// Inlined from antigravity-responsibility.ts to avoid pulling in unified-config-loader
-// (which requires js-yaml at runtime). Keep in sync if ANTIGRAVITY_ACCEPT_RISK_FLAGS changes.
-const ANTIGRAVITY_ACCEPT_RISK_FLAGS_LOCAL = [
-  '--accept-agr-risk',
-  '--accept-antigravity-risk',
-] as const;
-
-function hasAntigravityRiskAcceptanceFlag(args: string[]): boolean {
-  return args.some((arg) =>
-    (ANTIGRAVITY_ACCEPT_RISK_FLAGS_LOCAL as readonly string[]).includes(arg)
-  );
-}
-
 // ── Simple Helpers ────────────────────────────────────────────────────────────
 
 /**
@@ -115,8 +102,6 @@ export const CCS_FLAGS: readonly string[] = [
   '--incognito',
   '--no-incognito',
   '--import',
-  '--accept-agr-risk',
-  '--accept-antigravity-risk',
   '--settings',
   ...PROXY_CLI_FLAGS,
 ] as const;
@@ -166,7 +151,6 @@ export interface ParsedExecutorFlags {
   showAccounts: boolean;
   forceImport: boolean;
   gitlabTokenLogin: boolean;
-  acceptAgyRisk: boolean;
   incognitoFlag: boolean;
   noIncognitoFlag: boolean;
   noIncognito: boolean;
@@ -219,7 +203,6 @@ export function parseExecutorFlags(
   const showAccounts = args.includes('--accounts');
   const forceImport = args.includes('--import');
   const gitlabTokenLogin = hasGitLabTokenLoginFlag(args);
-  const acceptAgyRisk = hasAntigravityRiskAcceptanceFlag(args);
 
   const incognitoFlag = args.includes('--incognito');
   const noIncognitoFlag = args.includes('--no-incognito');
@@ -262,7 +245,6 @@ export function parseExecutorFlags(
         showAccounts,
         forceImport,
         gitlabTokenLogin,
-        acceptAgyRisk,
         incognitoFlag,
         noIncognitoFlag,
         noIncognito,
@@ -294,7 +276,6 @@ export function parseExecutorFlags(
         showAccounts,
         forceImport,
         gitlabTokenLogin,
-        acceptAgyRisk,
         incognitoFlag,
         noIncognitoFlag,
         noIncognito,
@@ -331,7 +312,6 @@ export function parseExecutorFlags(
       showAccounts,
       forceImport,
       gitlabTokenLogin,
-      acceptAgyRisk,
       incognitoFlag,
       noIncognitoFlag,
       noIncognito,
@@ -366,7 +346,6 @@ export function parseExecutorFlags(
       showAccounts,
       forceImport,
       gitlabTokenLogin,
-      acceptAgyRisk,
       incognitoFlag,
       noIncognitoFlag,
       noIncognito,
@@ -402,7 +381,6 @@ export function parseExecutorFlags(
         showAccounts,
         forceImport,
         gitlabTokenLogin,
-        acceptAgyRisk,
         incognitoFlag,
         noIncognitoFlag,
         noIncognito,
@@ -434,7 +412,6 @@ export function parseExecutorFlags(
         showAccounts,
         forceImport,
         gitlabTokenLogin,
-        acceptAgyRisk,
         incognitoFlag,
         noIncognitoFlag,
         noIncognito,
@@ -471,7 +448,6 @@ export function parseExecutorFlags(
       showAccounts,
       forceImport,
       gitlabTokenLogin,
-      acceptAgyRisk,
       incognitoFlag,
       noIncognitoFlag,
       noIncognito,
@@ -532,11 +508,10 @@ export function parseExecutorFlags(
     forceLogout,
     forceConfig,
     addAccount,
-    showAccounts,
-    forceImport,
-    gitlabTokenLogin,
-    acceptAgyRisk,
-    incognitoFlag,
+        showAccounts,
+        forceImport,
+        gitlabTokenLogin,
+        incognitoFlag,
     noIncognitoFlag,
     noIncognito,
     useAccount,

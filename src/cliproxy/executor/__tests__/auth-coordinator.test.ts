@@ -29,14 +29,6 @@ jest.mock('../../auth/auth-handler', () => ({
   triggerOAuth: (...args: unknown[]) => mockTriggerOAuth(...args),
 }));
 
-const mockEnsureAntigravity = jest.fn(async () => true);
-const MOCK_ANTIGRAVITY_FLAGS = ['--accept-agr-risk', '--accept-antigravity-risk'];
-
-jest.mock('../../auth/antigravity-responsibility', () => ({
-  ensureCliAntigravityResponsibility: (...args: unknown[]) => mockEnsureAntigravity(...args),
-  ANTIGRAVITY_ACCEPT_RISK_FLAGS: MOCK_ANTIGRAVITY_FLAGS,
-}));
-
 const mockHandleTokenExpiration = jest.fn(async () => {});
 const mockHandleQuotaCheck = jest.fn(async () => {});
 
@@ -77,7 +69,6 @@ const {
   resolveSkipLocalAuth,
   handleLogout,
   handleImport,
-  runAntigravityGate,
   ensureProviderAuthentication,
   runPreflightQuotaCheck,
   runAccountSafetyGuards,
@@ -98,7 +89,6 @@ function makeFlags(overrides: Partial<Record<string, unknown>> = {}): ParsedExec
     showAccounts: false,
     forceImport: false,
     gitlabTokenLogin: false,
-    acceptAgyRisk: false,
     incognitoFlag: false,
     noIncognitoFlag: false,
     noIncognito: false,
@@ -248,65 +238,6 @@ describe('handleImport', () => {
     await handleImport(
       makeCtx({ provider: 'kiro', parsedFlags: makeFlags({ forceImport: true }) })
     );
-    expect(exitSpy).toHaveBeenCalledWith(1);
-  });
-});
-
-// ── runAntigravityGate ────────────────────────────────────────────────────────
-
-describe('runAntigravityGate', () => {
-  let exitSpy: ReturnType<typeof jest.spyOn>;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockEnsureAntigravity.mockResolvedValue(true);
-    mockIsAuthenticated.mockReturnValue(false);
-    exitSpy = jest
-      .spyOn(process, 'exit')
-      .mockImplementation((() => undefined) as typeof process.exit);
-  });
-
-  afterEach(() => {
-    exitSpy.mockRestore();
-  });
-
-  it('returns earlyReturn=false for non-agy provider without calling gate', async () => {
-    const result = await runAntigravityGate(makeCtx({ provider: 'gemini' }), false);
-    expect(result.earlyReturn).toBe(false);
-    expect(mockEnsureAntigravity).not.toHaveBeenCalled();
-  });
-
-  it('agy + forceAuth + skipLocalAuth + acknowledged → earlyReturn=true', async () => {
-    mockEnsureAntigravity.mockResolvedValue(true);
-    const ctx = makeCtx({ provider: 'agy', parsedFlags: makeFlags({ forceAuth: true }) });
-    const result = await runAntigravityGate(ctx, true);
-    expect(result.earlyReturn).toBe(true);
-    expect(mockEnsureAntigravity).toHaveBeenCalledWith(
-      expect.objectContaining({ context: 'oauth' })
-    );
-  });
-
-  it('agy + forceAuth + skipLocalAuth + refused → throws', async () => {
-    mockEnsureAntigravity.mockResolvedValue(false);
-    const ctx = makeCtx({ provider: 'agy', parsedFlags: makeFlags({ forceAuth: true }) });
-    await expect(runAntigravityGate(ctx, true)).rejects.toThrow('Antigravity auth blocked');
-  });
-
-  it('agy + no forceAuth + skipLocalAuth + acknowledged → earlyReturn=false, no exit', async () => {
-    mockEnsureAntigravity.mockResolvedValue(true);
-    mockIsAuthenticated.mockReturnValue(true); // already authenticated → run context triggers
-    const ctx = makeCtx({ provider: 'agy', parsedFlags: makeFlags({ forceAuth: false }) });
-    const result = await runAntigravityGate(ctx, true);
-    expect(result.earlyReturn).toBe(false);
-    expect(exitSpy).not.toHaveBeenCalled();
-    expect(mockEnsureAntigravity).toHaveBeenCalledWith(expect.objectContaining({ context: 'run' }));
-  });
-
-  it('agy + no forceAuth + skipLocalAuth + refused → process.exit(1)', async () => {
-    mockEnsureAntigravity.mockResolvedValue(false);
-    mockIsAuthenticated.mockReturnValue(true);
-    const ctx = makeCtx({ provider: 'agy', parsedFlags: makeFlags({ forceAuth: false }) });
-    await runAntigravityGate(ctx, true);
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 });

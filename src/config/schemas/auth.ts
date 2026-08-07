@@ -71,11 +71,11 @@ export interface CLIProxyAuthConfig {
  * Manages background token refresh worker settings.
  */
 export interface TokenRefreshSettings {
-  /** Enable background token refresh (default: false) */
+  /** Enable background token refresh (default: true) */
   enabled?: boolean;
-  /** Refresh check interval in minutes (default: 30) */
+  /** Refresh check interval in minutes (default: 5) */
   interval_minutes?: number;
-  /** Preemptive refresh time in minutes (default: 45) */
+  /** Preemptive refresh time in minutes (default: 30) */
   preemptive_minutes?: number;
   /** Maximum retry attempts per token (default: 3) */
   max_retries?: number;

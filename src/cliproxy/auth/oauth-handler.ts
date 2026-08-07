@@ -77,7 +77,6 @@ import {
 } from '../accounts/account-safety';
 import { maybeOfferPoolRouting } from '../routing/pool-opt-in-prompt';
 import { checkCrossLaneEmailOverlap } from '../accounts/account-safety-cross-lane';
-import { ensureCliAntigravityResponsibility } from '../auth/antigravity-responsibility';
 import { InteractivePrompt } from '../../utils/prompt';
 import { getCcsDir } from '../../utils/config-manager';
 import { generateSessionId } from './project-selection-handler';
@@ -1053,7 +1052,7 @@ async function handleGitLabPatLogin(
     tokenDir,
     nickname,
     verbose,
-    expectedAccountId || tokenSnapshot.file
+    tokenSnapshot.file
   );
 
   if (!account) {
@@ -1084,7 +1083,6 @@ export async function triggerOAuth(
     fromUI: options.fromUI === true,
   });
   const { verbose = false, add = false, fromUI = false, noIncognito = true } = options;
-  const acceptAgyRisk = options.acceptAgyRisk === true;
   const { nickname } = options;
   const resolvedKiroMethod =
     provider === 'kiro' ? normalizeKiroAuthMethod(options.kiroMethod) : DEFAULT_KIRO_AUTH_METHOD;
@@ -1099,24 +1097,6 @@ export async function triggerOAuth(
     } catch (error) {
       console.log(fail((error as Error).message));
       return null;
-    }
-  }
-
-  if (provider === 'agy') {
-    if (fromUI && !acceptAgyRisk) {
-      console.log(fail('Antigravity OAuth blocked: responsibility acknowledgement is missing.'));
-      return null;
-    }
-
-    if (!fromUI) {
-      const acknowledged = await ensureCliAntigravityResponsibility({
-        context: 'oauth',
-        acceptedByFlag: acceptAgyRisk,
-      });
-      if (!acknowledged) {
-        console.log(info('Cancelled'));
-        return null;
-      }
     }
   }
 

@@ -310,7 +310,6 @@ describe('validateFlagCombinations', () => {
       showAccounts: false,
       forceImport: false,
       gitlabTokenLogin: false,
-      acceptAgyRisk: false,
       incognitoFlag: false,
       noIncognitoFlag: false,
       noIncognito: false,

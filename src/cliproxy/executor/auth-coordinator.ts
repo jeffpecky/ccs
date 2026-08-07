@@ -33,10 +33,6 @@ import { getProviderConfig, ensureProviderSettings } from '../config/config-gene
 import { configureProviderModel, getCurrentModel } from '../config/model-config';
 import { reconcileCodexModelForActivePlan } from '../ai-providers/codex-plan-compatibility';
 import { supportsModelConfig } from '../model-catalog';
-import {
-  ensureCliAntigravityResponsibility,
-  ANTIGRAVITY_ACCEPT_RISK_FLAGS,
-} from '../auth/antigravity-responsibility';
 import { handleTokenExpiration, handleQuotaCheck } from './retry-handler';
 import { applyAccountSafetyGuards, touchDefaultAccount } from './account-resolution';
 import { MANAGED_QUOTA_PROVIDERS } from '../quota/quota-manager';
@@ -159,44 +155,13 @@ export async function runAntigravityGate(
   skipLocalAuth: boolean
 ): Promise<{ earlyReturn: boolean }> {
   const { provider, parsedFlags } = context;
-  const { forceAuth, acceptAgyRisk } = parsedFlags;
+  const { forceAuth } = parsedFlags;
 
   if (provider !== 'agy') return { earlyReturn: false };
 
-  const providerConfig = getProviderConfig(provider);
-  const requiresAuthNow = providerConfig.requiresOAuth && !isAuthenticated(provider);
-
   if (forceAuth && skipLocalAuth) {
-    // Case A: remote proxy + forceAuth — gate in oauth context, skip local OAuth
-    const acknowledged = await ensureCliAntigravityResponsibility({
-      context: 'oauth',
-      acceptedByFlag: acceptAgyRisk,
-    });
-    if (!acknowledged) {
-      throw new Error(
-        `Antigravity auth blocked. Re-run after completing confirmation or pass ${ANTIGRAVITY_ACCEPT_RISK_FLAGS[0]}.`
-      );
-    }
     console.error(info('Remote proxy mode is active; local OAuth flow is skipped in --auth mode.'));
     return { earlyReturn: true };
-  }
-
-  if (!forceAuth) {
-    // Case B: run-context gate (only when auth not immediately required)
-    if (skipLocalAuth || !requiresAuthNow) {
-      const acknowledged = await ensureCliAntigravityResponsibility({
-        context: 'run',
-        acceptedByFlag: acceptAgyRisk,
-      });
-      if (!acknowledged) {
-        console.error(
-          fail(
-            `Antigravity session blocked. Re-run after completing confirmation or pass ${ANTIGRAVITY_ACCEPT_RISK_FLAGS[0]}.`
-          )
-        );
-        process.exit(1);
-      }
-    }
   }
 
   return { earlyReturn: false };
@@ -218,7 +183,6 @@ export async function ensureProviderAuthentication(
   const {
     forceAuth,
     addAccount,
-    acceptAgyRisk,
     kiroAuthMethod,
     kiroIDCStartUrl,
     kiroIDCRegion,
@@ -243,7 +207,6 @@ export async function ensureProviderAuthentication(
         const authSuccess = await triggerOAuth(p, {
           verbose,
           add: addAccount,
-          ...(acceptAgyRisk ? { acceptAgyRisk: true } : {}),
           ...(kiroAuthMethod && p === 'kiro' ? { kiroMethod: kiroAuthMethod } : {}),
           ...(kiroIDCStartUrl && p === 'kiro' ? { kiroIDCStartUrl } : {}),
           ...(kiroIDCRegion && p === 'kiro' ? { kiroIDCRegion } : {}),
@@ -293,7 +256,6 @@ export async function ensureProviderAuthentication(
       const authSuccess = await triggerOAuth(provider, {
         verbose,
         add: addAccount,
-        ...(acceptAgyRisk ? { acceptAgyRisk: true } : {}),
         ...(kiroAuthMethod ? { kiroMethod: kiroAuthMethod } : {}),
         ...(kiroIDCStartUrl ? { kiroIDCStartUrl } : {}),
         ...(kiroIDCRegion ? { kiroIDCRegion } : {}),

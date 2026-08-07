@@ -15,6 +15,7 @@ import {
 } from '../../cliproxy/auth/auth-session-manager';
 import { fetchCliproxyStats } from '../../cliproxy/services/stats-fetcher';
 import {
+  type AccountInfo,
   getAllAccountsSummary,
   getProviderAccounts,
   setDefaultAccount as setDefaultAccountFn,
@@ -63,12 +64,9 @@ import {
 } from '../../cliproxy/provider-capabilities';
 import type { CLIProxyProvider } from '../../cliproxy/types';
 import { CLIPROXY_PROFILES } from '../../auth/profile-detector';
-import {
-  validateAntigravityRiskAcknowledgement,
-  isAntigravityResponsibilityBypassEnabled,
-} from '../../cliproxy/auth/antigravity-responsibility';
 import { createRouteErrorHelpers } from './route-helpers';
 import { requireLocalAccessWhenAuthDisabled } from '../middleware/auth-middleware';
+import { createLogger } from '../../services/logging';
 import { loadOrCreateUnifiedConfig } from '../../config/config-loader-facade';
 import {
   getPlusOAuthCredentialError,
@@ -78,6 +76,7 @@ import { buildOAuthStartFailureGuidance } from '../../cliproxy/auth/oauth-start-
 import { getStoredConfiguredBackend } from '../../cliproxy/binary-manager';
 
 const router = Router();
+const logger = createLogger('cliproxy-auth-routes');
 const MANUAL_AUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const POLLED_AUTH_LOCAL_TOKEN_GRACE_MS = 15 * 1000;
 
@@ -91,6 +90,13 @@ const pendingManualAuthState = new Map<
     knownTokenFiles: ProviderTokenSnapshot[];
   }
 >();
+
+type ManualAuthCompletion = {
+  createdAt: number;
+  account: Pick<AccountInfo, 'id' | 'email' | 'nickname' | 'provider' | 'isDefault'>;
+};
+
+const completedManualAuthState = new Map<string, ManualAuthCompletion>();
 
 // Valid providers list - derived from canonical CLIPROXY_PROFILES
 const validProviders: CLIProxyProvider[] = [...CLIPROXY_PROFILES];
@@ -117,9 +123,40 @@ function pruneExpiredManualAuthState(now = Date.now()): void {
       now - pending.upstreamCompletedAt < POLLED_AUTH_LOCAL_TOKEN_GRACE_MS;
 
     if (authExpired && !withinLocalTokenGrace) {
+      logger.info('prune-expired-state', `Pruning expired auth state=${state}`, {
+        state,
+        ageMs: now - pending.createdAt,
+        ttlMs: MANUAL_AUTH_STATE_TTL_MS,
+      });
       pendingManualAuthState.delete(state);
     }
   }
+}
+
+function pruneExpiredCompletedManualAuthState(now = Date.now()): void {
+  for (const [state, completion] of completedManualAuthState.entries()) {
+    if (now - completion.createdAt > POLLED_AUTH_LOCAL_TOKEN_GRACE_MS) {
+      completedManualAuthState.delete(state);
+    }
+  }
+}
+
+export function rememberCompletedManualAuthState(
+  state: string,
+  account: ManualAuthCompletion['account'],
+  now = Date.now()
+): void {
+  pruneExpiredCompletedManualAuthState(now);
+  completedManualAuthState.set(state, { account, createdAt: now });
+}
+
+export function getCompletedManualAuthState(
+  state: string,
+  now = Date.now()
+): { status: 'ok'; account: ManualAuthCompletion['account'] } | null {
+  pruneExpiredCompletedManualAuthState(now);
+  const completion = completedManualAuthState.get(state);
+  return completion ? { status: 'ok', account: completion.account } : null;
 }
 
 function rememberManualAuthState(
@@ -131,6 +168,12 @@ function rememberManualAuthState(
   }
 ): void {
   pruneExpiredManualAuthState();
+  logger.info('remember-state', `rememberManualAuthState: state=${state}`, {
+    state,
+    expectedAccountId: pending.expectedAccountId,
+    knownTokenCount: pending.knownTokenFiles.length,
+    activeStatesAfter: Array.from(pendingManualAuthState.keys()).join(', ') || '(none)',
+  });
   pendingManualAuthState.set(state, {
     ...pending,
     createdAt: Date.now(),
@@ -151,6 +194,11 @@ function getManualAuthState(state: string | undefined): {
   pruneExpiredManualAuthState();
   const pending = pendingManualAuthState.get(state);
   if (!pending) {
+    logger.warn('state-lookup-miss', `getManualAuthState: state=${state} NOT FOUND`, {
+      state,
+      activeStates: Array.from(pendingManualAuthState.keys()).join(', ') || '(none)',
+      activeStateCount: pendingManualAuthState.size,
+    });
     return null;
   }
 
@@ -183,11 +231,38 @@ function findNewTokenSnapshotForPendingAuth(
   provider: CLIProxyProvider,
   pending: { expectedAccountId?: string; knownTokenFiles: ProviderTokenSnapshot[] }
 ): ProviderTokenSnapshot | null {
-  return findNewTokenSnapshot(
-    listProviderTokenSnapshots(provider),
+  let expectedEmail: string | undefined;
+  if (pending.expectedAccountId) {
+    const accounts = getProviderAccounts(provider);
+    const expectedAccount = accounts.find((a) => a.id === pending.expectedAccountId);
+    expectedEmail = expectedAccount?.email;
+  }
+
+  const currentTokens = listProviderTokenSnapshots(provider);
+  logger.info('find-new-token', `findNewTokenSnapshot: provider=${provider} expectedAccountId=${pending.expectedAccountId || '(none)'} expectedEmail=${expectedEmail || '(none)'}`, {
+    provider,
+    expectedAccountId: pending.expectedAccountId,
+    expectedEmail,
+    knownTokenCount: pending.knownTokenFiles.length,
+    knownTokenFiles: pending.knownTokenFiles.map(f => f.file),
+    currentTokenCount: currentTokens.length,
+    currentTokenFiles: currentTokens.map(f => f.file),
+  });
+
+  const result = findNewTokenSnapshot(
+    currentTokens,
     pending.knownTokenFiles,
-    pending.expectedAccountId
+    pending.expectedAccountId,
+    expectedEmail
   );
+
+  logger.info('find-new-token-result', `findNewTokenSnapshot result: ${result ? result.file : 'null'}`, {
+    resultFile: result?.file,
+    resultAccountId: result?.accountId,
+    resultEmail: result?.email,
+  });
+
+  return result;
 }
 
 function shouldKeepWaitingForLocalToken(
@@ -660,7 +735,6 @@ router.post('/:provider/start', async (req: Request, res: Response): Promise<voi
     typeof requestBody.gitlabPersonalAccessToken === 'string'
       ? requestBody.gitlabPersonalAccessToken.trim()
       : undefined;
-  const riskAcknowledgement = requestBody.riskAcknowledgement;
   const target = getProxyTarget();
   if (target.isRemote) {
     res.status(501).json({ error: 'OAuth start flow not available in remote mode' });
@@ -717,17 +791,6 @@ router.post('/:provider/start', async (req: Request, res: Response): Promise<voi
     }
   }
 
-  if (provider === 'agy' && !isAntigravityResponsibilityBypassEnabled()) {
-    const validation = validateAntigravityRiskAcknowledgement(riskAcknowledgement);
-    if (!validation.valid) {
-      res.status(400).json({
-        error: validation.error,
-        code: 'AGY_RISK_ACK_REQUIRED',
-      });
-      return;
-    }
-  }
-
   if (provider === 'gitlab' && gitlabAuthMode === 'pat') {
     if (!gitlabPersonalAccessToken) {
       res.status(400).json({
@@ -768,7 +831,12 @@ router.post('/:provider/start', async (req: Request, res: Response): Promise<voi
       const tokenSnapshot = findNewTokenSnapshot(
         listProviderTokenSnapshots(localProvider),
         knownTokenFiles,
-        targetAccountId
+        accountId,
+        accountId ? (() => {
+          const accounts = getProviderAccounts(localProvider);
+          const expectedAccount = accounts.find((a) => a.id === accountId);
+          return expectedAccount?.email;
+        })() : undefined
       );
       if (!tokenSnapshot) {
         res.status(409).json({
@@ -840,7 +908,6 @@ router.post('/:provider/start', async (req: Request, res: Response): Promise<voi
       headless: false, // Force interactive mode
       nickname: effectiveNickname || undefined,
       expectedAccountId: targetAccountId,
-      acceptAgyRisk: provider === 'agy',
       kiroMethod: provider === 'kiro' ? kiroMethod : undefined,
       kiroIDCStartUrl: provider === 'kiro' ? kiroIDCStartUrl : undefined,
       kiroIDCRegion: provider === 'kiro' ? kiroIDCRegion : undefined,
@@ -1008,7 +1075,6 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
   const gitlabAuthModeRaw = requestBody.gitlabAuthMode;
   const gitlabBaseUrl =
     typeof requestBody.gitlabBaseUrl === 'string' ? requestBody.gitlabBaseUrl.trim() : undefined;
-  const riskAcknowledgement = requestBody.riskAcknowledgement;
   const nickname = nicknameRaw?.trim();
   const { method: kiroMethod, invalid: invalidKiroMethod } = parseKiroMethod(kiroMethodRaw);
   const { mode: gitlabAuthMode, invalid: invalidGitLabAuthMode } =
@@ -1051,17 +1117,6 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
     return;
   }
 
-  if (provider === 'agy' && !isAntigravityResponsibilityBypassEnabled()) {
-    const validation = validateAntigravityRiskAcknowledgement(riskAcknowledgement);
-    if (!validation.valid) {
-      res.status(400).json({
-        error: validation.error,
-        code: 'AGY_RISK_ACK_REQUIRED',
-      });
-      return;
-    }
-  }
-
   const unsupportedReason = getStartUrlUnsupportedReason(provider as CLIProxyProvider, {
     kiroMethod: provider === 'kiro' ? kiroMethod : undefined,
   });
@@ -1097,9 +1152,7 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
     getStoredConfiguredBackend()
   );
   if (credentialError) {
-    console.error(
-      `[cliproxy-auth-routes] start-url credential guard fired for provider=${provider}: ${credentialError}`
-    );
+    logger.warn('start-url credential guard', `Credential guard fired for provider=${provider}`, { provider, credentialError });
     res.status(400).json({
       error: 'plus_oauth_credentials_missing',
       provider,
@@ -1154,9 +1207,7 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
       const authUrlError = getPlusAuthUrlCredentialError(provider as CLIProxyProvider, authUrl);
       if (authUrlError) {
         const redactedUrl = authUrl.split('?')[0];
-        console.error(
-          `[cliproxy-auth-routes] Plus emitted OAuth URL without client_id for provider=${provider} url=${redactedUrl}`
-        );
+        logger.warn('start-url missing client_id', `Plus emitted OAuth URL without client_id for provider=${provider}`, { provider, redactedUrl });
         res.status(502).json({
           error: 'plus_oauth_url_missing_client_id',
           provider,
@@ -1177,11 +1228,14 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
     }
 
     if (oauthState) {
+      logger.info('register-auth-state', `Registering auth state=${oauthState} for provider=${provider}`, { provider, oauthState });
       rememberManualAuthState(oauthState, {
         nickname: effectiveNickname || undefined,
         expectedAccountId: targetAccountId,
         knownTokenFiles: listProviderTokenSnapshots(localProvider),
       });
+    } else {
+      logger.warn('no-oauth-state', `No OAuth state received from CLIProxyAPI for provider=${provider}`, { provider });
     }
 
     res.json({
@@ -1192,9 +1246,7 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
     });
   } catch (error) {
     if (error instanceof SyntaxError) {
-      console.error(
-        `[cliproxy-auth-routes] Invalid OAuth start response for provider=${provider}: ${error.message}`
-      );
+      logger.error('invalid-oauth-response', `Invalid OAuth start response for provider=${provider}`, { provider, errorMessage: error.message });
       res.status(502).json({
         error: 'cliproxy_oauth_start_invalid_response',
         provider,
@@ -1211,7 +1263,7 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
       startPath: startPath ?? `/v0/management/${authUrlProvider}-auth-url?is_webui=true`,
       cause: error,
     });
-    console.error(`[cliproxy-auth-routes] ${guidance.message} ${guidance.details}`);
+    logger.error('oauth-start-failure', `${guidance.message} ${guidance.details}`, { guidance });
     res.status(503).json(guidance);
   }
 });
@@ -1223,6 +1275,8 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
 router.get('/:provider/status', async (req: Request, res: Response): Promise<void> => {
   const { provider } = req.params;
   const { state } = req.query;
+
+  res.setHeader('Cache-Control', 'no-store');
 
   if (!state || typeof state !== 'string') {
     res.status(400).json({ error: 'state query parameter required' });
@@ -1250,6 +1304,17 @@ router.get('/:provider/status', async (req: Request, res: Response): Promise<voi
       const pendingAuth = getManualAuthState(state);
 
       if (!pendingAuth) {
+        const completedAuth = getCompletedManualAuthState(state);
+        if (completedAuth) {
+          res.json(completedAuth);
+          return;
+        }
+
+        logger.error('no-pending-auth', `No pending auth for state=${state} (provider=${provider})`, {
+          state,
+          provider,
+          activeStates: Array.from(pendingManualAuthState.keys()).join(', ') || '(none)',
+        });
         res.status(409).json({
           status: 'error',
           error:
@@ -1280,7 +1345,7 @@ router.get('/:provider/status', async (req: Request, res: Response): Promise<voi
         getProviderTokenDir(localProvider),
         pendingAuth.nickname,
         false,
-        pendingAuth.expectedAccountId || tokenSnapshot.file
+        tokenSnapshot.file
       );
 
       if (!account) {
@@ -1298,7 +1363,7 @@ router.get('/:provider/status', async (req: Request, res: Response): Promise<voi
         // Keep manual callback success path non-fatal when prefix repair cannot run.
       }
       invalidateQuotaForRegisteredAccount(account);
-      res.json({
+      const completedAuth = {
         status: 'ok',
         account: {
           id: account.id,
@@ -1307,7 +1372,9 @@ router.get('/:provider/status', async (req: Request, res: Response): Promise<voi
           provider: account.provider,
           isDefault: account.isDefault,
         },
-      });
+      } as const;
+      rememberCompletedManualAuthState(state, completedAuth.account);
+      res.json(completedAuth);
       pendingManualAuthState.delete(state);
       return;
     }
@@ -1429,7 +1496,7 @@ router.post('/:provider/submit-callback', async (req: Request, res: Response): P
         getProviderTokenDir(localProvider),
         pendingAuth.nickname,
         false,
-        pendingAuth.expectedAccountId || tokenSnapshot.file
+        tokenSnapshot.file
       );
 
       if (!account) {

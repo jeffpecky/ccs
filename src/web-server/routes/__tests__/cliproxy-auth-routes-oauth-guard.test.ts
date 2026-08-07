@@ -123,3 +123,26 @@ describe('start-url route: response body contract', () => {
     expect(simulateHookErrorResolution(generic)).toBe('some_other_error');
   });
 });
+
+describe('status route: duplicate completion polling', () => {
+  it('returns the completed account again for duplicate polls after state cleanup', async () => {
+    const authRoutes = await import(
+      `../cliproxy-auth-routes?duplicate-status-${Date.now()}`
+    );
+    const account = {
+      id: 'newtrial530@gmail.com',
+      email: 'newtrial530@gmail.com',
+      nickname: undefined,
+      provider: 'agy' as const,
+      isDefault: false,
+    };
+
+    expect(authRoutes.getCompletedManualAuthState('state-123')).toBeNull();
+    authRoutes.rememberCompletedManualAuthState('state-123', account);
+
+    expect(authRoutes.getCompletedManualAuthState('state-123')).toEqual({
+      status: 'ok',
+      account,
+    });
+  });
+});
