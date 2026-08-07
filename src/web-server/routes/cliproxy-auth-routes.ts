@@ -123,11 +123,6 @@ function pruneExpiredManualAuthState(now = Date.now()): void {
       now - pending.upstreamCompletedAt < POLLED_AUTH_LOCAL_TOKEN_GRACE_MS;
 
     if (authExpired && !withinLocalTokenGrace) {
-      logger.info('prune-expired-state', `Pruning expired auth state=${state}`, {
-        state,
-        ageMs: now - pending.createdAt,
-        ttlMs: MANUAL_AUTH_STATE_TTL_MS,
-      });
       pendingManualAuthState.delete(state);
     }
   }
@@ -168,12 +163,6 @@ function rememberManualAuthState(
   }
 ): void {
   pruneExpiredManualAuthState();
-  logger.info('remember-state', `rememberManualAuthState: state=${state}`, {
-    state,
-    expectedAccountId: pending.expectedAccountId,
-    knownTokenCount: pending.knownTokenFiles.length,
-    activeStatesAfter: Array.from(pendingManualAuthState.keys()).join(', ') || '(none)',
-  });
   pendingManualAuthState.set(state, {
     ...pending,
     createdAt: Date.now(),
@@ -194,11 +183,6 @@ function getManualAuthState(state: string | undefined): {
   pruneExpiredManualAuthState();
   const pending = pendingManualAuthState.get(state);
   if (!pending) {
-    logger.warn('state-lookup-miss', `getManualAuthState: state=${state} NOT FOUND`, {
-      state,
-      activeStates: Array.from(pendingManualAuthState.keys()).join(', ') || '(none)',
-      activeStateCount: pendingManualAuthState.size,
-    });
     return null;
   }
 
@@ -239,15 +223,6 @@ function findNewTokenSnapshotForPendingAuth(
   }
 
   const currentTokens = listProviderTokenSnapshots(provider);
-  logger.info('find-new-token', `findNewTokenSnapshot: provider=${provider} expectedAccountId=${pending.expectedAccountId || '(none)'} expectedEmail=${expectedEmail || '(none)'}`, {
-    provider,
-    expectedAccountId: pending.expectedAccountId,
-    expectedEmail,
-    knownTokenCount: pending.knownTokenFiles.length,
-    knownTokenFiles: pending.knownTokenFiles.map(f => f.file),
-    currentTokenCount: currentTokens.length,
-    currentTokenFiles: currentTokens.map(f => f.file),
-  });
 
   const result = findNewTokenSnapshot(
     currentTokens,
@@ -255,12 +230,6 @@ function findNewTokenSnapshotForPendingAuth(
     pending.expectedAccountId,
     expectedEmail
   );
-
-  logger.info('find-new-token-result', `findNewTokenSnapshot result: ${result ? result.file : 'null'}`, {
-    resultFile: result?.file,
-    resultAccountId: result?.accountId,
-    resultEmail: result?.email,
-  });
 
   return result;
 }
@@ -1228,14 +1197,11 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
     }
 
     if (oauthState) {
-      logger.info('register-auth-state', `Registering auth state=${oauthState} for provider=${provider}`, { provider, oauthState });
       rememberManualAuthState(oauthState, {
         nickname: effectiveNickname || undefined,
         expectedAccountId: targetAccountId,
         knownTokenFiles: listProviderTokenSnapshots(localProvider),
       });
-    } else {
-      logger.warn('no-oauth-state', `No OAuth state received from CLIProxyAPI for provider=${provider}`, { provider });
     }
 
     res.json({
