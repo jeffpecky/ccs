@@ -183,6 +183,11 @@ function getManualAuthState(state: string | undefined): {
   pruneExpiredManualAuthState();
   const pending = pendingManualAuthState.get(state);
   if (!pending) {
+    logger.warn('state-lookup-miss', `getManualAuthState: state=${state} NOT FOUND`, {
+      state,
+      activeStates: Array.from(pendingManualAuthState.keys()).join(', ') || '(none)',
+      activeStateCount: pendingManualAuthState.size,
+    });
     return null;
   }
 
