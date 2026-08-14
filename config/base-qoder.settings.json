@@ -1,7 +1,7 @@
 {
   "env": {
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:8317/api/provider/qoder",
-    "ANTHROPIC_AUTH_TOKEN": "ccs-internal-managed",
+    "ANTHROPIC_AUTH_TOKEN": "sk-45c9e789d78326c6b25e11879fc81602edc7228a4c594339",
     "ANTHROPIC_MODEL": "qoder/auto",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "qoder/ultimate",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "qoder/performance",

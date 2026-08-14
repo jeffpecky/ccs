@@ -28,8 +28,7 @@ import {
 } from '../unified-config-types';
 import type { UnifiedConfig } from '../unified-config-types';
 import { canonicalizeBrowserConfig, normalizeSessionAffinityTtl } from './normalizers';
-import { normalizeContinuityConfig, normalizeOfficialChannelsConfig } from './normalizers';
-import type { LegacyDiscordChannelsConfig } from './normalizers';
+import { normalizeContinuityConfig } from './normalizers';
 
 // ---------------------------------------------------------------------------
 // mergeWithDefaults
@@ -255,9 +254,6 @@ export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfi
       provider_overrides: partial.thinking?.provider_overrides,
       show_warnings: partial.thinking?.show_warnings ?? DEFAULT_THINKING_CONFIG.show_warnings,
     },
-    channels: normalizeOfficialChannelsConfig(
-      partial as Partial<UnifiedConfig> & { discord_channels?: LegacyDiscordChannelsConfig }
-    ),
     // Dashboard auth config - disabled by default
     dashboard_auth: {
       enabled: partial.dashboard_auth?.enabled ?? DEFAULT_DASHBOARD_AUTH_CONFIG.enabled,

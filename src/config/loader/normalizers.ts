@@ -5,26 +5,18 @@
  * unified-config-loader.ts (Phase 2 split — issue #1164).
  *
  * Contains: browser config normalizers, session affinity TTL normalizer,
- * composite variant validator, continuity config normalizer, and official
- * channels config normalizer.
+ * composite variant validator, and continuity config normalizer.
  */
 
-import { DEFAULT_BROWSER_CONFIG, DEFAULT_OFFICIAL_CHANNELS_CONFIG } from '../unified-config-types';
+import { DEFAULT_BROWSER_CONFIG } from '../unified-config-types';
 import type {
   UnifiedConfig,
   BrowserConfig,
   BrowserEvalMode,
   BrowserToolPolicy,
-  OfficialChannelsConfig,
-  OfficialChannelId,
   ContinuityConfig,
 } from '../unified-config-types';
 import { validateCompositeTiers } from '../../cliproxy/config/composite-validator';
-import {
-  isOfficialChannelId,
-  normalizeOfficialChannelIds,
-  resolveLegacyDiscordSelection,
-} from '../../channels/official-channels-ids';
 import { getRecommendedBrowserUserDataDir } from '../../utils/browser/browser-settings';
 import { GO_DURATION_PATTERN, GO_DURATION_SEGMENT } from './io-locks';
 
@@ -194,35 +186,5 @@ export function normalizeContinuityConfig(
 }
 
 // ---------------------------------------------------------------------------
-// Official channels config normalizer
+// Continuity config normalizer
 // ---------------------------------------------------------------------------
-
-export interface LegacyDiscordChannelsConfig {
-  enabled?: boolean;
-  unattended?: boolean;
-}
-
-export function normalizeOfficialChannelsConfig(
-  partial: Partial<UnifiedConfig> & { discord_channels?: LegacyDiscordChannelsConfig }
-): OfficialChannelsConfig {
-  const hasCanonicalChannelsSection = partial.channels !== undefined;
-  const hasExplicitSelectedField =
-    hasCanonicalChannelsSection &&
-    Object.prototype.hasOwnProperty.call(partial.channels, 'selected');
-  const rawSelected =
-    hasExplicitSelectedField && Array.isArray(partial.channels?.selected)
-      ? partial.channels.selected.filter((value): value is OfficialChannelId =>
-          isOfficialChannelId(value)
-        )
-      : [];
-
-  return {
-    selected: hasCanonicalChannelsSection
-      ? normalizeOfficialChannelIds(rawSelected)
-      : resolveLegacyDiscordSelection(partial.discord_channels?.enabled),
-    unattended:
-      partial.channels?.unattended ??
-      partial.discord_channels?.unattended ??
-      DEFAULT_OFFICIAL_CHANNELS_CONFIG.unattended,
-  };
-}

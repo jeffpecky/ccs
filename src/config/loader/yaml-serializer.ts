@@ -240,28 +240,6 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
     lines.push('');
   }
 
-  // Official Channels section
-  if (config.channels) {
-    lines.push('# ----------------------------------------------------------------------------');
-    lines.push('# Official Channels: Runtime auto-enable for Anthropic official channel plugins');
-    lines.push('# Supported channels: telegram, discord, imessage');
-    lines.push('# Runtime-only: CCS injects --channels at launch for compatible Claude sessions.');
-    lines.push('# Bot tokens live in Claude channel env files, not in config.yaml.');
-    lines.push('# Use selected: [telegram, discord, imessage] to choose channels.');
-    lines.push(
-      '# unattended adds --dangerously-skip-permissions only when channel auto-enable is active.'
-    );
-    lines.push('# Compatible sessions: native Claude default/account profiles only.');
-    lines.push('# Configure via: Settings > Channels dashboard tab.');
-    lines.push('# ----------------------------------------------------------------------------');
-    lines.push(
-      yaml
-        .dump({ channels: config.channels }, { indent: 2, lineWidth: -1, quotingType: '"' })
-        .trim()
-    );
-    lines.push('');
-  }
-
   // Dashboard auth section (only if configured)
   if (config.dashboard_auth?.enabled) {
     lines.push('# ----------------------------------------------------------------------------');

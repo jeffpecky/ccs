@@ -62,6 +62,8 @@ interface ModelConfigTabProps {
   privacyMode?: boolean;
   /** True if connected to remote CLIProxy (quota not available) */
   isRemoteMode?: boolean;
+  /** Hide the accounts section */
+  hideAccounts?: boolean;
 }
 
 export function ModelConfigTab({
@@ -97,6 +99,7 @@ export function ModelConfigTab({
   isBulkResuming,
   privacyMode,
   isRemoteMode,
+  hideAccounts,
 }: ModelConfigTabProps) {
   const normalizedProvider = provider.toLowerCase();
   const showQuota =
@@ -175,28 +178,30 @@ export function ModelConfigTab({
           isDeletePending={isDeletePending}
         />
         <Separator />
-        <AccountsSection
-          accounts={accounts}
-          onAddAccount={onAddAccount}
-          onReauthAccount={onReauthAccount}
-          onSetDefault={onSetDefault}
-          onRemoveAccount={onRemoveAccount}
-          onPauseToggle={onPauseToggle}
-          onSoloMode={onSoloMode}
-          onBulkPause={onBulkPause}
-          onBulkResume={onBulkResume}
-          isRemovingAccount={isRemovingAccount}
-          isPausingAccount={isPausingAccount}
-          isSoloingAccount={isSoloingAccount}
-          isBulkPausing={isBulkPausing}
-          isBulkResuming={isBulkResuming}
-          privacyMode={privacyMode}
-          showQuota={showQuota}
-          isKiro={isKiro}
-          kiroNoIncognito={kiroNoIncognito}
-          onKiroNoIncognitoChange={saveKiroNoIncognito}
-          kiroSettingsLoading={kiroSettingsLoading || kiroSaving}
-        />
+        {!hideAccounts && (
+          <AccountsSection
+            accounts={accounts}
+            onAddAccount={onAddAccount}
+            onReauthAccount={onReauthAccount}
+            onSetDefault={onSetDefault}
+            onRemoveAccount={onRemoveAccount}
+            onPauseToggle={onPauseToggle}
+            onSoloMode={onSoloMode}
+            onBulkPause={onBulkPause}
+            onBulkResume={onBulkResume}
+            isRemovingAccount={isRemovingAccount}
+            isPausingAccount={isPausingAccount}
+            isSoloingAccount={isSoloingAccount}
+            isBulkPausing={isBulkPausing}
+            isBulkResuming={isBulkResuming}
+            privacyMode={privacyMode}
+            showQuota={showQuota}
+            isKiro={isKiro}
+            kiroNoIncognito={kiroNoIncognito}
+            onKiroNoIncognitoChange={saveKiroNoIncognito}
+            kiroSettingsLoading={kiroSettingsLoading || kiroSaving}
+          />
+        )}
       </div>
     </ScrollArea>
   );

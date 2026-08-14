@@ -35,7 +35,6 @@ export {
   getContinuityInheritanceMap,
   getCliproxySafetyConfig,
   getThinkingConfig,
-  getOfficialChannelsConfig,
   isDashboardAuthEnabled,
   getDashboardAuthConfig,
   getBrowserConfig,

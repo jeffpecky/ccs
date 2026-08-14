@@ -1,6 +1,6 @@
 /**
- * Provider Editor Component
- * Split-view editor for CLIProxy provider settings
+ * CLI Provider Editor Component
+ * Split-view editor for CLI tool provider settings
  */
 
 /* eslint-disable react-refresh/only-export-components */
@@ -19,17 +19,16 @@ import {
 import { CLIPROXY_DEFAULT_PORT } from '@/lib/preset-utils';
 import { isDeniedAgyModelId } from '@/lib/utils';
 import i18n from '@/lib/i18n';
-import { usePrivacy } from '@/contexts/privacy-context';
 import { useTranslation } from 'react-i18next';
-import { useProviderEditor } from './use-provider-editor';
-import { CustomPresetDialog } from './custom-preset-dialog';
-import { RawEditorSection } from './raw-editor-section';
-import { ProviderInfoTab } from './provider-info-tab';
-import { ProviderEditorHeader } from './provider-editor-header';
-import { ModelConfigTab } from './model-config-tab';
-import type { ProviderEditorProps, ModelMappingValues } from './types';
+import { useCLIProviderEditor } from './use-cli-provider-editor';
+import { CLICustomPresetDialog } from './cli-custom-preset-dialog';
+import { CLIRawEditorSection } from './cli-raw-editor-section';
+import { CLIProviderInfoTab } from './cli-provider-info-tab';
+import { CLIProviderEditorHeader } from './cli-provider-editor-header';
+import { CLIModelConfigTab } from './cli-model-config-tab';
+import type { CLIProviderEditorProps, ModelMappingValues } from './types';
 
-export function ProviderEditor({
+export function CLIProviderEditor({
   provider,
   displayName,
   authStatus,
@@ -41,23 +40,8 @@ export function ProviderEditor({
   port,
   defaultTarget,
   topNotice,
-  onAddAccount,
-  onReauthAccount,
-  onSetDefault,
-  onRemoveAccount,
-  onPauseToggle,
-  onSoloMode,
-  onBulkPause,
-  onBulkResume,
-  isRemovingAccount,
-  isPausingAccount,
-  isSoloingAccount,
-  isBulkPausing,
-  isBulkResuming,
-  hideAccounts,
-}: ProviderEditorProps) {
+}: CLIProviderEditorProps) {
   const [customPresetOpen, setCustomPresetOpen] = useState(false);
-  const { privacyMode } = usePrivacy();
   const { t } = useTranslation();
 
   const { data: modelsData } = useCliproxyModels();
@@ -65,7 +49,6 @@ export function ProviderEditor({
   const createPresetMutation = useCreatePreset();
   const deletePresetMutation = useDeletePreset();
 
-  // Use baseProvider for model filtering (for variants, this is the parent provider)
   const modelFilterProvider = baseProvider || provider;
   const isAgyProvider = modelFilterProvider.toLowerCase() === 'agy';
 
@@ -132,18 +115,7 @@ export function ProviderEditor({
     conflictDialog,
     handleConflictResolve,
     missingRequiredFields,
-  } = useProviderEditor(provider, catalog);
-
-  // Defensive normalization: remote/legacy payloads may omit account.provider.
-  // Fallback to current editor provider to avoid runtime crashes in account UI.
-  const accounts = useMemo(
-    () =>
-      (authStatus.accounts || []).map((account) => ({
-        ...account,
-        provider: account.provider || baseProvider || provider,
-      })),
-    [authStatus.accounts, baseProvider, provider]
-  );
+  } = useCLIProviderEditor(provider, catalog);
 
   // Fetch effective API key for presets (uses configured value, not hardcoded)
   const { data: authTokens } = useQuery<{ apiKey: { value: string } }>({
@@ -224,7 +196,7 @@ export function ProviderEditor({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <ProviderEditorHeader
+      <CLIProviderEditorHeader
         provider={provider}
         displayName={displayName}
         logoProvider={logoProvider}
@@ -264,7 +236,7 @@ export function ProviderEditor({
                   value="config"
                   className="flex-1 mt-0 border-0 p-0 data-[state=inactive]:hidden flex flex-col overflow-hidden"
                 >
-                  <ModelConfigTab
+                  <CLIModelConfigTab
                     provider={provider}
                     catalog={catalog}
                     savedPresets={savedPresets}
@@ -283,30 +255,13 @@ export function ProviderEditor({
                       deletePresetMutation.mutate({ profile: provider, name })
                     }
                     isDeletePending={deletePresetMutation.isPending}
-                    accounts={accounts}
-                    onAddAccount={onAddAccount}
-                    onReauthAccount={onReauthAccount}
-                    onSetDefault={onSetDefault}
-                    onRemoveAccount={onRemoveAccount}
-                    onPauseToggle={onPauseToggle}
-                    onSoloMode={onSoloMode}
-                    onBulkPause={onBulkPause}
-                    onBulkResume={onBulkResume}
-                    isRemovingAccount={isRemovingAccount}
-                    isPausingAccount={isPausingAccount}
-                    isSoloingAccount={isSoloingAccount}
-                    isBulkPausing={isBulkPausing}
-                    isBulkResuming={isBulkResuming}
-                    privacyMode={privacyMode}
-                    isRemoteMode={isRemoteMode}
-                    hideAccounts={hideAccounts}
                   />
                 </TabsContent>
                 <TabsContent
                   value="info"
                   className="h-full mt-0 border-0 p-0 data-[state=inactive]:hidden"
                 >
-                  <ProviderInfoTab
+                  <CLIProviderInfoTab
                     provider={provider}
                     displayName={displayName}
                     baseProvider={baseProvider}
@@ -327,7 +282,7 @@ export function ProviderEditor({
                 {t('rawEditorSection.rawConfig')} (JSON)
               </span>
             </div>
-            <RawEditorSection
+            <CLIRawEditorSection
               rawJsonContent={rawJsonContent}
               isRawJsonValid={isRawJsonValid}
               rawJsonEdits={rawJsonEdits}
@@ -349,7 +304,7 @@ export function ProviderEditor({
         onCancel={() => handleConflictResolve(false)}
       />
 
-      <CustomPresetDialog
+      <CLICustomPresetDialog
         open={customPresetOpen}
         onClose={() => setCustomPresetOpen(false)}
         currentValues={{
@@ -369,14 +324,12 @@ export function ProviderEditor({
   );
 }
 
-export type { ProviderEditorProps, ModelMappingValues } from './types';
-export { AccountItem } from './account-item';
+export type { CLIProviderEditorProps, ModelMappingValues } from './types';
 export { UsageCommand } from './usage-command';
-export { CustomPresetDialog } from './custom-preset-dialog';
-export { ModelConfigSection } from './model-config-section';
-export { RawEditorSection } from './raw-editor-section';
-export { AccountsSection } from './accounts-section';
-export { ProviderInfoTab } from './provider-info-tab';
-export { ProviderEditorHeader } from './provider-editor-header';
-export { ModelConfigTab } from './model-config-tab';
-export { useProviderEditor } from './use-provider-editor';
+export { CLICustomPresetDialog } from './cli-custom-preset-dialog';
+export { CLIModelConfigSection } from './cli-model-config-section';
+export { CLIRawEditorSection } from './cli-raw-editor-section';
+export { CLIProviderInfoTab } from './cli-provider-info-tab';
+export { CLIProviderEditorHeader } from './cli-provider-editor-header';
+export { CLIModelConfigTab } from './cli-model-config-tab';
+export { useCLIProviderEditor } from './use-cli-provider-editor';

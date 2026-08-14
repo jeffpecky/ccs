@@ -15,7 +15,6 @@ import {
   DEFAULT_CURSOR_CONFIG,
   DEFAULT_GLOBAL_ENV,
   DEFAULT_LOGGING_CONFIG,
-  DEFAULT_OFFICIAL_CHANNELS_CONFIG,
   DEFAULT_THINKING_CONFIG,
 } from '../unified-config-types';
 import type {
@@ -25,11 +24,9 @@ import type {
   DashboardAuthConfig,
   GlobalEnvConfig,
   LoggingConfig,
-  OfficialChannelsConfig,
   ThinkingConfig,
 } from '../unified-config-types';
 import { canonicalizeBrowserConfig } from './normalizers';
-import { normalizeOfficialChannelIds } from '../../channels/official-channels-ids';
 
 // ---------------------------------------------------------------------------
 // Circular-import safety: loadOrCreateUnifiedConfig lives in
@@ -113,22 +110,6 @@ export function getThinkingConfig(): ThinkingConfig {
     },
     provider_overrides: config.thinking?.provider_overrides,
     show_warnings: config.thinking?.show_warnings ?? DEFAULT_THINKING_CONFIG.show_warnings,
-  };
-}
-
-/**
- * Get Official Channels configuration.
- * Returns defaults if not configured.
- */
-export function getOfficialChannelsConfig(): OfficialChannelsConfig {
-  const config = getConfig();
-
-  return {
-    selected:
-      config.channels?.selected && config.channels.selected.length > 0
-        ? normalizeOfficialChannelIds(config.channels.selected)
-        : DEFAULT_OFFICIAL_CHANNELS_CONFIG.selected,
-    unattended: config.channels?.unattended ?? DEFAULT_OFFICIAL_CHANNELS_CONFIG.unattended,
   };
 }
 

@@ -109,7 +109,7 @@ export {
 
 // Executor
 export {
-  execClaudeWithCLIProxy,
+  startCLIProxy,
   isPortAvailable,
   findAvailablePort,
 } from './executor';

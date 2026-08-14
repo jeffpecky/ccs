@@ -35,6 +35,9 @@ const SettingsPage = lazy(() =>
   import('@/pages/settings').then((m) => ({ default: m.SettingsPage }))
 );
 const HealthPage = lazy(() => import('@/pages/health').then((m) => ({ default: m.HealthPage })));
+const CliToolsPage = lazy(() =>
+  import('@/pages/cli-tools').then((m) => ({ default: m.CliToolsPage }))
+);
 
 // Loading fallback for lazy components
 function PageLoader() {
@@ -129,6 +132,14 @@ export default function App() {
                       element={
                         <Suspense fallback={<PageLoader />}>
                           <LogsPage />
+                        </Suspense>
+                      }
+                    />
+                    <Route
+                      path="/cli-tools"
+                      element={
+                        <Suspense fallback={<PageLoader />}>
+                          <CliToolsPage />
                         </Suspense>
                       }
                     />

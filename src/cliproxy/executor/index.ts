@@ -7,12 +7,11 @@
  * 3. Authentication and account management
  * 4. Proxy lifecycle (spawn/detect/join)
  * 5. Environment setup and proxy chains
- * 6. Claude CLI execution with cleanup handlers
+ * 6. CLIProxy ready notification
  */
 
 import { ChildProcess } from 'child_process';
-import * as fs from 'fs';
-import { fail, warn } from '../../utils/ui';
+import { warn } from '../../utils/ui';
 import {
   generateConfig,
   getProviderConfig,
@@ -53,11 +52,10 @@ import {
   resolveRuntimeThinkingOverride,
 } from './thinking-override-resolver';
 import { shouldStartHttpsTunnel } from './https-tunnel-policy';
-import { filterCcsFlags, parseExecutorFlags, validateFlagCombinations } from './arg-parser';
+import { parseExecutorFlags, validateFlagCombinations } from './arg-parser';
 import { resolveExecutorProxy, resolveExecutorProxyConfig } from './proxy-resolver';
 import { buildProxyChain } from './proxy-chain-builder';
 import { warnBrokenModels } from './model-warnings';
-import { launchClaude } from './claude-launcher';
 import { maybeWarnClaudeShadow, maybeShowClaudeRoutingNotice } from '../claude-shadow-warning';
 
 /** Local alias so internal call sites need no change */
@@ -71,22 +69,14 @@ const DEFAULT_CONFIG: ExecutorConfig = {
   pollInterval: 100,
 };
 
-// readOptionValue, hasGitLabTokenLoginFlag, CCS_FLAGS, filterCcsFlags are
-// re-exported from ./arg-parser via the export block at the bottom of this file
-// for backwards compatibility with external callers.
-
 /**
- * Execute Claude CLI with CLIProxy (main entry point)
+ * Start CLIProxy as a background service
  *
- * @param claudeCli Path to Claude CLI executable
  * @param provider CLIProxy provider (gemini, codex, agy, qwen)
- * @param args Arguments to pass to Claude CLI
  * @param config Optional executor configuration
  */
-export async function execClaudeWithCLIProxy(
-  claudeCli: string,
+export async function startCLIProxy(
   provider: CLIProxyProvider,
-  args: string[],
   config: Partial<ExecutorConfig> = {}
 ): Promise<void> {
   // Filter out undefined values to prevent overwriting defaults
@@ -94,14 +84,7 @@ export async function execClaudeWithCLIProxy(
     Object.entries(config).filter(([, v]) => v !== undefined)
   ) as Partial<ExecutorConfig>;
   const cfg = { ...DEFAULT_CONFIG, ...filteredConfig };
-  const verbose = cfg.verbose || args.includes('--verbose') || args.includes('-v');
-
-  // Validate Claude CLI exists before proceeding
-  if (!fs.existsSync(claudeCli)) {
-    console.error(fail(`Claude CLI not found at: ${claudeCli}`));
-    console.error('    Run diagnostics from the dashboard settings to reinstall or check your PATH');
-    process.exit(1);
-  }
+  const verbose = cfg.verbose;
 
   const log = (msg: string) => {
     if (verbose) {
@@ -115,13 +98,13 @@ export async function execClaudeWithCLIProxy(
       ? [...new Set(Object.values(cfg.compositeTiers).map((t) => t.provider))]
       : [];
 
-  // 0. Resolve proxy configuration (CLI > ENV > config.yaml > defaults)
+  // 1. Resolve proxy configuration (CLI > ENV > config.yaml > defaults)
   const unifiedConfig = loadOrCreateUnifiedConfig();
 
   // Collect all providers to validate (default + composite tiers)
   const allProviders = [provider, ...compositeProviders];
 
-  const proxyResolution = resolveExecutorProxyConfig(args, {
+  const proxyResolution = resolveExecutorProxyConfig([], {
     unifiedConfig,
     allProviders,
     verbose,
@@ -131,12 +114,11 @@ export async function execClaudeWithCLIProxy(
 
   const {
     browserLaunchOverride,
-    argsWithoutBrowserFlags,
     parseFailed: browserLaunchParseFailed,
   } = resolveBrowserLaunchFlags(proxyResolution.argsWithoutProxy);
   if (browserLaunchParseFailed) return;
 
-  const { proxyConfig, useRemoteProxy, localBackend, binaryPath, argsWithoutProxy } =
+  const { proxyConfig, useRemoteProxy, localBackend, binaryPath } =
     await resolveExecutorProxy(proxyResolution, {
       unifiedConfig,
       allProviders,
@@ -153,11 +135,8 @@ export async function execClaudeWithCLIProxy(
     maybeWarnClaudeShadow();
   }
 
-  // Variables for local proxy mode
-  let sessionId: string | undefined;
-
   // 2. Parse all CCS executor flags (extracted to arg-parser.ts)
-  const parsedFlags = parseExecutorFlags(argsWithoutProxy, {
+  const parsedFlags = parseExecutorFlags([], {
     provider,
     compositeProviders,
     unifiedConfig,
@@ -168,7 +147,7 @@ export async function execClaudeWithCLIProxy(
   const flagCombinationsValid = validateFlagCombinations(
     parsedFlags,
     { provider, compositeProviders },
-    argsWithoutProxy
+    []
   );
   if (!flagCombinationsValid) return;
 
@@ -299,13 +278,11 @@ export async function execClaudeWithCLIProxy(
     log(`Config written: ${configPath}`);
 
     // 6a. Check or join existing proxy
-    const { sessionId: existingSessionId, shouldSpawn } = await checkOrJoinProxy(
+    const { shouldSpawn } = await checkOrJoinProxy(
       cfg.port,
       cfg.timeout,
       verbose
     );
-
-    sessionId = existingSessionId;
 
     // 6b. Spawn new proxy if needed
     if (shouldSpawn && binaryPath) {
@@ -322,7 +299,7 @@ export async function execClaudeWithCLIProxy(
 
       // Register session
       if (proxy.pid) {
-        sessionId = registerProxySession(cfg.port, proxy.pid, localBackend, verbose);
+        registerProxySession(cfg.port, proxy.pid, localBackend, verbose);
       }
     }
   }
@@ -427,7 +404,7 @@ export async function execClaudeWithCLIProxy(
       log,
     }));
 
-  // 11. Build final environment with all proxy chains
+  // 10. Build final environment with all proxy chains
   const env = buildClaudeEnvironment({
     provider,
     useRemoteProxy,
@@ -479,7 +456,7 @@ export async function execClaudeWithCLIProxy(
   }
   logEnvironment(env, verbose);
 
-  // 11b. Print thinking status feedback (TTY only, non-piped sessions)
+  // Print thinking status feedback (TTY only, non-piped sessions)
   if (process.stderr.isTTY) {
     const { thinkingLabel, sourceLabel } = buildThinkingStartupStatus(
       thinkingCfg,
@@ -491,38 +468,16 @@ export async function execClaudeWithCLIProxy(
     console.error(`[i] Thinking: ${thinkingLabel} (${sourceLabel})`);
   }
 
-  // 12. Filter CCS flags, spawn Claude CLI, start quota monitor, wire cleanup
-  const claudeArgs = filterCcsFlags(argsWithoutBrowserFlags);
-  await launchClaude({
-    claudeCli,
-    claudeArgs,
-    env,
-    cfg,
-    provider,
-    compositeProviders,
-    skipLocalAuth,
-    sessionId,
-    browserRuntimeEnv,
-    inheritedClaudeConfigDir,
-    codexReasoningProxy,
-    toolSanitizationProxy,
-    httpsTunnel,
-    verbose,
-  });
+  // CLIProxy is ready - users can now configure their CLI in the dashboard
+  console.log(`[cliproxy] CLIProxy ready on port ${cfg.port}`);
+  console.log(`[cliproxy] Configure your CLI at: http://localhost:3000/dashboard/cli-tools`);
 }
 
 // Re-export utility functions for backwards compatibility
 export { isPortAvailable, findAvailablePort } from './lifecycle-manager';
 
-// Re-export arg-parser helpers (previously inlined here; external callers can
-// import from index or directly from ./arg-parser)
-export { readOptionValue, hasGitLabTokenLoginFlag, CCS_FLAGS, filterCcsFlags } from './arg-parser';
-
-// Re-export account-resolution helpers for backwards compat with __testExports consumers
-export { resolveRuntimeQuotaMonitorProviders as _resolveRuntimeQuotaMonitorProviders } from './account-resolution';
-
 export const __testExports = {
   resolveRuntimeQuotaMonitorProviders,
 };
 
-export default execClaudeWithCLIProxy;
+export default startCLIProxy;

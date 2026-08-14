@@ -68,7 +68,6 @@ export {
   validateCompositeVariants,
   normalizeContinuityInheritanceMap,
   normalizeContinuityConfig,
-  normalizeOfficialChannelsConfig,
 } from './loader/normalizers';
 import { canonicalizeBrowserConfig, validateCompositeVariants } from './loader/normalizers';
 
@@ -95,7 +94,6 @@ export {
   getContinuityInheritanceMap,
   getCliproxySafetyConfig,
   getThinkingConfig,
-  getOfficialChannelsConfig,
   isDashboardAuthEnabled,
   getDashboardAuthConfig,
   getBrowserConfig,

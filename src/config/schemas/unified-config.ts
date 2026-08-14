@@ -31,8 +31,6 @@ import type { QuotaManagementConfig } from './quota';
 import { DEFAULT_QUOTA_MANAGEMENT_CONFIG } from './quota';
 import type { ThinkingConfig } from './thinking';
 import { DEFAULT_THINKING_CONFIG } from './thinking';
-import type { OfficialChannelsConfig } from './channels';
-import { DEFAULT_OFFICIAL_CHANNELS_CONFIG } from './channels';
 import type { BrowserConfig } from './browser';
 import { DEFAULT_BROWSER_CONFIG } from './browser';
 
@@ -73,8 +71,6 @@ export interface UnifiedConfig {
   quota_management?: QuotaManagementConfig;
   /** Thinking/reasoning budget configuration (v8+) */
   thinking?: ThinkingConfig;
-  /** Official Channels runtime auto-enable preferences (v11+) */
-  channels?: OfficialChannelsConfig;
   /** Dashboard authentication configuration (optional) */
   dashboard_auth?: DashboardAuthConfig;
   /** Browser automation configuration */
@@ -129,7 +125,6 @@ export function createEmptyUnifiedConfig(): UnifiedConfig {
     cliproxy_server: { ...DEFAULT_CLIPROXY_SERVER_CONFIG },
     quota_management: { ...DEFAULT_QUOTA_MANAGEMENT_CONFIG },
     thinking: { ...DEFAULT_THINKING_CONFIG },
-    channels: { ...DEFAULT_OFFICIAL_CHANNELS_CONFIG },
     dashboard_auth: { ...DEFAULT_DASHBOARD_AUTH_CONFIG },
     browser: {
       claude: { ...DEFAULT_BROWSER_CONFIG.claude },

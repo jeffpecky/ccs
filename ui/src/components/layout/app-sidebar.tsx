@@ -8,6 +8,7 @@ import {
   BarChart3,
   ScrollText,
   Github,
+  Terminal,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -84,6 +85,12 @@ function buildNavGroups(t: (key: string) => string): SidebarGroupDef[] {
             { path: '/cliproxy/control-panel', label: t('nav.controlPanel') },
           ],
         },
+      ],
+    },
+    {
+      title: 'CLI Tools',
+      items: [
+        { path: '/cli-tools', icon: Terminal, label: 'CLI Tools' },
       ],
     },
     {
