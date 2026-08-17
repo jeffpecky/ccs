@@ -16,6 +16,7 @@ import { getAuthDir, getProviderAuthDir, getConfigPathForPort } from './path-res
 import { CLIPROXY_DEFAULT_PORT } from './port-manager';
 import { loadOrCreateUnifiedConfig } from '../../config/config-loader-facade';
 import { getActiveDockerLegacyApiKeys } from '../../docker/docker-key-rotation';
+import type { CLIProxyTokenSaverConfig } from '../../config/unified-config-types';
 
 /** Internal API key for CCS-managed requests */
 export const CCS_INTERNAL_API_KEY = 'sk-45c9e789d78326c6b25e11879fc81602edc7228a4c594339';
@@ -45,17 +46,68 @@ export const CCS_CONTROL_PANEL_SECRET = 'mgmt-f078070e88eadc04ff2688da7797b8be';
  * v18: Persist routing.session-affinity and routing.session-affinity-ttl from CCS unified config
  * v19: Persist backend-aware management panel repository from CCS unified config
  * v20: Pool-gated cooling/routing/retry-cap block; disable-cooling flips to false for pool users
+ * v21: Persist token-saver controls and Headroom endpoint contract
  */
-export const CLIPROXY_CONFIG_VERSION = 20;
+export const CLIPROXY_CONFIG_VERSION = 21;
 
 export const ORIGINAL_MANAGEMENT_PANEL_REPOSITORY =
   'https://github.com/router-for-me/Cli-Proxy-API-Management-Center';
 export const PLUS_MANAGEMENT_PANEL_REPOSITORY =
   'https://github.com/jeffpecky/Cli-Proxy-API-Management-Center';
 
-interface RegenerateConfigOptions {
+export interface RegenerateConfigOptions {
   configPath?: string;
   authDir?: string;
+  tokenSaver?: CLIProxyTokenSaverConfig;
+}
+
+export interface AtomicReplaceFs {
+  openSync(path: string, flags: string, mode: number): number;
+  writeFileSync(fd: number, content: string): void;
+  fsyncSync(fd: number): void;
+  closeSync(fd: number): void;
+  renameSync(from: string, to: string): void;
+  unlinkSync(path: string): void;
+}
+
+const atomicReplaceFs: AtomicReplaceFs = {
+  openSync: (filePath, flags, mode) => fs.openSync(filePath, flags, mode),
+  writeFileSync: (fd, content) => fs.writeFileSync(fd, content),
+  fsyncSync: (fd) => fs.fsyncSync(fd),
+  closeSync: (fd) => fs.closeSync(fd),
+  renameSync: (from, to) => fs.renameSync(from, to),
+  unlinkSync: (filePath) => fs.unlinkSync(filePath),
+};
+
+export function replaceFileAtomically(
+  targetPath: string,
+  content: string,
+  fileSystem: AtomicReplaceFs = atomicReplaceFs
+): void {
+  const tempPath = `${targetPath}.${process.pid}.${Date.now()}.tmp`;
+  let fd: number | undefined;
+  try {
+    fd = fileSystem.openSync(tempPath, 'wx', 0o600);
+    fileSystem.writeFileSync(fd, content);
+    fileSystem.fsyncSync(fd);
+    fileSystem.closeSync(fd);
+    fd = undefined;
+    fileSystem.renameSync(tempPath, targetPath);
+  } catch (error) {
+    if (fd !== undefined) {
+      try {
+        fileSystem.closeSync(fd);
+      } catch {
+        // Preserve original failure.
+      }
+    }
+    try {
+      fileSystem.unlinkSync(tempPath);
+    } catch {
+      // Temp file may not exist.
+    }
+    throw error;
+  }
 }
 
 interface PreservedYamlSection {
@@ -190,6 +242,34 @@ function getSessionAffinityEnabled(): boolean {
 function getSessionAffinityTtl(): string {
   const ttl = loadOrCreateUnifiedConfig().cliproxy?.routing?.session_affinity_ttl?.trim();
   return ttl && GO_DURATION_PATTERN.test(ttl) && hasPositiveDuration(ttl) ? ttl : '1h';
+}
+
+function generateTokenSaverBlock(override?: CLIProxyTokenSaverConfig): string {
+  const tokenSaver = override ?? loadOrCreateUnifiedConfig().cliproxy.token_saver;
+  const caveman = tokenSaver?.caveman;
+  const ponytail = tokenSaver?.ponytail;
+  const headroom = tokenSaver?.headroom;
+  const pxpipe = tokenSaver?.pxpipe;
+
+  return `token-saver:
+  enabled: ${tokenSaver?.enabled ?? false}
+  rtk: ${tokenSaver?.rtk ?? false}
+  caveman:
+    enabled: ${caveman?.enabled ?? false}
+    level: ${quoteYamlString(caveman?.level ?? 'full')}
+  ponytail:
+    enabled: ${ponytail?.enabled ?? false}
+    level: ${quoteYamlString(ponytail?.level ?? 'full')}
+  headroom:
+    enabled: ${headroom?.enabled ?? false}
+    url: ${quoteYamlString(headroom?.url ?? 'http://127.0.0.1:8787')}
+    timeout-ms: ${headroom?.timeout_ms ?? 3000}
+    compress-user-messages: ${headroom?.compress_user_messages ?? false}
+    proxy-token-env: "HEADROOM_PROXY_TOKEN"
+  pxpipe:
+    enabled: ${pxpipe?.enabled ?? false}
+    min-chars: ${pxpipe?.min_chars ?? 25000}
+    timeout-ms: ${pxpipe?.timeout_ms ?? 15000}`;
 }
 
 function normalizeManagementPanelRepository(value: unknown): string | undefined {
@@ -647,9 +727,11 @@ function generateOAuthModelAliasSection(existingAliases?: string): string {
 function generateUnifiedConfigContent(
   port: number = CLIPROXY_DEFAULT_PORT,
   userApiKeys: string[] = [],
-  existingAliases?: string
+  existingAliases?: string,
+  tokenSaverOverride?: CLIProxyTokenSaverConfig,
+  authDirOverride?: string
 ): string {
-  const authDir = getAuthDir(); // Base auth dir - CLIProxyAPI scans subdirectories
+  const authDir = authDirOverride ?? getAuthDir(); // Base auth dir - CLIProxyAPI scans subdirectories
   // Convert Windows backslashes to forward slashes for YAML compatibility
   const authDirNormalized = authDir.split(path.sep).join('/');
 
@@ -710,6 +792,9 @@ routing:
 
 port: ${port}
 debug: false
+
+# Optional independent request-body token saving transforms
+${generateTokenSaverBlock(tokenSaverOverride)}
 
 # =============================================================================
 # Logging
@@ -938,8 +1023,6 @@ export function regenerateConfig(
     } catch {
       // Use defaults if reading fails
     }
-    // Delete existing config
-    fs.unlinkSync(configPath);
   }
 
   // Ensure directories exist
@@ -947,16 +1030,39 @@ export function regenerateConfig(
   fs.mkdirSync(authDir, { recursive: true, mode: 0o700 });
 
   // Generate fresh config with preserved user API keys and aliases
-  let configContent = generateUnifiedConfigContent(effectivePort, userApiKeys, existingAliases);
+  let configContent = generateUnifiedConfigContent(
+    effectivePort,
+    userApiKeys,
+    existingAliases,
+    options?.tokenSaver,
+    authDir
+  );
 
   // Re-append managed top-level sections that are not part of the generated defaults.
   for (const section of preservedSections) {
     configContent += `${section.key}:\n${section.body}\n`;
   }
 
-  fs.writeFileSync(configPath, configContent, { mode: 0o600 });
+  replaceFileAtomically(configPath, configContent);
 
   return configPath;
+}
+
+export function regenerateConfigWithRollback(
+  port: number = CLIPROXY_DEFAULT_PORT,
+  options?: RegenerateConfigOptions
+): () => void {
+  const configPath = options?.configPath ?? getConfigPathForPort(port);
+  const existed = fs.existsSync(configPath);
+  const previous = existed ? fs.readFileSync(configPath, 'utf8') : undefined;
+  regenerateConfig(port, options);
+  return () => {
+    if (previous !== undefined) {
+      replaceFileAtomically(configPath, previous);
+    } else if (fs.existsSync(configPath)) {
+      fs.unlinkSync(configPath);
+    }
+  };
 }
 
 /**

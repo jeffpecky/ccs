@@ -20,36 +20,26 @@ export default defineConfig({
     minify: 'esbuild',
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Vendor chunks - split large dependencies
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'radix-ui': [
-            '@radix-ui/react-alert-dialog',
-            '@radix-ui/react-checkbox',
-            '@radix-ui/react-collapsible',
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-label',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-scroll-area',
-            '@radix-ui/react-select',
-            '@radix-ui/react-separator',
-            '@radix-ui/react-slot',
-            '@radix-ui/react-switch',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-tooltip',
-          ],
-          'tanstack': ['@tanstack/react-query', '@tanstack/react-table'],
-          'form-utils': ['react-hook-form', '@hookform/resolvers', 'zod'],
-          'icons': ['lucide-react'],
-          // Charts - large library, separate chunk
-          'charts': ['recharts'],
-          // Code editor / syntax highlighting
-          'code-highlight': ['prism-react-renderer'],
-          // Notifications
-          'notifications': ['sonner'],
-          // Utilities
-          'utils': ['date-fns', 'clsx', 'class-variance-authority', 'tailwind-merge', 'yaml'],
+        manualChunks(id) {
+          if (id.includes('/node_modules/recharts/')) return 'charts';
+          if (id.includes('/node_modules/lodash/')) return 'lodash-vendor';
+          if (id.includes('/node_modules/@babel/runtime/')) return 'babel-runtime';
+          if (/\/node_modules\/(react|react-dom|react-router-dom)\//.test(id))
+            return 'react-vendor';
+          if (id.includes('/node_modules/@radix-ui/')) return 'radix-ui';
+          if (id.includes('/node_modules/@tanstack/')) return 'tanstack';
+          if (/\/node_modules\/(i18next|react-i18next)\//.test(id)) return 'i18n-vendor';
+          if (/\/node_modules\/(react-hook-form|@hookform\/resolvers|zod)\//.test(id))
+            return 'form-utils';
+          if (id.includes('/node_modules/lucide-react/')) return 'icons';
+          if (id.includes('/node_modules/prism-react-renderer/')) return 'code-highlight';
+          if (id.includes('/node_modules/sonner/')) return 'notifications';
+          if (
+            /\/node_modules\/(date-fns|clsx|class-variance-authority|tailwind-merge|yaml)\//.test(
+              id
+            )
+          )
+            return 'utils';
         },
       },
     },

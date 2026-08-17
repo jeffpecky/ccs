@@ -157,6 +157,57 @@ export interface CLIProxyPoolRoutingConfig {
   onboarding_hint_dismissed?: boolean;
 }
 
+export interface TokenSaverPromptConfig {
+  enabled?: boolean;
+  level?: string;
+}
+
+export interface TokenSaverHeadroomConfig {
+  enabled?: boolean;
+  /** Admin-trusted Headroom origin/base path. CCS only probes its fixed /health endpoint. */
+  url?: string;
+  mode?: 'local' | 'external';
+  timeout_ms?: number;
+  compress_user_messages?: boolean;
+  /** Fixed to HEADROOM_PROXY_TOKEN. Secret value is never persisted. */
+  token_env?: string;
+  code_aware?: boolean;
+  kompress?: boolean;
+}
+
+export interface TokenSaverPXPipeConfig {
+  enabled?: boolean;
+  min_chars?: number;
+  timeout_ms?: number;
+}
+
+export interface CLIProxyTokenSaverConfig {
+  enabled?: boolean;
+  rtk?: boolean;
+  caveman?: TokenSaverPromptConfig;
+  ponytail?: TokenSaverPromptConfig;
+  headroom?: TokenSaverHeadroomConfig;
+  pxpipe?: TokenSaverPXPipeConfig;
+}
+
+export const DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG = {
+  enabled: false,
+  rtk: false,
+  caveman: { enabled: false, level: 'full' },
+  ponytail: { enabled: false, level: 'full' },
+  headroom: {
+    enabled: false,
+    url: 'http://127.0.0.1:8787',
+    mode: 'local' as const,
+    timeout_ms: 3000,
+    compress_user_messages: false,
+    token_env: 'HEADROOM_PROXY_TOKEN',
+    code_aware: false,
+    kompress: true,
+  },
+  pxpipe: { enabled: false, min_chars: 25000, timeout_ms: 15000 },
+};
+
 /**
  * CLIProxy configuration section.
  */
@@ -187,4 +238,6 @@ export interface CLIProxyConfig {
   routing?: CLIProxyRoutingConfig;
   /** Pool routing opt-in state and configuration */
   pool_routing?: CLIProxyPoolRoutingConfig;
+  /** Independent request-body token saving transforms */
+  token_saver?: CLIProxyTokenSaverConfig;
 }

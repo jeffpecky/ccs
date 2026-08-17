@@ -8,7 +8,11 @@
 import type { AccountConfig, ProfileConfig, DashboardAuthConfig } from './auth';
 import { DEFAULT_DASHBOARD_AUTH_CONFIG } from './auth';
 import type { CLIProxyConfig } from './cliproxy';
-import { CLIPROXY_SUPPORTED_PROVIDERS, DEFAULT_CLIPROXY_SAFETY_CONFIG } from './cliproxy';
+import {
+  CLIPROXY_SUPPORTED_PROVIDERS,
+  DEFAULT_CLIPROXY_SAFETY_CONFIG,
+  DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG,
+} from './cliproxy';
 import type { LoggingConfig, PreferencesConfig } from './logging';
 import { DEFAULT_LOGGING_CONFIG } from './logging';
 import type {
@@ -96,6 +100,7 @@ export function createEmptyUnifiedConfig(): UnifiedConfig {
         request_log: false,
       },
       safety: { ...DEFAULT_CLIPROXY_SAFETY_CONFIG },
+      token_saver: structuredClone(DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG),
       auto_sync: true,
       routing: {
         strategy: 'round-robin',

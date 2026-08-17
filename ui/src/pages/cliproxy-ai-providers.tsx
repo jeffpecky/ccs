@@ -8,7 +8,7 @@ import type {
 } from '../../../src/cliproxy/ai-providers';
 import { ProviderLogo } from '@/components/cliproxy/provider-logo';
 import { ProxyStatusWidget } from '@/components/monitoring/proxy-status-widget';
-import { CodeEditor } from '@/components/shared/code-editor';
+import { CodeEditor } from '@/components/shared/lazy-code-editor';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { GlobalEnvIndicator } from '@/components/shared/global-env-indicator';
 import { Badge } from '@/components/ui/badge';

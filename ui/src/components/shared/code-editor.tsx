@@ -22,7 +22,7 @@ import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
 
-interface CodeEditorProps {
+export interface CodeEditorProps {
   value: string;
   onChange: (value: string) => void;
   language?: 'json' | 'yaml' | 'toml';

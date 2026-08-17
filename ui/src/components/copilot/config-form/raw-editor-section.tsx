@@ -3,15 +3,11 @@
  * JSON editor panel for copilot settings
  */
 
-import { Suspense, lazy } from 'react';
+import { Suspense } from 'react';
 import { Loader2, X, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { GlobalEnvIndicator } from '@/components/shared/global-env-indicator';
-
-// Lazy load CodeEditor
-const CodeEditor = lazy(() =>
-  import('@/components/shared/code-editor').then((m) => ({ default: m.CodeEditor }))
-);
+import { CodeEditor } from '@/components/shared/lazy-code-editor';
 
 interface RawEditorSectionProps {
   rawJsonContent: string;

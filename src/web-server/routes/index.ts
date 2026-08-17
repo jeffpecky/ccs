@@ -30,6 +30,7 @@ import catalogRoutes from './catalog-routes';
 import logsRoutes from './logs-routes';
 import barRoutes from './bar-routes';
 import cliToolsRoutes from './cli-tools-routes';
+import headroomRoutes from './headroom-routes';
 
 // Create the main API router
 export const apiRoutes = Router();
@@ -120,6 +121,9 @@ apiRoutes.use('/bar', barRoutes);
 
 // ==================== CLI Tools ====================
 apiRoutes.use('/cli-tools', cliToolsRoutes);
+
+// ==================== Token Saver / Headroom ====================
+apiRoutes.use('/headroom', headroomRoutes);
 
 // ==================== Misc (File API, Global Env) ====================
 apiRoutes.use('/', miscRoutes);

@@ -12,7 +12,7 @@ import { Layout } from '@/components/layout/layout';
 import { Loader2 } from 'lucide-react';
 
 // Eager load: HomePage (initial route) + LoginPage (auth flow)
-import { HomePage } from '@/pages';
+import { HomePage } from '@/pages/home';
 import { LoginPage } from '@/pages/login';
 
 // Lazy load: heavy pages with charts or complex dependencies
@@ -37,6 +37,9 @@ const SettingsPage = lazy(() =>
 const HealthPage = lazy(() => import('@/pages/health').then((m) => ({ default: m.HealthPage })));
 const CliToolsPage = lazy(() =>
   import('@/pages/cli-tools').then((m) => ({ default: m.CliToolsPage }))
+);
+const TokenSaverPage = lazy(() =>
+  import('@/pages/token-saver').then((m) => ({ default: m.TokenSaverPage }))
 );
 
 // Loading fallback for lazy components
@@ -140,6 +143,14 @@ export default function App() {
                       element={
                         <Suspense fallback={<PageLoader />}>
                           <CliToolsPage />
+                        </Suspense>
+                      }
+                    />
+                    <Route
+                      path="/token-saver"
+                      element={
+                        <Suspense fallback={<PageLoader />}>
+                          <TokenSaverPage />
                         </Suspense>
                       }
                     />

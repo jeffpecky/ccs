@@ -9,6 +9,7 @@ import {
   ScrollText,
   Github,
   Terminal,
+  Gauge,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -69,6 +70,7 @@ function buildNavGroups(t: (key: string) => string): SidebarGroupDef[] {
       items: [
         { path: '/', icon: Home, label: t('nav.home') },
         { path: '/analytics', icon: BarChart3, label: t('nav.analytics') },
+        { path: '/token-saver', icon: Gauge, label: 'Token Saver' },
       ],
     },
     {
@@ -89,9 +91,7 @@ function buildNavGroups(t: (key: string) => string): SidebarGroupDef[] {
     },
     {
       title: 'CLI Tools',
-      items: [
-        { path: '/cli-tools', icon: Terminal, label: 'CLI Tools' },
-      ],
+      items: [{ path: '/cli-tools', icon: Terminal, label: 'CLI Tools' }],
     },
     {
       title: t('nav.deprecated'),
@@ -182,10 +182,7 @@ export function AppSidebar() {
                 {group.items.map((item) => (
                   <SidebarMenuItem key={item.path}>
                     {item.isCollapsible && item.children ? (
-                      <Collapsible
-                        defaultOpen={true}
-                        className="group/collapsible"
-                      >
+                      <Collapsible defaultOpen={true} className="group/collapsible">
                         {/* Click navigates to overview AND opens submenu */}
                         <CollapsibleTrigger asChild>
                           <SidebarMenuButton

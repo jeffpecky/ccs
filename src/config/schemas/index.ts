@@ -21,7 +21,11 @@ export type {
 export { DEFAULT_DASHBOARD_AUTH_CONFIG } from './auth';
 
 // CLIProxy provider, variant, routing, safety, logging types
-export { CLIPROXY_SUPPORTED_PROVIDERS, DEFAULT_CLIPROXY_SAFETY_CONFIG } from './cliproxy';
+export {
+  CLIPROXY_SUPPORTED_PROVIDERS,
+  DEFAULT_CLIPROXY_SAFETY_CONFIG,
+  DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG,
+} from './cliproxy';
 export type {
   CLIProxyVariantConfig,
   CompositeTierConfig,
@@ -29,6 +33,10 @@ export type {
   CLIProxyLoggingConfig,
   CLIProxySafetyConfig,
   CLIProxyRoutingConfig,
+  TokenSaverPromptConfig,
+  TokenSaverHeadroomConfig,
+  TokenSaverPXPipeConfig,
+  CLIProxyTokenSaverConfig,
   CLIProxyConfig,
 } from './cliproxy';
 

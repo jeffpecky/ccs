@@ -16,7 +16,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, FileCode, Copy, Check, GripVertical, AlertCircle } from 'lucide-react';
-import { CodeEditor } from '@/components/shared/code-editor';
+import { CodeEditor } from '@/components/shared/lazy-code-editor';
 import { SettingsProvider } from './context';
 import { useSettingsTab, useRawConfig } from './hooks';
 import { TabNavigation } from './components/tab-navigation';

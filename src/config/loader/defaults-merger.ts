@@ -25,6 +25,7 @@ import {
   DEFAULT_THINKING_CONFIG,
   DEFAULT_DASHBOARD_AUTH_CONFIG,
   DEFAULT_LOGGING_CONFIG,
+  DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG,
 } from '../unified-config-types';
 import type { UnifiedConfig } from '../unified-config-types';
 import { canonicalizeBrowserConfig, normalizeSessionAffinityTtl } from './normalizers';
@@ -101,6 +102,66 @@ export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfi
           partial.cliproxy?.routing?.session_affinity_ttl,
           defaults.cliproxy.routing?.session_affinity_ttl ?? '1h'
         ),
+      },
+      token_saver: {
+        enabled:
+          partial.cliproxy?.token_saver?.enabled ?? DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.enabled,
+        rtk: partial.cliproxy?.token_saver?.rtk ?? DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.rtk,
+        caveman: {
+          enabled:
+            partial.cliproxy?.token_saver?.caveman?.enabled ??
+            DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.caveman.enabled,
+          level:
+            normalizeOptionalString(partial.cliproxy?.token_saver?.caveman?.level) ??
+            DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.caveman.level,
+        },
+        ponytail: {
+          enabled:
+            partial.cliproxy?.token_saver?.ponytail?.enabled ??
+            DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.ponytail.enabled,
+          level:
+            normalizeOptionalString(partial.cliproxy?.token_saver?.ponytail?.level) ??
+            DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.ponytail.level,
+        },
+        headroom: {
+          enabled:
+            partial.cliproxy?.token_saver?.headroom?.enabled ??
+            DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.headroom.enabled,
+          url:
+            normalizeOptionalString(partial.cliproxy?.token_saver?.headroom?.url) ??
+            DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.headroom.url,
+          mode: partial.cliproxy?.token_saver?.headroom?.mode === 'external' ? 'external' : 'local',
+          timeout_ms:
+            partial.cliproxy?.token_saver?.headroom?.timeout_ms &&
+            partial.cliproxy.token_saver.headroom.timeout_ms > 0
+              ? partial.cliproxy.token_saver.headroom.timeout_ms
+              : DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.headroom.timeout_ms,
+          compress_user_messages:
+            partial.cliproxy?.token_saver?.headroom?.compress_user_messages ??
+            DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.headroom.compress_user_messages,
+          token_env: DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.headroom.token_env,
+          code_aware:
+            partial.cliproxy?.token_saver?.headroom?.code_aware ??
+            DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.headroom.code_aware,
+          kompress:
+            partial.cliproxy?.token_saver?.headroom?.kompress ??
+            DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.headroom.kompress,
+        },
+        pxpipe: {
+          enabled:
+            partial.cliproxy?.token_saver?.pxpipe?.enabled ??
+            DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.pxpipe.enabled,
+          min_chars:
+            partial.cliproxy?.token_saver?.pxpipe?.min_chars &&
+            partial.cliproxy.token_saver.pxpipe.min_chars > 0
+              ? partial.cliproxy.token_saver.pxpipe.min_chars
+              : DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.pxpipe.min_chars,
+          timeout_ms:
+            partial.cliproxy?.token_saver?.pxpipe?.timeout_ms &&
+            partial.cliproxy.token_saver.pxpipe.timeout_ms > 0
+              ? partial.cliproxy.token_saver.pxpipe.timeout_ms
+              : DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG.pxpipe.timeout_ms,
+        },
       },
     },
     proxy: {
