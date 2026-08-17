@@ -5,13 +5,11 @@ import type { CLIProxyTokenSaverConfig } from '../../config/unified-config-types
 import { getCachedConfig, mutateConfig } from '../../config/config-loader-facade';
 import { regenerateConfigWithRollback } from '../../cliproxy/config/generator';
 import {
-  getHeadroomEndpoint,
-  getHeadroomStatus,
-  installHeadroom,
-  restartHeadroom,
-  startHeadroom,
-  stopHeadroom,
-} from '../../headroom/service';
+  buildManagementHeaders,
+  buildProxyUrl,
+  getProxyTarget,
+} from '../../cliproxy/proxy/proxy-target-resolver';
+import { getHeadroomEndpoint } from '../../headroom/service';
 import { requireLocalAccessWhenAuthDisabled } from '../middleware/auth-middleware';
 
 const HEADROOM_TOKEN_ENV = 'HEADROOM_PROXY_TOKEN';
@@ -26,6 +24,23 @@ function serializeConfigTransaction<T>(operation: () => Promise<T>): Promise<T> 
   return result;
 }
 
+async function proxyToCliproxy(
+  method: string,
+  managementPath: string,
+  body?: unknown
+): Promise<{ status: number; data: unknown }> {
+  const target = getProxyTarget();
+  const url = buildProxyUrl(target, managementPath);
+  const headers = buildManagementHeaders(target, { 'Content-Type': 'application/json' });
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const data = await response.json().catch(() => ({}));
+  return { status: response.status, data };
+}
+
 export interface HeadroomRouterDeps {
   enforceAccess(req: Request, res: Response): boolean;
   getTokenSaverConfig(): CLIProxyTokenSaverConfig;
@@ -33,11 +48,6 @@ export interface HeadroomRouterDeps {
   regenerateConfig(
     config: CLIProxyTokenSaverConfig
   ): void | (() => void) | Promise<void | (() => void)>;
-  getStatus(url: string): Promise<unknown>;
-  start(options: Parameters<typeof startHeadroom>[0]): ReturnType<typeof startHeadroom>;
-  stop(): ReturnType<typeof stopHeadroom>;
-  restart(options: Parameters<typeof restartHeadroom>[0]): ReturnType<typeof restartHeadroom>;
-  install(extras?: string[]): ReturnType<typeof installHeadroom>;
 }
 
 const defaultDeps: HeadroomRouterDeps = {
@@ -56,11 +66,6 @@ const defaultDeps: HeadroomRouterDeps = {
   regenerateConfig: (next) => {
     return regenerateConfigWithRollback(undefined, { tokenSaver: next });
   },
-  getStatus: getHeadroomStatus,
-  start: startHeadroom,
-  stop: stopHeadroom,
-  restart: restartHeadroom,
-  install: installHeadroom,
 };
 
 function normalizeConfig(input: unknown): CLIProxyTokenSaverConfig | null {
@@ -177,77 +182,56 @@ export function createHeadroomRouter(deps: HeadroomRouterDeps = defaultDeps) {
     });
   });
 
+  // All Headroom lifecycle operations proxy to CLIProxyAPIPlusNEW's management API.
+  // CLIProxyAPIPlusNEW runs on the same machine where Headroom needs to be installed,
+  // regardless of whether CCS is local or remote.
+
   router.get('/status', async (_req, res) => {
-    const headroom = getConfig().headroom;
-    if (headroom?.mode === 'external') {
-      res.json({
-        configured: true,
-        external: true,
-        local: false,
-        managed: false,
-        running: false,
-        healthy: null,
-        health: 'unknown',
-      });
-      return;
-    }
-    const url = headroom?.url ?? 'http://127.0.0.1:8787';
     try {
-      getHeadroomEndpoint(url);
-    } catch {
-      res.json({
-        configured: true,
-        external: false,
-        local: true,
-        managed: false,
-        running: false,
-        healthy: false,
-        health: 'invalid-config',
-        error: 'Invalid local Headroom URL.',
-      });
-      return;
+      const { status, data } = await proxyToCliproxy('GET', '/v0/management/headroom/status');
+      res.status(status).json(data);
+    } catch (error) {
+      res.status(502).json({ error: `Headroom status failed: ${(error as Error).message}` });
     }
-    res.json(await deps.getStatus(url));
   });
 
-  async function lifecycle(action: 'start' | 'stop' | 'restart', res: Response): Promise<void> {
-    const headroom = getConfig().headroom;
-    if (!headroom || headroom.mode !== 'local') {
-      res
-        .status(400)
-        .json({ success: false, error: 'External Headroom cannot be managed by CCS.' });
-      return;
-    }
-    try {
-      const { port } = getHeadroomEndpoint(headroom.url ?? '');
-      const options = {
-        port,
-        codeAware: headroom.code_aware ?? false,
-        kompress: headroom.kompress ?? true,
-      };
-      const result =
-        action === 'start'
-          ? await deps.start(options)
-          : action === 'restart'
-            ? await deps.restart(options)
-            : await deps.stop();
-      res.status(result.success ? 200 : 500).json(result);
-    } catch {
-      res.status(500).json({ error: 'Headroom lifecycle operation failed.' });
-    }
-  }
-
-  router.post('/start', (_req, res) => lifecycle('start', res));
-  router.post('/stop', (_req, res) => lifecycle('stop', res));
-  router.post('/restart', (_req, res) => lifecycle('restart', res));
-
   router.post('/install', async (req: Request, res: Response) => {
-    const extras = Array.isArray(req.body?.extras) ? req.body.extras : undefined;
     try {
-      const result = await deps.install(extras);
-      res.status(result.success ? 200 : 500).json(result);
-    } catch {
-      res.status(500).json({ success: false, error: 'Headroom installation failed.' });
+      const { status, data } = await proxyToCliproxy(
+        'POST',
+        '/v0/management/headroom/install',
+        req.body
+      );
+      res.status(status).json(data);
+    } catch (error) {
+      res.status(502).json({ error: `Headroom install failed: ${(error as Error).message}` });
+    }
+  });
+
+  router.post('/start', async (_req, res) => {
+    try {
+      const { status, data } = await proxyToCliproxy('POST', '/v0/management/headroom/start');
+      res.status(status).json(data);
+    } catch (error) {
+      res.status(502).json({ error: `Headroom start failed: ${(error as Error).message}` });
+    }
+  });
+
+  router.post('/stop', async (_req, res) => {
+    try {
+      const { status, data } = await proxyToCliproxy('POST', '/v0/management/headroom/stop');
+      res.status(status).json(data);
+    } catch (error) {
+      res.status(502).json({ error: `Headroom stop failed: ${(error as Error).message}` });
+    }
+  });
+
+  router.post('/restart', async (_req, res) => {
+    try {
+      const { status, data } = await proxyToCliproxy('POST', '/v0/management/headroom/restart');
+      res.status(status).json(data);
+    } catch (error) {
+      res.status(502).json({ error: `Headroom restart failed: ${(error as Error).message}` });
     }
   });
 
