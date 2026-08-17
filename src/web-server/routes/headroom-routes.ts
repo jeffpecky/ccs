@@ -190,8 +190,15 @@ export function createHeadroomRouter(deps: HeadroomRouterDeps = defaultDeps) {
     try {
       const { status, data } = await proxyToCliproxy('GET', '/v0/management/headroom/status');
       res.status(status).json(data);
-    } catch (error) {
-      res.status(502).json({ error: `Headroom status failed: ${(error as Error).message}` });
+    } catch {
+      // CLIProxyAPIPlusNEW not reachable — return offline status instead of error
+      res.json({
+        installed: false,
+        running: false,
+        healthy: false,
+        managed: false,
+        url: '',
+      });
     }
   });
 
