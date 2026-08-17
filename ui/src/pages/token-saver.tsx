@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Activity,
   BrainCircuit,
+  Copy,
   ExternalLink,
   Gauge,
   Hammer,
   Loader2,
   Play,
   RefreshCw,
-  Save,
   Square,
   TerminalSquare,
 } from 'lucide-react';
@@ -173,12 +173,13 @@ export function TokenSaverPage() {
   const [config, setConfig] = useState<TokenSaverConfig>();
   const [status, setStatus] = useState<HeadroomStatus>();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [acting, setActing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const persistController = useRef<AbortController | null>(null);
   const refreshController = useRef<AbortController | null>(null);
   const refreshSequence = useRef(0);
+  const persistSequence = useRef(0);
 
   const refresh = async (manual = false) => {
     refreshController.current?.abort();
@@ -228,31 +229,45 @@ export function TokenSaverPage() {
       current.pxpipe.enabled,
   });
 
-  const persist = async (current: TokenSaverConfig) => {
-    const response = await fetch('/api/headroom/config', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(configForSave(current)),
-    });
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(body.error ?? 'Unable to save Token Saver settings.');
-    }
-  };
+  const persist = useCallback(
+    async (current: TokenSaverConfig) => {
+      persistController.current?.abort();
+      const controller = new AbortController();
+      persistController.current = controller;
+      const sequence = ++persistSequence.current;
+      const response = await fetch('/api/headroom/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(configForSave(current)),
+        signal: controller.signal,
+      });
+      if (sequence !== persistSequence.current) return;
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? 'Unable to save Token Saver settings.');
+      }
+    },
+    []
+  );
 
-  const save = async () => {
-    if (!config) return;
-    setSaving(true);
-    try {
-      await persist(config);
-      toast.success('Token Saver settings saved.');
-      await refresh();
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
+  const updateConfig = useCallback(
+    (patch: Partial<TokenSaverConfig> | ((prev: TokenSaverConfig) => TokenSaverConfig)) => {
+      setConfig((prev) => {
+        if (!prev) return prev;
+        const next = typeof patch === 'function' ? patch(prev) : { ...prev, ...patch };
+        void persist(next);
+        return next;
+      });
+    },
+    [persist]
+  );
+
+  const updateHeadroom = useCallback(
+    (patch: Partial<TokenSaverConfig['headroom']>) => {
+      updateConfig((prev) => ({ ...prev, headroom: { ...prev.headroom, ...patch } }));
+    },
+    [updateConfig]
+  );
 
   const lifecycle = async (action: 'start' | 'stop' | 'restart') => {
     if (!config) return;
@@ -283,9 +298,7 @@ export function TokenSaverPage() {
     );
   }
 
-  const updateHeadroom = (patch: Partial<TokenSaverConfig['headroom']>) =>
-    setConfig({ ...config, headroom: { ...config.headroom, ...patch } });
-  const mutating = saving || acting || refreshing;
+  const mutating = acting || refreshing;
   const dashboardUrl = getHeadroomDashboardUrl(config.headroom.url);
 
   return (
@@ -309,23 +322,11 @@ export function TokenSaverPage() {
           >
             <RefreshCw className={cn('mr-2 h-4 w-4', refreshing && 'animate-spin')} /> Refresh
           </Button>
-          <Button onClick={() => void save()} disabled={mutating}>
-            {saving ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
-            )}
-            Save changes
-          </Button>
         </div>
       </header>
 
       <div role="status" aria-live="polite" className="sr-only">
-        {saving
-          ? 'Saving Token Saver settings'
-          : acting
-            ? 'Updating Headroom process'
-            : 'Token Saver ready'}
+        {acting ? 'Updating Headroom process' : 'Token Saver ready'}
       </div>
 
       <Card className="gap-0 overflow-hidden py-0">
@@ -337,7 +338,7 @@ export function TokenSaverPage() {
             description="Reduce git, grep, tree, and log output before it enters context."
             checked={config.rtk}
             disabled={mutating}
-            onCheckedChange={(rtk) => setConfig({ ...config, rtk })}
+            onCheckedChange={(rtk) => updateConfig({ ...config, rtk })}
           />
           <SaverRow
             icon={<BrainCircuit className="h-4 w-4" />}
@@ -350,7 +351,8 @@ export function TokenSaverPage() {
             controls={
               <>
                 <Badge variant={status?.healthy ? 'default' : 'secondary'}>
-                  <Activity className="mr-1 h-3 w-3" /> {status?.healthy ? 'Healthy' : 'Offline'}
+                  <Activity className="mr-1 h-3 w-3" />{' '}
+                  {status?.healthy ? 'Running' : 'Offline'}
                 </Badge>
                 <Button
                   variant="ghost"
@@ -358,7 +360,7 @@ export function TokenSaverPage() {
                   disabled={mutating}
                   onClick={() => setSetupOpen(true)}
                 >
-                  Setup Headroom
+                  {status?.running ? 'Manage' : 'Setup'}
                 </Button>
               </>
             }
@@ -371,7 +373,7 @@ export function TokenSaverPage() {
             checked={config.caveman.enabled}
             disabled={mutating}
             onCheckedChange={(enabled) =>
-              setConfig({ ...config, caveman: { ...config.caveman, enabled } })
+              updateConfig({ ...config, caveman: { ...config.caveman, enabled } })
             }
             controls={
               <LevelControl
@@ -379,7 +381,7 @@ export function TokenSaverPage() {
                 value={config.caveman.level}
                 disabled={!config.caveman.enabled || mutating}
                 onChange={(level) =>
-                  setConfig({ ...config, caveman: { ...config.caveman, level } })
+                  updateConfig({ ...config, caveman: { ...config.caveman, level } })
                 }
               />
             }
@@ -392,7 +394,7 @@ export function TokenSaverPage() {
             checked={config.ponytail.enabled}
             disabled={mutating}
             onCheckedChange={(enabled) =>
-              setConfig({ ...config, ponytail: { ...config.ponytail, enabled } })
+              updateConfig({ ...config, ponytail: { ...config.ponytail, enabled } })
             }
             controls={
               <LevelControl
@@ -400,7 +402,7 @@ export function TokenSaverPage() {
                 value={config.ponytail.level}
                 disabled={!config.ponytail.enabled || mutating}
                 onChange={(level) =>
-                  setConfig({ ...config, ponytail: { ...config.ponytail, level } })
+                  updateConfig({ ...config, ponytail: { ...config.ponytail, level } })
                 }
               />
             }
@@ -411,7 +413,9 @@ export function TokenSaverPage() {
       <Dialog open={setupOpen} onOpenChange={setSetupOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Headroom setup</DialogTitle>
+            <DialogTitle>
+              {status?.running ? 'Headroom' : 'Setup Headroom'}
+            </DialogTitle>
             <DialogDescription>
               Configure compression and manage local Headroom process.
             </DialogDescription>
@@ -430,11 +434,14 @@ export function TokenSaverPage() {
                     ? `Managed on port ${status.port}`
                     : config.headroom.mode === 'external'
                       ? 'External endpoint'
-                      : 'Not managed'}
+                      : status?.installed
+                        ? 'Installed'
+                        : 'Not installed'}
                 </p>
               </div>
               <Badge variant={status?.healthy ? 'default' : 'secondary'}>
-                <Activity className="mr-1 h-3 w-3" /> {status?.healthy ? 'Healthy' : 'Offline'}
+                <Activity className="mr-1 h-3 w-3" />{' '}
+                {status?.healthy ? 'Running' : 'Offline'}
               </Badge>
             </div>
 
@@ -449,55 +456,69 @@ export function TokenSaverPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="headroom-compression-mode">Compression mode</Label>
-              <Input
-                id="headroom-compression-mode"
-                aria-label="Compression mode"
-                value="lossy_inline"
-                readOnly
-              />
-              <p className="text-xs text-muted-foreground">
-                CCS uses Headroom lossy inline compression for request context.
-              </p>
-            </div>
-
-            <div className="divide-y rounded-lg border px-4">
-              {[
-                {
-                  id: 'compress-user-messages',
-                  label: 'Compress user messages',
-                  checked: config.headroom.compress_user_messages,
-                  change: (value: boolean) => updateHeadroom({ compress_user_messages: value }),
-                },
-                {
-                  id: 'code-aware',
-                  label: 'Code-aware compression',
-                  checked: config.headroom.code_aware,
-                  change: (value: boolean) => updateHeadroom({ code_aware: value }),
-                },
-                {
-                  id: 'kompress',
-                  label: 'Kompress ML',
-                  checked: config.headroom.kompress,
-                  change: (value: boolean) => updateHeadroom({ kompress: value }),
-                },
-              ].map((option) => (
-                <div key={option.id} className="flex items-center justify-between gap-4 py-3">
-                  <Label htmlFor={option.id}>{option.label}</Label>
-                  <Switch
-                    id={option.id}
-                    aria-label={option.label}
-                    checked={option.checked}
-                    disabled={mutating}
-                    onCheckedChange={option.change}
-                  />
+            {!status?.installed && (
+              <div className="rounded-lg border bg-muted/20 px-4 py-3">
+                <p className="mb-2 text-sm font-medium">Install Headroom</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Python &gt;= 3.10 is required. Run the following command in your terminal:
+                </p>
+                <div className="flex items-center gap-2 rounded-md bg-background px-3 py-2 font-mono text-xs">
+                  <code className="flex-1 truncate">
+                    pip install "headroom-ai[proxy]"
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 px-2"
+                    onClick={() => {
+                      void navigator.clipboard.writeText('pip install "headroom-ai[proxy]"');
+                      toast.success('Copied to clipboard');
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {status?.installed && (
+              <div className="divide-y rounded-lg border px-4">
+                {[
+                  {
+                    id: 'compress-user-messages',
+                    label: 'Compress user messages',
+                    checked: config.headroom.compress_user_messages,
+                    change: (value: boolean) => updateHeadroom({ compress_user_messages: value }),
+                  },
+                  {
+                    id: 'code-aware',
+                    label: 'Code-aware compression',
+                    checked: config.headroom.code_aware,
+                    change: (value: boolean) => updateHeadroom({ code_aware: value }),
+                  },
+                  {
+                    id: 'kompress',
+                    label: 'Kompress ML',
+                    checked: config.headroom.kompress,
+                    change: (value: boolean) => updateHeadroom({ kompress: value }),
+                  },
+                ].map((option) => (
+                  <div key={option.id} className="flex items-center justify-between gap-4 py-3">
+                    <Label htmlFor={option.id}>{option.label}</Label>
+                    <Switch
+                      id={option.id}
+                      aria-label={option.label}
+                      checked={option.checked}
+                      disabled={mutating}
+                      onCheckedChange={option.change}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-              {config.headroom.mode === 'local' && !status?.running && (
+              {config.headroom.mode === 'local' && !status?.running && status?.installed && (
                 <Button onClick={() => void lifecycle('start')} disabled={mutating}>
                   <Play className="mr-2 h-4 w-4" /> Start
                 </Button>
