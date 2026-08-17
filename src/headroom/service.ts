@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'child_process';
+import { spawn, spawnSync, execFile } from 'child_process';
 import * as fs from 'fs';
 import * as http from 'http';
 import * as https from 'https';
@@ -34,6 +34,7 @@ export interface HeadroomServiceDeps {
   sleep(milliseconds: number): Promise<void>;
   getEnv(name: string): string | undefined;
   lifecycleLock: Pick<ProfileContextSyncLock, 'withNamedLock'>;
+  execFile(command: string, args: string[]): Promise<{ stdout: string; stderr: string }>;
 }
 
 const STARTUP_ATTEMPTS = 40;
@@ -179,6 +180,13 @@ const defaultDeps: HeadroomServiceDeps = {
   sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
   getEnv: (name) => process.env[name],
   lifecycleLock: new ProfileContextSyncLock(path.join(getCcsDir(), 'headroom')),
+  execFile: (command, args) =>
+    new Promise((resolve, reject) => {
+      execFile(command, args, { windowsHide: true }, (error, stdout, stderr) => {
+        if (error) reject(error);
+        else resolve({ stdout, stderr });
+      });
+    }),
 };
 
 export function createHeadroomService(overrides: Partial<HeadroomServiceDeps> = {}) {
@@ -335,6 +343,20 @@ export function createHeadroomService(overrides: Partial<HeadroomServiceDeps> = 
         if (!stopped.success) return stopped;
         return startUnlocked(options);
       }),
+    async install(extras?: string[]) {
+      const spec = extras && extras.length > 0
+        ? `headroom-ai[proxy,${extras.join(',')}]`
+        : 'headroom-ai[proxy]';
+      try {
+        await deps.execFile('pip', ['install', '--upgrade', spec]);
+        return { success: true, installed: deps.installed() };
+      } catch (error) {
+        return {
+          success: false,
+          error: `pip install failed: ${(error as Error).message}`,
+        };
+      }
+    },
   };
 }
 
@@ -343,3 +365,4 @@ export const getHeadroomStatus = service.status;
 export const startHeadroom = service.start;
 export const stopHeadroom = service.stop;
 export const restartHeadroom = service.restart;
+export const installHeadroom = service.install;

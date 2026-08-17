@@ -7,6 +7,7 @@ import { regenerateConfigWithRollback } from '../../cliproxy/config/generator';
 import {
   getHeadroomEndpoint,
   getHeadroomStatus,
+  installHeadroom,
   restartHeadroom,
   startHeadroom,
   stopHeadroom,
@@ -36,6 +37,7 @@ export interface HeadroomRouterDeps {
   start(options: Parameters<typeof startHeadroom>[0]): ReturnType<typeof startHeadroom>;
   stop(): ReturnType<typeof stopHeadroom>;
   restart(options: Parameters<typeof restartHeadroom>[0]): ReturnType<typeof restartHeadroom>;
+  install(extras?: string[]): ReturnType<typeof installHeadroom>;
 }
 
 const defaultDeps: HeadroomRouterDeps = {
@@ -58,6 +60,7 @@ const defaultDeps: HeadroomRouterDeps = {
   start: startHeadroom,
   stop: stopHeadroom,
   restart: restartHeadroom,
+  install: installHeadroom,
 };
 
 function normalizeConfig(input: unknown): CLIProxyTokenSaverConfig | null {
@@ -237,6 +240,17 @@ export function createHeadroomRouter(deps: HeadroomRouterDeps = defaultDeps) {
   router.post('/start', (_req, res) => lifecycle('start', res));
   router.post('/stop', (_req, res) => lifecycle('stop', res));
   router.post('/restart', (_req, res) => lifecycle('restart', res));
+
+  router.post('/install', async (req: Request, res: Response) => {
+    const extras = Array.isArray(req.body?.extras) ? req.body.extras : undefined;
+    try {
+      const result = await deps.install(extras);
+      res.status(result.success ? 200 : 500).json(result);
+    } catch {
+      res.status(500).json({ success: false, error: 'Headroom installation failed.' });
+    }
+  });
+
   return router;
 }
 

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Activity,
   BrainCircuit,
-  Copy,
   ExternalLink,
   Gauge,
   Hammer,
@@ -174,6 +173,7 @@ export function TokenSaverPage() {
   const [status, setStatus] = useState<HeadroomStatus>();
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
+  const [installing, setInstalling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const persistController = useRef<AbortController | null>(null);
@@ -285,6 +285,25 @@ export function TokenSaverPage() {
     }
   };
 
+  const installHeadroom = async (extras?: string[]) => {
+    setInstalling(true);
+    try {
+      const response = await fetch('/api/headroom/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extras }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean };
+      if (!response.ok || !body.success) throw new Error(body.error ?? 'Installation failed.');
+      toast.success('Headroom installed successfully.');
+      await refresh();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setInstalling(false);
+    }
+  };
+
   if (loading || !config) {
     return (
       <div
@@ -298,7 +317,7 @@ export function TokenSaverPage() {
     );
   }
 
-  const mutating = acting || refreshing;
+  const mutating = acting || installing || refreshing;
   const dashboardUrl = getHeadroomDashboardUrl(config.headroom.url);
 
   return (
@@ -352,7 +371,7 @@ export function TokenSaverPage() {
               <>
                 <Badge variant={status?.healthy ? 'default' : 'secondary'}>
                   <Activity className="mr-1 h-3 w-3" />{' '}
-                  {status?.healthy ? 'Running' : 'Offline'}
+                  {status?.healthy ? 'Healthy' : 'Offline'}
                 </Badge>
                 <Button
                   variant="ghost"
@@ -441,7 +460,7 @@ export function TokenSaverPage() {
               </div>
               <Badge variant={status?.healthy ? 'default' : 'secondary'}>
                 <Activity className="mr-1 h-3 w-3" />{' '}
-                {status?.healthy ? 'Running' : 'Offline'}
+                {status?.healthy ? 'Healthy' : 'Offline'}
               </Badge>
             </div>
 
@@ -460,24 +479,17 @@ export function TokenSaverPage() {
               <div className="rounded-lg border bg-muted/20 px-4 py-3">
                 <p className="mb-2 text-sm font-medium">Install Headroom</p>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  Python &gt;= 3.10 is required. Run the following command in your terminal:
+                  Python &gt;= 3.10 is required. Click Install to install Headroom on the backend.
                 </p>
-                <div className="flex items-center gap-2 rounded-md bg-background px-3 py-2 font-mono text-xs">
-                  <code className="flex-1 truncate">
-                    pip install "headroom-ai[proxy]"
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 shrink-0 px-2"
-                    onClick={() => {
-                      void navigator.clipboard.writeText('pip install "headroom-ai[proxy]"');
-                      toast.success('Copied to clipboard');
-                    }}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                <Button
+                  onClick={() => void installHeadroom()}
+                  disabled={mutating}
+                >
+                  {installing ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  Install Headroom
+                </Button>
               </div>
             )}
 
