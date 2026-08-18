@@ -21,14 +21,14 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('/node_modules/recharts/')) return 'charts';
+          if (id.includes('/node_modules/recharts/') || id.includes('/node_modules/d3-')) return 'react-vendor';
           if (id.includes('/node_modules/lodash/')) return 'lodash-vendor';
           if (id.includes('/node_modules/@babel/runtime/')) return 'babel-runtime';
           if (/\/node_modules\/(react|react-dom|react-router-dom)\//.test(id))
             return 'react-vendor';
           if (id.includes('/node_modules/@radix-ui/')) return 'radix-ui';
           if (id.includes('/node_modules/@tanstack/')) return 'tanstack';
-          if (/\/node_modules\/(i18next|react-i18next)\//.test(id)) return 'i18n-vendor';
+          if (/\/node_modules\/(i18next|react-i18next)\//.test(id)) return 'react-vendor';
           if (/\/node_modules\/(react-hook-form|@hookform\/resolvers|zod)\//.test(id))
             return 'form-utils';
           if (id.includes('/node_modules/lucide-react/')) return 'icons';
