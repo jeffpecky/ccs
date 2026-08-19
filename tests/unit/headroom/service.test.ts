@@ -52,7 +52,7 @@ describe('Headroom managed lifecycle', () => {
   function harness(overrides: Record<string, unknown> = {}) {
     let pid: number | undefined;
     const signals: Array<[number, NodeJS.Signals | 0]> = [];
-    const spawned: Array<{ command: string; args: string[] }> = [];
+    const spawned: Array<{ command: string; args: string[]; options?: Record<string, unknown> }> = [];
     let probes = [true];
     const service = createHeadroomService({
       readPid: () => pid,
@@ -65,8 +65,8 @@ describe('Headroom managed lifecycle', () => {
       installed: () => true,
       ownership: () => 'owned',
       probe: async () => probes.shift() ?? false,
-      spawn: (command, args) => {
-        spawned.push({ command, args });
+      spawn: (command, args, options) => {
+        spawned.push({ command, args, options });
         return { pid: 42, unref: () => undefined };
       },
       signal: (target, signal) => {
@@ -161,6 +161,10 @@ describe('Headroom managed lifecycle', () => {
       {
         command: 'headroom',
         args: ['proxy', '--port', '8787', '--code-aware', '--disable-kompress'],
+        options: expect.objectContaining({
+          detached: true,
+          windowsHide: true,
+        }),
       },
     ]);
   });

@@ -493,7 +493,7 @@ export function TokenSaverPage() {
               </div>
             )}
 
-            {status?.installed && (
+            {status?.installed && status?.running && (
               <div className="divide-y rounded-lg border px-4">
                 {[
                   {
@@ -554,8 +554,8 @@ export function TokenSaverPage() {
                 </Button>
               )}
               {dashboardUrl ? (
-                <Button asChild variant="secondary" className="sm:ml-auto">
-                  <a href={dashboardUrl} target="_blank" rel="noreferrer">
+                <Button asChild variant="secondary" className="sm:ml-auto" disabled={!status?.running}>
+                  <a href={dashboardUrl} target="_blank" rel="noreferrer" onClick={(e) => { if (!status?.running) e.preventDefault(); }}>
                     Open Headroom dashboard <ExternalLink className="ml-2 h-4 w-4" />
                   </a>
                 </Button>
