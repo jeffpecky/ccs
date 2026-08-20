@@ -118,13 +118,11 @@ export function CLIModelConfigSection({
   }, [resolvedCatalogModels]);
 
   const showPresets = presetGroups.length > 0 || savedPresets.length > 0;
-  const isClaudeStyle = CLAUDE_STYLE_TOOLS.includes(provider);
   const isSimpleModel = SIMPLE_MODEL_TOOLS.includes(provider);
 
   // Simple model list UI for OpenCode, Codex, etc.
   if (isSimpleModel) {
     return <SimpleModelConfigUI
-      provider={provider}
       currentModel={currentModel}
       providerModels={providerModels}
       catalog={catalog}
@@ -308,14 +306,12 @@ export function CLIModelConfigSection({
 
 // Simple model list UI for OpenCode, Codex, etc.
 function SimpleModelConfigUI({
-  provider,
   currentModel,
   providerModels,
   catalog,
   routing,
   onUpdateEnvValue,
 }: {
-  provider: string;
   currentModel?: string;
   providerModels: Array<{ id: string; owned_by: string }>;
   catalog?: ModelConfigSectionProps['catalog'];
