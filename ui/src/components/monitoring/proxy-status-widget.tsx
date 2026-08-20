@@ -528,7 +528,7 @@ export function ProxyStatusWidget() {
                   <SelectValue placeholder={t('proxyStatusWidget.selectVersionPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {versionsData?.versions.slice(0, 20).map((v) => {
+                  {versionsData?.versions.slice(0, 5).map((v) => {
                     const vIsExperimental =
                       versionsData?.maxStableVersion &&
                       isCliproxyVersionExperimental(v, versionsData.maxStableVersion);
