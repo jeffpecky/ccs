@@ -242,6 +242,43 @@ export function createHeadroomRouter(deps: HeadroomRouterDeps = defaultDeps) {
     }
   });
 
+  // Extras management — detect, install, uninstall compression extras (code, ml)
+
+  router.get('/extras', async (_req, res) => {
+    try {
+      const { status, data } = await proxyToCliproxy('GET', '/v0/management/headroom/extras');
+      res.status(status).json(data);
+    } catch {
+      // CLIProxyAPIPlus not reachable — return default status
+      res.json({ installed: false, version: null, extras: { code: false, ml: false } });
+    }
+  });
+
+  router.post('/extras/install', async (req: Request, res: Response) => {
+    try {
+      const { status, data } = await proxyToCliproxy(
+        'POST',
+        '/v0/management/headroom/extras/install',
+        req.body
+      );
+      res.status(status).json(data);
+    } catch (error) {
+      res.status(502).json({ error: `Extras install failed: ${(error as Error).message}` });
+    }
+  });
+
+  router.post('/extras/uninstall/:extra', async (req: Request, res: Response) => {
+    try {
+      const { status, data } = await proxyToCliproxy(
+        'POST',
+        `/v0/management/headroom/extras/uninstall/${req.params.extra}`
+      );
+      res.status(status).json(data);
+    } catch (error) {
+      res.status(502).json({ error: `Extras uninstall failed: ${(error as Error).message}` });
+    }
+  });
+
   return router;
 }
 

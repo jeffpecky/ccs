@@ -55,6 +55,12 @@ interface HeadroomStatus {
   port?: number;
 }
 
+interface HeadroomExtrasStatus {
+  installed: boolean;
+  version: string | null;
+  extras: { code: boolean; ml: boolean };
+}
+
 function getHeadroomDashboardUrl(value: string): string | null {
   try {
     const url = new URL(value);
@@ -171,9 +177,16 @@ function SaverRow({
 export function TokenSaverPage() {
   const [config, setConfig] = useState<TokenSaverConfig>();
   const [status, setStatus] = useState<HeadroomStatus>();
+  const [extrasStatus, setExtrasStatus] = useState<HeadroomExtrasStatus>({
+    installed: false,
+    version: null,
+    extras: { code: false, ml: false },
+  });
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [installingExtra, setInstallingExtra] = useState<string | null>(null);
+  const [uninstallingExtra, setUninstallingExtra] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const persistController = useRef<AbortController | null>(null);
@@ -188,9 +201,13 @@ export function TokenSaverPage() {
     const sequence = ++refreshSequence.current;
     if (manual) setRefreshing(true);
     try {
-      const [configResponse, statusResponse] = await Promise.all([
+      const [configResponse, statusResponse, extrasResponse] = await Promise.all([
         fetch('/api/headroom/config', { signal: controller.signal }),
         fetch('/api/headroom/status', {
+          headers: { 'Cache-Control': 'no-store' },
+          signal: controller.signal,
+        }),
+        fetch('/api/headroom/extras', {
           headers: { 'Cache-Control': 'no-store' },
           signal: controller.signal,
         }),
@@ -200,6 +217,9 @@ export function TokenSaverPage() {
       setConfig(((await configResponse.json()) as { config: TokenSaverConfig }).config);
       if (sequence !== refreshSequence.current) return;
       setStatus((await statusResponse.json()) as HeadroomStatus);
+      if (extrasResponse.ok) {
+        setExtrasStatus((await extrasResponse.json()) as HeadroomExtrasStatus);
+      }
     } catch (error) {
       if ((error as Error).name === 'AbortError') return;
       toast.error((error as Error).message);
@@ -301,6 +321,42 @@ export function TokenSaverPage() {
       toast.error((error as Error).message);
     } finally {
       setInstalling(false);
+    }
+  };
+
+  const installExtra = async (extra: string) => {
+    setInstallingExtra(extra);
+    try {
+      const response = await fetch('/api/headroom/extras/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extras: [extra] }),
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean };
+      if (!response.ok || !body.success) throw new Error(body.error ?? `Failed to install ${extra}.`);
+      toast.success(`[${extra}] installed successfully.`);
+      await refresh();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setInstallingExtra(null);
+    }
+  };
+
+  const uninstallExtra = async (extra: string) => {
+    setUninstallingExtra(extra);
+    try {
+      const response = await fetch(`/api/headroom/extras/uninstall/${extra}`, {
+        method: 'POST',
+      });
+      const body = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean };
+      if (!response.ok || !body.success) throw new Error(body.error ?? `Failed to uninstall ${extra}.`);
+      toast.success(`[${extra}] uninstalled successfully.`);
+      await refresh();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setUninstallingExtra(null);
     }
   };
 
@@ -494,36 +550,74 @@ export function TokenSaverPage() {
             )}
 
             {status?.installed && status?.running && (
-              <div className="divide-y rounded-lg border px-4">
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Compression extras {extrasStatus.version ? `· v${extrasStatus.version}` : ''}:
+                </p>
                 {[
                   {
-                    id: 'compress-user-messages',
-                    label: 'Compress user messages',
-                    checked: config.headroom.compress_user_messages,
-                    change: (value: boolean) => updateHeadroom({ compress_user_messages: value }),
-                  },
-                  {
-                    id: 'code-aware',
+                    id: 'code',
                     label: 'Code-aware compression',
-                    checked: config.headroom.code_aware,
-                    change: (value: boolean) => updateHeadroom({ code_aware: value }),
+                    description: 'tree-sitter AST compression for code responses',
+                    installed: extrasStatus.extras.code,
+                    active: config.headroom.code_aware,
+                    toggle: (value: boolean) => updateHeadroom({ code_aware: value }),
                   },
                   {
-                    id: 'kompress',
+                    id: 'ml',
                     label: 'Kompress ML',
-                    checked: config.headroom.kompress,
-                    change: (value: boolean) => updateHeadroom({ kompress: value }),
+                    description: 'Kompress-v2 HF model for prose/agentic traces (~+1GB)',
+                    installed: extrasStatus.extras.ml,
+                    active: config.headroom.kompress,
+                    toggle: (value: boolean) => updateHeadroom({ kompress: value }),
                   },
-                ].map((option) => (
-                  <div key={option.id} className="flex items-center justify-between gap-4 py-3">
-                    <Label htmlFor={option.id}>{option.label}</Label>
-                    <Switch
-                      id={option.id}
-                      aria-label={option.label}
-                      checked={option.checked}
-                      disabled={mutating}
-                      onCheckedChange={option.change}
-                    />
+                ].map((extra) => (
+                  <div
+                    key={extra.id}
+                    className="flex items-center justify-between gap-4 rounded-lg border px-4 py-3"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">[{extra.id}]</p>
+                      <p className="text-xs text-muted-foreground">{extra.description}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {extra.installed ? (
+                        <>
+                          <Switch
+                            id={extra.id}
+                            aria-label={extra.label}
+                            checked={extra.active}
+                            disabled={mutating}
+                            onCheckedChange={extra.toggle}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive"
+                            disabled={mutating || uninstallingExtra === extra.id}
+                            onClick={() => void uninstallExtra(extra.id)}
+                          >
+                            {uninstallingExtra === extra.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              'Uninstall'
+                            )}
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={mutating || installingExtra === extra.id}
+                          onClick={() => void installExtra(extra.id)}
+                        >
+                          {installingExtra === extra.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : null}
+                          Install
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
