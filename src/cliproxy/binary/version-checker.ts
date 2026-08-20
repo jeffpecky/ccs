@@ -203,7 +203,21 @@ export async function fetchAllVersions(
     const releases = response as unknown as Array<{ tag_name: string }>;
     const versions = releases
       .map((r) => r.tag_name.replace(/^v/, ''))
-      .filter((v) => /^\d+\.\d+\.\d+(-\d+)?$/.test(v)); // Valid semver only
+      .filter((v) => /^\d+\.\d+\.\d+(-\d+)?$/.test(v)) // Valid semver only
+      .sort((a, b) => {
+        // Sort by semver descending (newest first)
+        const parse = (v: string) => {
+          const [core, fork = '0'] = v.split('-', 2);
+          const [maj, min, pat] = core.split('.').map(Number);
+          return [maj, min, pat, parseInt(fork, 10) || 0];
+        };
+        const [aMaj, aMin, aPat, aFork] = parse(a);
+        const [bMaj, bMin, bPat, bFork] = parse(b);
+        if (aMaj !== bMaj) return bMaj - aMaj;
+        if (aMin !== bMin) return bMin - aMin;
+        if (aPat !== bPat) return bPat - aPat;
+        return bFork - aFork;
+      });
 
     const latest = versions[0] || '';
 
