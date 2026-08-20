@@ -182,6 +182,7 @@ export function TokenSaverPage() {
     version: null,
     extras: { code: false, ml: false },
   });
+  const [installLog, setInstallLog] = useState('');
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -189,6 +190,7 @@ export function TokenSaverPage() {
   const [uninstallingExtra, setUninstallingExtra] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const logPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const persistController = useRef<AbortController | null>(null);
   const refreshController = useRef<AbortController | null>(null);
   const refreshSequence = useRef(0);
@@ -307,6 +309,8 @@ export function TokenSaverPage() {
 
   const installHeadroom = async (extras?: string[]) => {
     setInstalling(true);
+    setInstallLog('');
+    startLogPolling();
     try {
       const response = await fetch('/api/headroom/install', {
         method: 'POST',
@@ -320,12 +324,15 @@ export function TokenSaverPage() {
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
+      stopLogPolling();
       setInstalling(false);
     }
   };
 
   const installExtra = async (extra: string) => {
     setInstallingExtra(extra);
+    setInstallLog('');
+    startLogPolling();
     try {
       const response = await fetch('/api/headroom/extras/install', {
         method: 'POST',
@@ -339,12 +346,15 @@ export function TokenSaverPage() {
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
+      stopLogPolling();
       setInstallingExtra(null);
     }
   };
 
   const uninstallExtra = async (extra: string) => {
     setUninstallingExtra(extra);
+    setInstallLog('');
+    startLogPolling();
     try {
       const response = await fetch(`/api/headroom/extras/uninstall/${extra}`, {
         method: 'POST',
@@ -356,9 +366,37 @@ export function TokenSaverPage() {
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
+      stopLogPolling();
       setUninstallingExtra(null);
     }
   };
+
+  const startLogPolling = useCallback(() => {
+    setInstallLog('');
+    if (logPollRef.current) clearInterval(logPollRef.current);
+    const tick = async () => {
+      try {
+        const r = await fetch('/api/headroom/extras?log=1', {
+          headers: { 'Cache-Control': 'no-store' },
+        });
+        const d = await r.json().catch(() => ({}));
+        if (typeof d.log === 'string') setInstallLog(d.log);
+      } catch {
+        /* ignore transient poll errors */
+      }
+    };
+    tick();
+    logPollRef.current = setInterval(tick, 1500);
+  }, []);
+
+  const stopLogPolling = useCallback(() => {
+    if (logPollRef.current) {
+      clearInterval(logPollRef.current);
+      logPollRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => stopLogPolling(), [stopLogPolling]);
 
   if (loading || !config) {
     return (
@@ -620,6 +658,13 @@ export function TokenSaverPage() {
                     </div>
                   </div>
                 ))}
+
+                {/* Install log display */}
+                {(installingExtra || uninstallingExtra) && installLog && (
+                  <pre className="max-h-32 overflow-auto rounded bg-muted/20 p-2 text-xs leading-tight text-muted-foreground whitespace-pre-wrap">
+                    {installLog}
+                  </pre>
+                )}
               </div>
             )}
 
