@@ -80,7 +80,7 @@ function displayLevel(value: string): (typeof LEVELS)[number] {
   return 'Full';
 }
 
-function storedLevel(kind: 'caveman' | 'ponytail', level: (typeof LEVELS)[number]): string {
+function storedLevel(level: (typeof LEVELS)[number]): string {
   if (level === 'Lite') return 'lite';
   if (level === 'Ultra') return 'ultra';
   return 'full';
@@ -110,7 +110,7 @@ function LevelControl({
           type="button"
           aria-pressed={selected === level}
           disabled={disabled}
-          onClick={() => onChange(storedLevel(name.toLowerCase() as 'caveman' | 'ponytail', level))}
+          onClick={() => onChange(storedLevel(level))}
           className={cn(
             'rounded-sm px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45',
             selected === level
