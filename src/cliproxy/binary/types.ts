@@ -19,8 +19,8 @@ export interface UpdateCheckResult {
   checkedAt: number; // Unix timestamp of last check
 }
 
-/** Cache duration for version check (1 hour in milliseconds) */
-export const VERSION_CACHE_DURATION_MS = 60 * 60 * 1000;
+/** Cache duration for version check (5 minutes in milliseconds) */
+export const VERSION_CACHE_DURATION_MS = 5 * 60 * 1000;
 
 /** Version pin file name - stores user's explicit version choice */
 export const VERSION_PIN_FILE = '.version-pin';
