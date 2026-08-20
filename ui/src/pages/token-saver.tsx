@@ -75,15 +75,15 @@ function getHeadroomDashboardUrl(value: string): string | null {
 const LEVELS = ['Lite', 'Full', 'Ultra'] as const;
 
 function displayLevel(value: string): (typeof LEVELS)[number] {
-  if (value === 'terse') return 'Lite';
-  if (value === 'ultra' || value === 'strict') return 'Ultra';
+  if (value === 'lite') return 'Lite';
+  if (value === 'ultra') return 'Ultra';
   return 'Full';
 }
 
 function storedLevel(kind: 'caveman' | 'ponytail', level: (typeof LEVELS)[number]): string {
-  if (level === 'Lite') return 'terse';
-  if (level === 'Ultra') return kind === 'caveman' ? 'ultra' : 'strict';
-  return 'standard';
+  if (level === 'Lite') return 'lite';
+  if (level === 'Ultra') return 'ultra';
+  return 'full';
 }
 
 function LevelControl({
