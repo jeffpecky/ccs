@@ -406,7 +406,6 @@ export function TokenSaverPage() {
   };
 
   const startLogPolling = useCallback(() => {
-    setInstallLog('');
     if (logPollRef.current) clearInterval(logPollRef.current);
     const tick = async () => {
       try {
@@ -695,7 +694,7 @@ export function TokenSaverPage() {
 
                 {/* Install log display */}
                 {(installingExtras.size > 0 || uninstallingExtra) && installLog && (
-                  <pre className="max-h-32 overflow-auto rounded bg-muted/20 p-2 text-xs leading-tight text-muted-foreground whitespace-pre-wrap">
+                  <pre className="max-h-32 overflow-y-auto overflow-x-hidden rounded bg-muted/20 p-2 text-xs leading-tight text-muted-foreground whitespace-pre-wrap">
                     {installLog}
                   </pre>
                 )}
