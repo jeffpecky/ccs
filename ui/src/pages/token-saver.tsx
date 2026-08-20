@@ -338,8 +338,12 @@ export function TokenSaverPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ extras: [extra] }),
       });
-      const body = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean };
-      if (!response.ok || !body.success) throw new Error(body.error ?? `Failed to install ${extra}.`);
+      const body = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean; status?: string };
+      if (!response.ok) throw new Error(body.error ?? `Failed to install ${extra}.`);
+      // Install is async - poll until extras status changes
+      if (body.status === 'installing') {
+        await waitForExtraInstalled(extra);
+      }
       toast.success(`[${extra}] installed successfully.`);
       await refresh();
     } catch (error) {
@@ -350,9 +354,20 @@ export function TokenSaverPage() {
         next.delete(extra);
         return next;
       });
-      // Stop polling only if no more installs running
       if (installingExtras.size <= 1) stopLogPolling();
     }
+  };
+
+  const waitForExtraInstalled = async (extra: string, maxAttempts = 60) => {
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const res = await fetch('/api/headroom/extras', { headers: { 'Cache-Control': 'no-store' } });
+        const data = await res.json() as HeadroomExtrasStatus;
+        if (data.extras[extra as keyof typeof data.extras]) return true;
+      } catch { /* ignore */ }
+    }
+    return false;
   };
 
   const uninstallExtra = async (extra: string) => {
@@ -362,8 +377,12 @@ export function TokenSaverPage() {
       const response = await fetch(`/api/headroom/extras/uninstall/${extra}`, {
         method: 'POST',
       });
-      const body = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean };
-      if (!response.ok || !body.success) throw new Error(body.error ?? `Failed to uninstall ${extra}.`);
+      const body = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean; status?: string };
+      if (!response.ok) throw new Error(body.error ?? `Failed to uninstall ${extra}.`);
+      // Uninstall is async - poll until extras status changes
+      if (body.status === 'uninstalling') {
+        await waitForExtraUninstalled(extra);
+      }
       toast.success(`[${extra}] uninstalled successfully.`);
       await refresh();
     } catch (error) {
@@ -372,6 +391,18 @@ export function TokenSaverPage() {
       setUninstallingExtra(null);
       stopLogPolling();
     }
+  };
+
+  const waitForExtraUninstalled = async (extra: string, maxAttempts = 60) => {
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const res = await fetch('/api/headroom/extras', { headers: { 'Cache-Control': 'no-store' } });
+        const data = await res.json() as HeadroomExtrasStatus;
+        if (!data.extras[extra as keyof typeof data.extras]) return true;
+      } catch { /* ignore */ }
+    }
+    return false;
   };
 
   const startLogPolling = useCallback(() => {

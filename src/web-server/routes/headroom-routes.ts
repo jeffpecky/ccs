@@ -244,9 +244,10 @@ export function createHeadroomRouter(deps: HeadroomRouterDeps = defaultDeps) {
 
   // Extras management — detect, install, uninstall compression extras (code, ml)
 
-  router.get('/extras', async (_req, res) => {
+  router.get('/extras', async (req: Request, res: Response) => {
     try {
-      const { status, data } = await proxyToCliproxy('GET', '/v0/management/headroom/extras');
+      const logParam = req.query.log === '1' ? '?log=1' : '';
+      const { status, data } = await proxyToCliproxy('GET', `/v0/management/headroom/extras${logParam}`);
       res.status(status).json(data);
     } catch {
       // CLIProxyAPIPlus not reachable — return default status
