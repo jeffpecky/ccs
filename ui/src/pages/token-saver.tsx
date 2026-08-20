@@ -186,7 +186,7 @@ export function TokenSaverPage() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [installing, setInstalling] = useState(false);
-  const [installingExtra, setInstallingExtra] = useState<string | null>(null);
+  const [installingExtras, setInstallingExtras] = useState<Set<string>>(new Set());
   const [uninstallingExtra, setUninstallingExtra] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -330,9 +330,8 @@ export function TokenSaverPage() {
   };
 
   const installExtra = async (extra: string) => {
-    setInstallingExtra(extra);
-    setInstallLog('');
-    startLogPolling();
+    setInstallingExtras((prev) => new Set(prev).add(extra));
+    if (logPollRef.current === null) startLogPolling();
     try {
       const response = await fetch('/api/headroom/extras/install', {
         method: 'POST',
@@ -346,15 +345,19 @@ export function TokenSaverPage() {
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
-      stopLogPolling();
-      setInstallingExtra(null);
+      setInstallingExtras((prev) => {
+        const next = new Set(prev);
+        next.delete(extra);
+        return next;
+      });
+      // Stop polling only if no more installs running
+      if (installingExtras.size <= 1) stopLogPolling();
     }
   };
 
   const uninstallExtra = async (extra: string) => {
     setUninstallingExtra(extra);
-    setInstallLog('');
-    startLogPolling();
+    if (logPollRef.current === null) startLogPolling();
     try {
       const response = await fetch(`/api/headroom/extras/uninstall/${extra}`, {
         method: 'POST',
@@ -366,8 +369,8 @@ export function TokenSaverPage() {
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
-      stopLogPolling();
       setUninstallingExtra(null);
+      stopLogPolling();
     }
   };
 
@@ -646,10 +649,10 @@ export function TokenSaverPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={mutating || installingExtra === extra.id}
+                          disabled={mutating || installingExtras.has(extra.id)}
                           onClick={() => void installExtra(extra.id)}
                         >
-                          {installingExtra === extra.id ? (
+                          {installingExtras.has(extra.id) ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           ) : null}
                           Install
@@ -660,7 +663,7 @@ export function TokenSaverPage() {
                 ))}
 
                 {/* Install log display */}
-                {(installingExtra || uninstallingExtra) && installLog && (
+                {(installingExtras.size > 0 || uninstallingExtra) && installLog && (
                   <pre className="max-h-32 overflow-auto rounded bg-muted/20 p-2 text-xs leading-tight text-muted-foreground whitespace-pre-wrap">
                     {installLog}
                   </pre>
