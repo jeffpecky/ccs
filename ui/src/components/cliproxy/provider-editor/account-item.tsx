@@ -217,6 +217,7 @@ export function AccountItem({
           account.provider === 'agy' ? renderProjectId(account.projectId, privacyMode, t) : null
         }
         quotaInsetClassName="pl-11"
+        showCountdown
       />
     </div>
   );

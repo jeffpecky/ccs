@@ -707,8 +707,7 @@ export interface GhcpQuotaSnapshot {
 }
 
 /** GitHub Copilot (ghcp) quota result */
-export interface GhcpQuotaResult {
-  /** Whether fetch succeeded */
+export interface GhcpQuotaResult {  /** Whether fetch succeeded */
   success: boolean;
   /** Copilot plan type */
   planType: string | null;
@@ -733,6 +732,56 @@ export interface GhcpQuotaResult {
   error?: string;
   /** Account ID this quota belongs to */
   accountId?: string;
+  /** Provider-specific remediation guidance */
+  actionHint?: string;
+  /** True if token is expired and needs re-authentication */
+  needsReauth?: boolean;
+  /** True when the failure is temporary and retrying later may help */
+  retryable?: boolean;
+  /** True if result was served from cache */
+  cached?: boolean;
+}
+
+/** Kiro (AWS CodeWhisperer) quota window */
+export interface KiroQuotaWindow {
+  /** Resource type, e.g., "AGENTIC_REQUEST" or "CREDIT" */
+  resourceType: string;
+  /** Total limit */
+  total: number;
+  /** Current usage */
+  used: number;
+  /** Remaining quota */
+  remaining: number;
+  /** Remaining percentage (0-100) */
+  remainingPercent: number;
+  /** Reset time ISO */
+  resetAt: string | null;
+  /** Whether quota is unlimited */
+  unlimited: boolean;
+}
+
+/** Kiro (AWS CodeWhisperer) quota result */
+export interface KiroQuotaResult {
+  /** Whether fetch succeeded */
+  success: boolean;
+  /** Plan type, e.g., "KIRO FREE" */
+  planType: string | null;
+  /** Quota windows */
+  windows: KiroQuotaWindow[];
+  /** Timestamp of fetch */
+  lastUpdated: number;
+  /** Upstream HTTP status when available */
+  httpStatus?: number;
+  /** Error message if failed */
+  error?: string;
+  /** Account ID this quota belongs to */
+  accountId?: string;
+  /** Stable machine-readable error code */
+  errorCode?: string;
+  /** Additional provider-specific detail/code from upstream */
+  errorDetail?: string;
+  /** True if account lacks quota access (403) */
+  isForbidden?: boolean;
   /** Provider-specific remediation guidance */
   actionHint?: string;
   /** True if token is expired and needs re-authentication */

@@ -7,6 +7,7 @@ import type {
   GeminiCliBucket,
   GeminiCliQuotaResult,
   GhcpQuotaResult,
+  KiroQuotaResult,
   QuotaResult,
 } from './api-client';
 import i18n from './i18n';
@@ -704,10 +705,37 @@ export function getMinGhcpQuota(snapshots: GhcpQuotaResult['snapshots']): number
 }
 
 /**
- * Get reset time from GitHub Copilot quota result
+ * Get earliest reset time from GitHub Copilot quota result
  */
 export function getGhcpResetTime(quotaResetDate: string | null): string | null {
   return quotaResetDate;
+}
+
+export interface KiroWindowSummary {
+  resourceType: string;
+  remainingPercent: number;
+  resetAt: string | null;
+  total: number;
+  used: number;
+}
+
+/**
+ * Break down Kiro windows into a sorted list for display.
+ * Sorts by remaining percent (ascending = most critical first).
+ */
+export function getKiroQuotaBreakdown(
+  windows: KiroQuotaResult['windows']
+): KiroWindowSummary[] {
+  if (!windows || windows.length === 0) return [];
+  return windows
+    .map((w) => ({
+      resourceType: w.resourceType,
+      remainingPercent: w.remainingPercent,
+      resetAt: w.resetAt,
+      total: w.total,
+      used: w.used,
+    }))
+    .sort((a, b) => a.remainingPercent - b.remainingPercent);
 }
 
 // ==================== Unified Quota Type Guards ====================
@@ -718,7 +746,8 @@ export type UnifiedQuotaResult =
   | CodexQuotaResult
   | ClaudeQuotaResult
   | GeminiCliQuotaResult
-  | GhcpQuotaResult;
+  | GhcpQuotaResult
+  | KiroQuotaResult;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -811,6 +840,22 @@ export function isGhcpQuotaResult(quota: UnifiedQuotaResult): quota is GhcpQuota
       isFiniteNumber(snapshot.percentUsed)
     );
   });
+}
+
+/** Type guard: Check if quota result is from Kiro (AWS CodeWhisperer) provider */
+export function isKiroQuotaResult(quota: UnifiedQuotaResult): quota is KiroQuotaResult {
+  if (!isRecord(quota)) return false;
+
+  const candidate = quota as Partial<KiroQuotaResult>;
+  if (typeof candidate.success !== 'boolean') return false;
+  if (!Array.isArray(candidate.windows)) return false;
+
+  return candidate.windows.every(
+    (window) =>
+      isRecord(window) &&
+      typeof window.resourceType === 'string' &&
+      isFiniteNumber(window.remainingPercent)
+  );
 }
 
 // ==================== Unified Quota Helpers ====================
@@ -1039,6 +1084,14 @@ export function getProviderMinQuota(
         return getMinGhcpQuota(quota.snapshots);
       }
       return null;
+    case 'kiro':
+      if (isKiroQuotaResult(quota)) {
+        const kiroPercents = quota.windows
+          .map((window) => window.remainingPercent)
+          .filter((value) => Number.isFinite(value));
+        return kiroPercents.length > 0 ? Math.min(...kiroPercents) : null;
+      }
+      return null;
     default:
       return null;
   }
@@ -1081,6 +1134,17 @@ export function getProviderResetTime(
     case 'github-copilot':
       if (isGhcpQuotaResult(quota)) {
         return getGhcpResetTime(quota.quotaResetDate);
+      }
+      return null;
+    case 'kiro':
+      if (isKiroQuotaResult(quota)) {
+        const resets = quota.windows
+          .map((window) => window.resetAt)
+          .filter((value): value is string => Boolean(value))
+          .map((value) => new Date(value).getTime())
+          .filter((value) => Number.isFinite(value));
+        if (resets.length === 0) return null;
+        return new Date(Math.min(...resets)).toISOString();
       }
       return null;
     default:

@@ -17,12 +17,14 @@ import { fetchCodexQuota } from '../../cliproxy/quota/quota-fetcher-codex';
 import { fetchClaudeQuota } from '../../cliproxy/quota/quota-fetcher-claude';
 import { fetchGeminiCliQuota } from '../../cliproxy/quota/quota-fetcher-gemini-cli';
 import { fetchGhcpQuota } from '../../cliproxy/quota/quota-fetcher-ghcp';
+import { fetchKiroQuota } from '../../cliproxy/quota/quota-fetcher-kiro';
 import { getCachedQuota, setCachedQuota } from '../../cliproxy/quota/quota-response-cache';
 import type {
   CodexQuotaResult,
   ClaudeQuotaResult,
   GeminiCliQuotaResult,
   GhcpQuotaResult,
+  KiroQuotaResult,
 } from '../../cliproxy/quota/quota-types';
 import type { QuotaResult } from '../../cliproxy/quota/quota-fetcher';
 import type { CLIProxyProvider } from '../../cliproxy/types';
@@ -944,9 +946,57 @@ router.get('/quota/ghcp/:accountId', async (req: Request, res: Response): Promis
 });
 
 /**
+ * GET /api/cliproxy/quota/kiro/:accountId - Get Kiro (AWS CodeWhisperer) quota
+ * Returns: KiroQuotaResult with per-resource usage windows
+ * Caching: 2 minute TTL to reduce CodeWhisperer API calls
+ */
+router.get('/quota/kiro/:accountId', async (req: Request, res: Response): Promise<void> => {
+  const { accountId } = req.params;
+  if (isQuotaRouteRateLimited(req, 'kiro')) {
+    res
+      .status(429)
+      .json({ error: 'Too many quota requests', message: 'Retry after a short delay' });
+    return;
+  }
+
+  // Validate accountId - prevent path traversal
+  if (
+    !accountId ||
+    accountId.includes('..') ||
+    accountId.includes('/') ||
+    accountId.includes('\\')
+  ) {
+    res.status(400).json({ error: 'Invalid account ID' });
+    return;
+  }
+
+  try {
+    // Check cache first
+    const cached = getCachedQuota<KiroQuotaResult>('kiro', accountId);
+    if (cached) {
+      res.json({ ...cached, cached: true });
+      return;
+    }
+
+    // Fetch from AWS CodeWhisperer API
+    const result = await fetchKiroQuota(accountId);
+
+    // Cache successful and stable failure states; skip transient network failures.
+    if (shouldCacheQuotaResult(result)) {
+      setCachedQuota('kiro', accountId, result);
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error(`[cliproxy-stats] ${(error as Error).message}`);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
  * GET /api/cliproxy/quota/:provider/:accountId - Get quota for a specific account (generic)
  * Returns: QuotaResult with model quotas and reset times
- * NOTE: This generic route MUST come after specific routes (codex, claude, gemini, ghcp)
+ * NOTE: This generic route MUST come after specific routes (codex, claude, gemini, ghcp, kiro)
  * Caching: 2 minute TTL to reduce external API calls
  */
 router.get('/quota/:provider/:accountId', async (req: Request, res: Response): Promise<void> => {

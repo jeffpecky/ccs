@@ -9,6 +9,7 @@ import {
   formatQuotaPercent,
   formatResetTime,
   getCodexQuotaBreakdown,
+  getKiroQuotaBreakdown,
   getQuotaFailureInfo,
   getCodexWindowDisplayLabel,
   getModelsWithTiers,
@@ -18,6 +19,7 @@ import {
   isCodexQuotaResult,
   isGeminiQuotaResult,
   isGhcpQuotaResult,
+  isKiroQuotaResult,
   type ModelTier,
   type UnifiedQuotaResult,
 } from '@/lib/utils';
@@ -500,6 +502,40 @@ export function QuotaTooltipContent({ quota, resetTime }: QuotaTooltipContentPro
           );
         })}
         <ResetTimeIndicator resetTime={effectiveResetTime} />
+      </div>
+    );
+  }
+
+  // Kiro (AWS CodeWhisperer) provider tooltip
+  if (isKiroQuotaResult(quota)) {
+    const kiroWindows = getKiroQuotaBreakdown(quota.windows);
+
+    return (
+      <div className="text-xs space-y-1.5">
+        <p className="font-medium">{t('quotaTooltip.rateLimits')}</p>
+        {quota.planType && (
+          <p className="text-muted-foreground">
+            {t('quotaTooltip.plan', { plan: quota.planType })}
+          </p>
+        )}
+        {kiroWindows.map((w) => (
+          <div key={w.resourceType} className="space-y-0.5">
+            <div className="flex justify-between gap-4">
+              <span className={cn(w.remainingPercent < 20 && lowQuotaTextClass)}>
+                {w.resourceType.replace(/_/g, ' ')}
+              </span>
+              <span className="font-mono">{w.remainingPercent}%</span>
+            </div>
+            {w.resetAt && (
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Clock className="h-3 w-3 text-sky-600 dark:text-sky-300" />
+                <span className="text-sky-600 dark:text-sky-300">
+                  {t('quotaTooltip.resets', { time: formatResetTime(w.resetAt) })}
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     );
   }

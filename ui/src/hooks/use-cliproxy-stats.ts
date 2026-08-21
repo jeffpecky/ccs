@@ -10,6 +10,7 @@ import type {
   ClaudeQuotaResult,
   GeminiCliQuotaResult,
   GhcpQuotaResult,
+  KiroQuotaResult,
 } from '@/lib/api-client';
 import type { UnifiedQuotaResult } from '@/lib/utils';
 
@@ -331,6 +332,24 @@ async function fetchGhcpQuotaApi(accountId: string): Promise<GhcpQuotaResult> {
   return response.json();
 }
 
+/**
+ * Fetch Kiro (AWS CodeWhisperer) quota from API
+ */
+async function fetchKiroQuotaApi(accountId: string): Promise<KiroQuotaResult> {
+  const response = await fetch(`/api/cliproxy/quota/kiro/${encodeURIComponent(accountId)}`);
+  if (!response.ok) {
+    let message = 'Failed to fetch Kiro quota';
+    try {
+      const error = await response.json();
+      message = error.message || message;
+    } catch {
+      // Use default message if response isn't JSON
+    }
+    throw new Error(message);
+  }
+  return response.json();
+}
+
 // Re-export unified type from utils for consumers
 export type { UnifiedQuotaResult } from '@/lib/utils';
 
@@ -375,6 +394,8 @@ async function fetchQuotaByProvider(
       return fetchGeminiQuotaApi(accountId);
     case 'ghcp':
       return fetchGhcpQuotaApi(accountId);
+    case 'kiro':
+      return fetchKiroQuotaApi(accountId);
     default:
       return fetchAccountQuota(provider, accountId);
   }

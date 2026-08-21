@@ -38,6 +38,7 @@ interface AccountSurfaceCardProps {
   bodySlot?: ReactNode;
   footerSlot?: ReactNode;
   quotaInsetClassName?: string;
+  showCountdown?: boolean;
   className?: string;
 }
 
@@ -167,6 +168,7 @@ export function AccountSurfaceCard({
   bodySlot,
   footerSlot,
   quotaInsetClassName,
+  showCountdown,
   className,
 }: AccountSurfaceCardProps) {
   const { t } = useTranslation();
@@ -365,6 +367,7 @@ export function AccountSurfaceCard({
           quotaLoading={quotaLoading}
           runtimeLastUsed={runtimeLastUsed}
           mode={mode}
+          showCountdown={showCountdown}
           className={quotaInsetClassName}
         />
       )}

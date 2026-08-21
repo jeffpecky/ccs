@@ -2,11 +2,13 @@ import {
   cn,
   formatQuotaPercent,
   getCodexQuotaBreakdown,
+  getKiroQuotaBreakdown,
   getProviderMinQuota,
   getProviderResetTime,
   getQuotaFailureInfo,
   isClaudeQuotaResult,
   isCodexQuotaResult,
+  isKiroQuotaResult,
 } from '@/lib/utils';
 import { QuotaTooltipContent } from '@/components/shared/quota-tooltip-content';
 import type { UnifiedQuotaResult } from '@/hooks/use-cliproxy-stats';
@@ -27,7 +29,7 @@ import { useTranslation } from 'react-i18next';
 type AccountSurfaceMode = 'compact' | 'detailed';
 
 interface QuotaRow {
-  id: 'five-hour' | 'weekly';
+  id: 'five-hour' | 'weekly' | 'monthly';
   label: string;
   compactLabel: string;
   value: number;
@@ -39,6 +41,7 @@ interface AccountQuotaPanelProps {
   quotaLoading?: boolean;
   runtimeLastUsed?: string;
   mode: AccountSurfaceMode;
+  showCountdown?: boolean;
   className?: string;
 }
 
@@ -91,18 +94,42 @@ function isRecentlyUsed(lastUsedAt: string | undefined): boolean {
   }
 }
 
+function formatCountdown(resetAt: string | null | undefined): string {
+  if (!resetAt) return '—';
+  try {
+    const resetDate = new Date(resetAt);
+    const diffMs = resetDate.getTime() - Date.now();
+    if (diffMs <= 0) return '—';
+
+    const totalMinutes = Math.ceil(diffMs / (1000 * 60));
+    if (totalMinutes < 60) return `${totalMinutes}m`;
+
+    const totalHours = Math.floor(totalMinutes / 60);
+    const remainingMinutes = totalMinutes % 60;
+    if (totalHours < 24) return `${totalHours}h ${remainingMinutes}m`;
+
+    const days = Math.floor(totalHours / 24);
+    const remainingHours = totalHours % 24;
+    return `${days}d ${remainingHours}h`;
+  } catch {
+    return '—';
+  }
+}
+
 export function AccountQuotaPanel({
   provider,
   quota,
   quotaLoading,
   runtimeLastUsed,
   mode,
+  showCountdown = false,
   className,
 }: AccountQuotaPanelProps) {
   const { t } = useTranslation();
   const normalizedProvider = provider.toLowerCase();
   const isCodexProvider = normalizedProvider === 'codex';
   const isClaudeProvider = normalizedProvider === 'claude' || normalizedProvider === 'anthropic';
+  const isKiroProvider = normalizedProvider === 'kiro';
   const minQuota = getProviderMinQuota(provider, quota);
   const resetTime = getProviderResetTime(provider, quota);
   const minQuotaLabel = minQuota !== null ? formatQuotaPercent(minQuota) : null;
@@ -123,14 +150,22 @@ export function AccountQuotaPanel({
     ? [
         {
           id: 'five-hour',
-          label: t('quotaTooltip.fiveHourLimit'),
-          compactLabel: '5h',
+          label: showCountdown
+            ? `${t('quotaTooltip.fiveHourLimit')} · resets ${formatCountdown(codexBreakdown?.fiveHourWindow?.resetAt)}`
+            : t('quotaTooltip.fiveHourLimit'),
+          compactLabel: showCountdown
+            ? formatCountdown(codexBreakdown?.fiveHourWindow?.resetAt)
+            : '5h',
           value: codexBreakdown?.fiveHourWindow?.remainingPercent ?? null,
         },
         {
           id: 'weekly',
-          label: t('quotaTooltip.weeklyLimit'),
-          compactLabel: 'Week',
+          label: showCountdown
+            ? `${t('quotaTooltip.weeklyLimit')} · resets ${formatCountdown(codexBreakdown?.weeklyWindow?.resetAt)}`
+            : t('quotaTooltip.weeklyLimit'),
+          compactLabel: showCountdown
+            ? formatCountdown(codexBreakdown?.weeklyWindow?.resetAt)
+            : 'Week',
           value: codexBreakdown?.weeklyWindow?.remainingPercent ?? null,
         },
       ].filter((row): row is QuotaRow => row.value !== null)
@@ -138,8 +173,18 @@ export function AccountQuotaPanel({
       ? [
           {
             id: 'five-hour',
-            label: t('quotaTooltip.fiveHourLimit'),
-            compactLabel: '5h',
+            label: showCountdown
+              ? `${t('quotaTooltip.fiveHourLimit')} · resets ${formatCountdown(
+                  quota.coreUsage?.fiveHour?.resetAt ??
+                    quota.windows.find((window) => window.rateLimitType === 'five_hour')?.resetAt
+                )}`
+              : t('quotaTooltip.fiveHourLimit'),
+            compactLabel: showCountdown
+              ? formatCountdown(
+                  quota.coreUsage?.fiveHour?.resetAt ??
+                    quota.windows.find((window) => window.rateLimitType === 'five_hour')?.resetAt
+                )
+              : '5h',
             value:
               quota.coreUsage?.fiveHour?.remainingPercent ??
               quota.windows.find((window) => window.rateLimitType === 'five_hour')
@@ -148,8 +193,34 @@ export function AccountQuotaPanel({
           },
           {
             id: 'weekly',
-            label: t('quotaTooltip.weeklyLimit'),
-            compactLabel: 'Week',
+            label: showCountdown
+              ? `${t('quotaTooltip.weeklyLimit')} · resets ${formatCountdown(
+                  quota.coreUsage?.weekly?.resetAt ??
+                    quota.windows.find((window) =>
+                      [
+                        'seven_day',
+                        'seven_day_opus',
+                        'seven_day_sonnet',
+                        'seven_day_oauth_apps',
+                        'seven_day_cowork',
+                      ].includes(window.rateLimitType)
+                    )?.resetAt
+                )}`
+              : t('quotaTooltip.weeklyLimit'),
+            compactLabel: showCountdown
+              ? formatCountdown(
+                  quota.coreUsage?.weekly?.resetAt ??
+                    quota.windows.find((window) =>
+                      [
+                        'seven_day',
+                        'seven_day_opus',
+                        'seven_day_sonnet',
+                        'seven_day_oauth_apps',
+                        'seven_day_cowork',
+                      ].includes(window.rateLimitType)
+                    )?.resetAt
+                )
+              : 'Week',
             value:
               quota.coreUsage?.weekly?.remainingPercent ??
               quota.windows.find((window) =>
@@ -164,7 +235,18 @@ export function AccountQuotaPanel({
               null,
           },
         ].filter((row): row is QuotaRow => row.value !== null)
-      : [];
+      : isKiroProvider && quota && isKiroQuotaResult(quota)
+        ? getKiroQuotaBreakdown(quota.windows).map((w) => ({
+            id: 'monthly' as const,
+            label: showCountdown
+              ? `30d usage limit · resets ${formatCountdown(w.resetAt)}`
+              : '30d usage limit',
+            compactLabel: showCountdown
+              ? formatCountdown(w.resetAt)
+              : '30d',
+            value: w.remainingPercent,
+          }))
+        : [];
   const quotaRows = compactQuotaRows;
 
   if (quotaLoading) {
