@@ -478,11 +478,8 @@ export function FlexibleModelSelector({
         getPreferredOptionValue(model.id, routingHint),
         isCodexProvider
       );
-      const recShortPrefix = PROVIDER_SHORT_PREFIX[catalog?.provider ?? ''] || (catalog?.provider ?? '');
-      const recDisplayPrefix = recShortPrefix ? `${recShortPrefix}/` : '';
 
       return optionValues.map((optionValue) => {
-        const displayLabel = `${recDisplayPrefix}${optionValue}`;
         return {
           value: optionValue,
           groupKey: getRecommendedGroupKey(optionValue, isCodexProvider),
@@ -490,7 +487,7 @@ export function FlexibleModelSelector({
           keywords: [model.tier ?? '', catalog?.provider ?? ''],
           triggerContent: (
             <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-mono text-xs">{displayLabel}</span>
+              <span className="truncate font-mono text-xs">{optionValue}</span>
               {routingHint?.pinnedAvailable ? (
                 <Badge variant="secondary" className="text-[9px] h-4 px-1 uppercase">
                   {routingHint.prefix}
@@ -502,7 +499,7 @@ export function FlexibleModelSelector({
           ),
           itemContent: (
             <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-mono text-xs">{displayLabel}</span>
+              <span className="truncate font-mono text-xs">{optionValue}</span>
               {model.tier === 'paid' && <PaidBadge label={t('providerModelSelector.paid')} />}
               {routingHint?.unprefixedStatus === 'shadowed' ? (
                 <Badge variant="outline" className="text-[9px] h-4 px-1">
@@ -547,10 +544,10 @@ export function FlexibleModelSelector({
       const shortPrefix = PROVIDER_SHORT_PREFIX[model.owned_by] || model.owned_by;
 
       return optionValues.map((optionValue) => {
-        const displayLabel = `${shortPrefix}/${optionValue}`;
+        const displayLabel = hideRecommended && shortPrefix ? `${shortPrefix}/${optionValue}` : optionValue;
         return {
           value: optionValue,
-          groupKey: model.owned_by || 'other',
+          groupKey: hideRecommended ? (model.owned_by || 'other') : 'all',
           searchText: `${optionValue} ${model.id} ${model.owned_by} ${routingHint?.recommendedModelId ?? ''}`,
           keywords: [model.owned_by],
           triggerContent: (
@@ -686,17 +683,32 @@ export function FlexibleModelSelector({
                 },
               ]
             : []),
-          ...providerGroups.map(([provider, count]) => ({
-            key: provider,
-            label: (
-              <div className="flex items-center justify-center gap-1 py-1">
-                <span className="text-xs font-semibold capitalize">
-                  {PROVIDER_DISPLAY_NAMES[provider] || provider}
-                </span>
-                <span className="text-[10px] text-muted-foreground">({count})</span>
-              </div>
-            ),
-          })),
+          ...(hideRecommended
+            ? providerGroups.map(([provider, count]) => ({
+                key: provider,
+                label: (
+                  <div className="flex items-center justify-center gap-1 py-1">
+                    <span className="text-xs font-semibold capitalize">
+                      {PROVIDER_DISPLAY_NAMES[provider] || provider}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">({count})</span>
+                  </div>
+                ),
+              }))
+            : allModelOptions.length > 0
+            ? [
+                {
+                  key: 'all',
+                  label: (
+                    <span className="text-xs text-muted-foreground">
+                      {t('providerModelSelector.allModelsCount', {
+                        count: allModelOptions.length,
+                      })}
+                    </span>
+                  ),
+                },
+              ]
+            : []),
         ]}
         options={[
           ...(selectedValueMissing && legacySelectedOption ? [legacySelectedOption] : []),
