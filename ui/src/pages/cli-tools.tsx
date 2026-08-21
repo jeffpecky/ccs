@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Check, X, RefreshCw, Terminal } from 'lucide-react';
 import { CLIProviderEditor } from '@/components/cliproxy/cli-provider-editor';
-import { ProviderLogo } from '@/components/cliproxy/provider-logo';
+import { CLIToolLogo } from '@/components/cliproxy/cli-tool-logo';
 import {
   useCliproxyAuth,
   useCliproxyCatalog,
@@ -36,33 +36,7 @@ async function fetchTools(): Promise<{ tools: CLITool[] }> {
 }
 
 // ==================== CLI Tool Icons ====================
-
-function CLIToolLogo({ toolId, size = 'md' }: { toolId: string; size?: 'sm' | 'md' | 'lg' }) {
-  const providerMap: Record<string, string> = {
-    'claude-code': 'claude',
-    opencode: 'openai',
-    codex: 'codex',
-    'open-claw': 'openai',
-    'claude-cowork': 'claude',
-    'hermes-agent': 'openai',
-    'factory-droid': 'openai',
-    cursor: 'openai',
-    cline: 'openai',
-    'kilo-code': 'openai',
-    roo: 'openai',
-    continue: 'openai',
-    'amp-cli': 'openai',
-    'qwen-code': 'openai',
-    'deepseek-tui': 'openai',
-    jcode: 'openai',
-    'grok-build': 'openai',
-    'devin-cli': 'openai',
-  };
-
-  const provider = providerMap[toolId] || 'openai';
-
-  return <ProviderLogo provider={provider} size={size} />;
-}
+// Uses shared CLIToolLogo (per-tool images from 9Router, provider-logo fallback)
 
 // ==================== Sidebar Component ====================
 

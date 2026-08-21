@@ -184,6 +184,7 @@ export function CLIProviderEditor({
         provider={provider}
         displayName={displayName}
         logoProvider={logoProvider}
+        toolId={toolId}
         data={data}
         isLoading={isLoading}
         hasChanges={hasChanges}

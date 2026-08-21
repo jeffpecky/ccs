@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Save, Loader2, RefreshCw, Globe, Network } from 'lucide-react';
 import { ProviderLogo } from '../provider-logo';
+import { CLIToolLogo } from '../cli-tool-logo';
 import type { SettingsResponse } from './types';
 import { useTranslation } from 'react-i18next';
 
@@ -14,6 +15,7 @@ interface CLIProviderEditorHeaderProps {
   provider: string;
   displayName: string;
   logoProvider?: string;
+  toolId?: string;
   data?: SettingsResponse;
   isLoading: boolean;
   hasChanges: boolean;
@@ -39,6 +41,7 @@ function formatSettingsPathBadgeLabel(pathValue: string): string {
 export function CLIProviderEditorHeader({
   displayName,
   logoProvider,
+  toolId,
   provider,
   data,
   isLoading,
@@ -54,7 +57,11 @@ export function CLIProviderEditorHeader({
   return (
     <div className="px-6 py-4 border-b bg-background flex items-center justify-between shrink-0">
       <div className="flex items-center gap-3">
-        <ProviderLogo provider={logoProvider || provider} size="lg" />
+        {toolId ? (
+          <CLIToolLogo toolId={toolId} size="lg" />
+        ) : (
+          <ProviderLogo provider={logoProvider || provider} size="lg" />
+        )}
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold">{displayName}</h2>
