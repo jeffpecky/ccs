@@ -259,6 +259,7 @@ export function CLIModelConfigSection({
             catalog={catalog}
             allModels={providerModels}
             routing={routing}
+            hideRecommended={true}
           />
           {/* Extended Context Toggle - shows when any saved mapping supports it */}
           {extendedContextModels.length > 0 && onExtendedContextToggle && (
@@ -277,6 +278,7 @@ export function CLIModelConfigSection({
             catalog={catalog}
             allModels={providerModels}
             routing={routing}
+            hideRecommended={true}
           />
           <FlexibleModelSelector
             label="Sonnet (Balanced)"
@@ -286,6 +288,7 @@ export function CLIModelConfigSection({
             catalog={catalog}
             allModels={providerModels}
             routing={routing}
+            hideRecommended={true}
           />
           <FlexibleModelSelector
             label="Haiku (Fast)"
@@ -295,6 +298,7 @@ export function CLIModelConfigSection({
             catalog={catalog}
             allModels={providerModels}
             routing={routing}
+            hideRecommended={true}
           />
         </div>
       </div>
@@ -363,6 +367,7 @@ function SimpleModelConfigUI({
             catalog={catalog}
             allModels={providerModels}
             routing={routing}
+            hideRecommended={true}
           />
           <FlexibleModelSelector
             label="Subagent Model"
@@ -372,6 +377,7 @@ function SimpleModelConfigUI({
             catalog={catalog}
             allModels={providerModels}
             routing={routing}
+            hideRecommended={true}
           />
         </div>
       </div>

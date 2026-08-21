@@ -305,6 +305,72 @@ export function ModelMappingSelector({
   );
 }
 
+// Provider display name aliases (for group headers)
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  aws: 'Kiro',
+  agy: 'Antigravity',
+  anthropic: 'Claude',
+  openai: 'OpenAI',
+  gemini: 'Gemini',
+  google: 'Google',
+  github: 'GitHub',
+  codex: 'Codex',
+};
+
+// Short provider prefixes for model display (like 9Router)
+const PROVIDER_SHORT_PREFIX: Record<string, string> = {
+  antigravity: 'ag',
+  agy: 'ag',
+  openai: 'cx',
+  codex: 'cx',
+  aws: 'kr',
+  kiro: 'kr',
+  anthropic: 'cc',
+  claude: 'cc',
+  gemini: 'gemini',
+  google: 'gemini',
+  qoder: 'qd',
+  github: 'gh',
+  'github-copilot': 'gh',
+  cloudflare: 'cf',
+  'cloudflare-ai': 'cf',
+  deepseek: 'ds',
+  xai: 'xai',
+  grok: 'gk',
+  'grok-cli': 'gk',
+  mistral: 'ml',
+  cohere: 'co',
+  together: 'tg',
+  fireworks: 'fw',
+  groq: 'gq',
+  sambanova: 'samba',
+  cerebras: 'cb',
+  nvidia: 'nv',
+  openrouter: 'or',
+  ollama: 'ollama',
+  azure: 'az',
+  vertex: 'vx',
+  'vertex-partner': 'vxp',
+  windsurf: 'ws',
+  cline: 'cl',
+  trae: 'tr',
+  zed: 'zd',
+  perplexity: 'px',
+  'perplexity-agent': 'px',
+  kimi: 'km',
+  minimax: 'mm',
+  'minimax-cn': 'mm',
+  glm: 'glm',
+  'glm-cn': 'glm',
+  siliconflow: 'sf',
+  huggingface: 'hf',
+  blackbox: 'bb',
+  devin: 'dv',
+  'devin-cli': 'dv',
+  opencode: 'oc',
+  'opencode-go': 'oc',
+};
+
 /** Flexible Model Selector - Combines catalog recommendations with full model list */
 interface FlexibleModelSelectorProps {
   label: string;
@@ -315,6 +381,7 @@ interface FlexibleModelSelectorProps {
   allModels: { id: string; owned_by: string }[];
   routing?: CliproxyProviderRoutingHints;
   disabled?: boolean;
+  hideRecommended?: boolean;
 }
 
 function normalizeModelValue(
@@ -361,87 +428,114 @@ export function FlexibleModelSelector({
   allModels,
   routing,
   disabled,
+  hideRecommended = false,
 }: FlexibleModelSelectorProps) {
   const { t } = useTranslation();
   const isCodexProvider = catalog?.provider === 'codex';
+  const resolvedCatalogModels = useMemo(
+    () => (hideRecommended ? [] : getResolvedCatalogModels(catalog, allModels)),
+    [allModels, catalog, hideRecommended]
+  );
+  const supplementalModels = useMemo(
+    () => (hideRecommended ? [] : getSupplementalCatalogModels(catalog?.provider ?? '', catalog, allModels)),
+    [allModels, catalog, hideRecommended]
+  );
+  const catalogModelIds = useMemo(
+    () => new Set(resolvedCatalogModels.map((model) => model.id)),
+    [resolvedCatalogModels]
+  );
   const routingHints = useMemo(
     () =>
       new Map((routing?.models ?? []).map((hint) => [hint.modelId.toLowerCase(), hint] as const)),
     [routing]
+  );
+  const recommendedOptionValues = useMemo(
+    () =>
+      new Set(
+        resolvedCatalogModels.flatMap((model) =>
+          getModelOptionValues(
+            model.codexMaxEffort,
+            model.codexServiceTiers,
+            getPreferredOptionValue(model.id, routingHints.get(model.id.toLowerCase())),
+            isCodexProvider
+          )
+        )
+      ),
+    [isCodexProvider, resolvedCatalogModels, routingHints]
   );
   const selectedRoutingHint = useMemo(
     () => routingHints.get(normalizeModelValue(value, routing).toLowerCase()),
     [routing, routingHints, value]
   );
 
-  // Provider display name aliases (for group headers)
-  const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-    aws: 'Kiro',
-    agy: 'Antigravity',
-    anthropic: 'Claude',
-    openai: 'OpenAI',
-    gemini: 'Gemini',
-    google: 'Google',
-    github: 'GitHub',
-    codex: 'Codex',
-  };
+  const recommendedOptions = useMemo(() => {
+    if (hideRecommended) return [];
+    return resolvedCatalogModels.flatMap((model) => {
+      const routingHint = routingHints.get(model.id.toLowerCase());
+      const optionValues = getModelOptionValues(
+        model.codexMaxEffort,
+        model.codexServiceTiers,
+        getPreferredOptionValue(model.id, routingHint),
+        isCodexProvider
+      );
+      const recShortPrefix = PROVIDER_SHORT_PREFIX[catalog?.provider ?? ''] || (catalog?.provider ?? '');
+      const recDisplayPrefix = recShortPrefix ? `${recShortPrefix}/` : '';
 
-  // Short provider prefixes for model display (like 9Router)
-  const PROVIDER_SHORT_PREFIX: Record<string, string> = {
-    antigravity: 'ag',
-    agy: 'ag',
-    openai: 'cx',
-    codex: 'cx',
-    aws: 'kr',
-    kiro: 'kr',
-    anthropic: 'cc',
-    claude: 'cc',
-    gemini: 'gemini',
-    google: 'gemini',
-    qoder: 'qd',
-    github: 'gh',
-    'github-copilot': 'gh',
-    cloudflare: 'cf',
-    'cloudflare-ai': 'cf',
-    deepseek: 'ds',
-    xai: 'xai',
-    grok: 'gk',
-    'grok-cli': 'gk',
-    mistral: 'ml',
-    cohere: 'co',
-    together: 'tg',
-    fireworks: 'fw',
-    groq: 'gq',
-    sambanova: 'samba',
-    cerebras: 'cb',
-    nvidia: 'nv',
-    openrouter: 'or',
-    ollama: 'ollama',
-    azure: 'az',
-    vertex: 'vx',
-    'vertex-partner': 'vxp',
-    windsurf: 'ws',
-    cline: 'cl',
-    trae: 'tr',
-    zed: 'zd',
-    perplexity: 'px',
-    'perplexity-agent': 'px',
-    kimi: 'km',
-    minimax: 'mm',
-    'minimax-cn': 'mm',
-    glm: 'glm',
-    'glm-cn': 'glm',
-    siliconflow: 'sf',
-    huggingface: 'hf',
-    blackbox: 'bb',
-    devin: 'dv',
-    'devin-cli': 'dv',
-    opencode: 'oc',
-    'opencode-go': 'oc',
-  };
+      return optionValues.map((optionValue) => {
+        const displayLabel = `${recDisplayPrefix}${optionValue}`;
+        return {
+          value: optionValue,
+          groupKey: getRecommendedGroupKey(optionValue, isCodexProvider),
+          searchText: `${optionValue} ${model.id} ${model.name} ${catalog?.provider ?? ''} ${routingHint?.recommendedModelId ?? ''}`,
+          keywords: [model.tier ?? '', catalog?.provider ?? ''],
+          triggerContent: (
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-mono text-xs">{displayLabel}</span>
+              {routingHint?.pinnedAvailable ? (
+                <Badge variant="secondary" className="text-[9px] h-4 px-1 uppercase">
+                  {routingHint.prefix}
+                </Badge>
+              ) : null}
+              {isCodexProvider && <CodexEffortBadge modelId={optionValue} />}
+              {isCodexProvider && <CodexServiceTierBadge modelId={optionValue} />}
+            </div>
+          ),
+          itemContent: (
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-mono text-xs">{displayLabel}</span>
+              {model.tier === 'paid' && <PaidBadge label={t('providerModelSelector.paid')} />}
+              {routingHint?.unprefixedStatus === 'shadowed' ? (
+                <Badge variant="outline" className="text-[9px] h-4 px-1">
+                  {t('providerModelSelector.shadowed')}
+                </Badge>
+              ) : null}
+              {routingHint?.unprefixedStatus === 'prefix-only' ? (
+                <Badge variant="outline" className="text-[9px] h-4 px-1">
+                  {t('providerModelSelector.prefixOnly')}
+                </Badge>
+              ) : null}
+              {isCodexProvider && <CodexEffortBadge modelId={optionValue} />}
+              {isCodexProvider && <CodexServiceTierBadge modelId={optionValue} />}
+            </div>
+          ),
+        };
+      });
+    });
+  }, [hideRecommended, resolvedCatalogModels, routingHints, isCodexProvider, catalog, t]);
 
-  const allModelOptions = allModels
-    .flatMap((model) => {
+  const allModelOptions = useMemo(() => {
+    const sourceModels = hideRecommended
+      ? allModels
+      : supplementalModels
+          .filter((model) => !catalogModelIds.has(model.id))
+          .filter(
+            (model) =>
+              !recommendedOptionValues.has(
+                getPreferredOptionValue(model.id, routingHints.get(model.id.toLowerCase()))
+              )
+          );
+
+    return sourceModels.flatMap((model) => {
       const routingHint = routingHints.get(model.id.toLowerCase());
       const optionValues = getModelOptionValues(
         undefined,
@@ -491,6 +585,7 @@ export function FlexibleModelSelector({
         };
       });
     });
+  }, [hideRecommended, allModels, supplementalModels, catalogModelIds, recommendedOptionValues, routingHints, isCodexProvider, t]);
 
   // Group allModelOptions by provider
   const providerGroups = useMemo(() => {
@@ -503,6 +598,7 @@ export function FlexibleModelSelector({
   }, [allModelOptions]);
   const selectedValueMissing =
     Boolean(value) &&
+    !recommendedOptions.some((option) => option.value === value) &&
     !allModelOptions.some((option) => option.value === value);
   const legacySelectedOption = value
     ? {
@@ -527,7 +623,7 @@ export function FlexibleModelSelector({
         ),
       }
     : null;
-  const hasAvailableModels = allModelOptions.length > 0;
+  const hasAvailableModels = recommendedOptions.length + allModelOptions.length > 0;
 
   return (
     <div className="space-y-1.5">
@@ -556,6 +652,16 @@ export function FlexibleModelSelector({
                     <span className="text-xs text-muted-foreground">
                       {t('providerModelSelector.currentValue')}
                     </span>
+                  ),
+                },
+              ]
+            : []),
+          ...(!hideRecommended
+            ? [
+                {
+                  key: 'recommended',
+                  label: (
+                    <span className="text-xs text-primary">{t('providerModelSelector.recommended')}</span>
                   ),
                 },
               ]
@@ -594,6 +700,7 @@ export function FlexibleModelSelector({
         ]}
         options={[
           ...(selectedValueMissing && legacySelectedOption ? [legacySelectedOption] : []),
+          ...(hideRecommended ? [] : recommendedOptions),
           ...allModelOptions,
         ]}
       />
