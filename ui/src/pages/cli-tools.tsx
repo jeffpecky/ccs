@@ -272,6 +272,7 @@ export function CliToolsPage() {
         {effectiveTool ? (
           <CLIProviderEditor
             provider={getProviderForTool(effectiveTool.id)}
+            toolId={effectiveTool.id}
             displayName={effectiveTool.name}
             authStatus={providers.find((p) => p.provider === getProviderForTool(effectiveTool.id)) || {
               provider: getProviderForTool(effectiveTool.id),
@@ -281,7 +282,12 @@ export function CliToolsPage() {
               tokenFiles: 0,
               accounts: [],
             }}
-            catalog={catalogs[getProviderForTool(effectiveTool.id)]}
+            catalog={catalogs[getProviderForTool(effectiveTool.id)] || {
+              provider: getProviderForTool(effectiveTool.id),
+              displayName: effectiveTool.name,
+              defaultModel: '',
+              models: [],
+            }}
             routing={routingHints[getProviderForTool(effectiveTool.id)]}
             isRemoteMode={isRemoteMode}
           />

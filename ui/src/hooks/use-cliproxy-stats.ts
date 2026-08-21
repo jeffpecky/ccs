@@ -218,7 +218,7 @@ export type {
 };
 
 /** Providers with quota API support */
-export const QUOTA_SUPPORTED_PROVIDERS = ['agy', 'codex', 'claude', 'gemini', 'ghcp'] as const;
+export const QUOTA_SUPPORTED_PROVIDERS = ['agy', 'codex', 'claude', 'gemini', 'ghcp', 'kiro'] as const;
 export type QuotaSupportedProvider = (typeof QUOTA_SUPPORTED_PROVIDERS)[number];
 const QUOTA_PROVIDER_ALIAS_MAP: Readonly<Record<string, QuotaSupportedProvider>> = {
   antigravity: 'agy',

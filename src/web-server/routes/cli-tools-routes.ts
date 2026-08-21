@@ -380,7 +380,7 @@ router.get('/', async (_req: Request, res: Response) => {
     );
 
     res.json({ tools: toolsWithStatus });
-  } catch (error) {
+  } catch (_error) {
     res.status(500).json({ error: 'Failed to list CLI tools' });
   }
 });
@@ -394,7 +394,7 @@ router.get('/:toolId/status', async (req: Request, res: Response) => {
     const { toolId } = req.params;
     const status = await getToolStatus(toolId);
     res.json({ toolId, status });
-  } catch (error) {
+  } catch (_error) {
     res.status(500).json({ error: 'Failed to check tool status' });
   }
 });
@@ -426,7 +426,7 @@ router.get('/:toolId/config', async (req: Request, res: Response) => {
       config,
       targetFiles: tool.targetFiles?.map(expandHome),
     });
-  } catch (error) {
+  } catch (_error) {
     res.status(500).json({ error: 'Failed to get tool config' });
   }
 });
@@ -492,7 +492,7 @@ router.post('/:toolId/apply', async (req: Request, res: Response) => {
     }
 
     res.json({ toolId, results });
-  } catch (error) {
+  } catch (_error) {
     res.status(500).json({ error: 'Failed to apply tool config' });
   }
 });
@@ -538,7 +538,7 @@ router.post('/:toolId/reset', async (req: Request, res: Response) => {
     }
 
     res.json({ toolId, results });
-  } catch (error) {
+  } catch (_error) {
     res.status(500).json({ error: 'Failed to reset tool config' });
   }
 });

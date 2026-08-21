@@ -18,6 +18,7 @@ import { fetchClaudeQuota } from './quota-fetcher-claude';
 import { fetchCodexQuota } from './quota-fetcher-codex';
 import { fetchGeminiCliQuota } from './quota-fetcher-gemini-cli';
 import { fetchGhcpQuota } from './quota-fetcher-ghcp';
+import { fetchKiroQuota, calculateKiroMinQuotaPercent, type KiroQuotaResult } from './quota-fetcher-kiro';
 import type {
   ClaudeQuotaResult,
   CodexQuotaResult,
@@ -37,13 +38,14 @@ import type { RuntimeMonitorConfig } from '../../config/unified-config-types';
 import { loadOrCreateUnifiedConfig } from '../../config/config-loader-facade';
 import { getTierLockForProvider } from '../../config/schemas/quota';
 
-export type ManagedQuotaProvider = 'agy' | 'claude' | 'codex' | 'gemini' | 'ghcp';
+export type ManagedQuotaProvider = 'agy' | 'claude' | 'codex' | 'gemini' | 'ghcp' | 'kiro';
 type ManagedQuotaResult =
   | QuotaResult
   | ClaudeQuotaResult
   | CodexQuotaResult
   | GeminiCliQuotaResult
-  | GhcpQuotaResult;
+  | GhcpQuotaResult
+  | KiroQuotaResult;
 
 export const MANAGED_QUOTA_PROVIDERS: readonly ManagedQuotaProvider[] = [
   'agy',
@@ -51,6 +53,7 @@ export const MANAGED_QUOTA_PROVIDERS: readonly ManagedQuotaProvider[] = [
   'codex',
   'gemini',
   'ghcp',
+  'kiro',
 ];
 
 export function isManagedQuotaProvider(
@@ -152,7 +155,7 @@ async function fetchQuotaWithDedup(
 async function fetchManagedQuota(
   provider: ManagedQuotaProvider,
   accountId: string,
-  verbose: boolean
+  verbose = false
 ): Promise<ManagedQuotaResult> {
   switch (provider) {
     case 'agy':
@@ -165,6 +168,8 @@ async function fetchManagedQuota(
       return fetchGeminiCliQuota(accountId, verbose);
     case 'ghcp':
       return fetchGhcpQuota(accountId, verbose);
+    case 'kiro':
+      return fetchKiroQuota(accountId, verbose);
   }
 }
 
@@ -230,6 +235,15 @@ function buildFailedQuotaResult(
         },
         lastUpdated: Date.now(),
         error: 'Failed to fetch GitHub Copilot quota',
+        accountId,
+      };
+    case 'kiro':
+      return {
+        success: false,
+        planType: null,
+        windows: [],
+        lastUpdated: Date.now(),
+        error: 'Failed to fetch Kiro quota',
         accountId,
       };
   }
@@ -407,6 +421,10 @@ function calculateGhcpQuotaPercent(quota: GhcpQuotaResult): number | null {
   return percentages.length > 0 ? Math.min(...percentages) : null;
 }
 
+function calculateKiroQuotaPercent(quota: KiroQuotaResult): number | null {
+  return calculateKiroMinQuotaPercent(quota);
+}
+
 /**
  * Calculate normalized quota percentage for managed providers.
  */
@@ -425,6 +443,8 @@ function calculateQuotaPercent(
       return calculateGeminiQuotaPercent(quota as GeminiCliQuotaResult);
     case 'ghcp':
       return calculateGhcpQuotaPercent(quota as GhcpQuotaResult);
+    case 'kiro':
+      return calculateKiroQuotaPercent(quota as KiroQuotaResult);
   }
 }
 

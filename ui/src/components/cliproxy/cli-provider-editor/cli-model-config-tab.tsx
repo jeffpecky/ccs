@@ -10,6 +10,7 @@ import type { CliproxyProviderRoutingHints } from '@/lib/api-client';
 
 interface CLIModelConfigTabProps {
   provider: string;
+  toolId?: string;
   catalog?: ProviderCatalog;
   savedPresets: Array<{
     name: string;
@@ -35,6 +36,7 @@ interface CLIModelConfigTabProps {
 
 export function CLIModelConfigTab({
   provider,
+  toolId,
   catalog,
   savedPresets,
   currentModel,
@@ -64,6 +66,7 @@ export function CLIModelConfigTab({
           providerModels={providerModels}
           routing={routing}
           provider={provider}
+          toolId={toolId}
           extendedContextEnabled={extendedContextEnabled}
           onExtendedContextToggle={onExtendedContextToggle}
           onApplyPreset={onApplyPreset}

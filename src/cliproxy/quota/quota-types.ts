@@ -2,16 +2,19 @@
  * Shared Quota Type Definitions
  *
  * Unified types for multi-provider quota system.
- * Supports Antigravity, Codex, Claude, Gemini CLI, and GitHub Copilot OAuth providers.
+ * Supports Antigravity, Codex, Claude, Gemini CLI, GitHub Copilot, and Kiro OAuth providers.
  */
 
 import type { ProviderEntitlementEvidence } from '../auth/provider-entitlement-types';
 
 /** Supported quota providers */
-export type QuotaProvider = 'agy' | 'codex' | 'claude' | 'gemini' | 'ghcp';
+export type QuotaProvider = 'agy' | 'codex' | 'claude' | 'gemini' | 'ghcp' | 'kiro';
 
 // Re-export Antigravity types for unified access
 export type { QuotaResult as AntigravityQuotaResult } from './quota-fetcher';
+
+// Re-export Kiro types for unified access
+export type { KiroQuotaResult, KiroQuotaWindow } from './quota-fetcher-kiro';
 
 export interface QuotaErrorMetadata {
   /** Upstream HTTP status when available */

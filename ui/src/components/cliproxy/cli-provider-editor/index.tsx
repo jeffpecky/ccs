@@ -30,6 +30,7 @@ import type { CLIProviderEditorProps, ModelMappingValues } from './types';
 
 export function CLIProviderEditor({
   provider,
+  toolId,
   displayName,
   authStatus,
   catalog,
@@ -67,30 +68,13 @@ export function CLIProviderEditor({
 
   const providerModels = useMemo(() => {
     if (!modelsData?.models) return [];
-    const ownerMap: Record<string, string[]> = {
-      gemini: ['google'],
-      agy: ['antigravity'],
-      codex: ['openai'],
-      cursor: ['cursor'],
-      gitlab: ['gitlab', 'duo'],
-      codebuddy: ['codebuddy'],
-      qwen: ['alibaba', 'qwen'],
-      iflow: ['iflow'],
-      kilo: ['kilo'],
-      qoder: ['qoder'],
-      kiro: ['kiro', 'aws'],
-      ghcp: ['github', 'copilot'],
-      kimi: ['kimi', 'moonshot'],
-    };
-    const owners = ownerMap[modelFilterProvider.toLowerCase()] || [
-      modelFilterProvider.toLowerCase(),
-    ];
-    return modelsData.models.filter((m) => {
-      if (!owners.some((o) => m.owned_by.toLowerCase().includes(o))) return false;
-      if (!isAgyProvider) return true;
-      return !isDeniedAgyModelId(m.id);
-    });
-  }, [isAgyProvider, modelsData, modelFilterProvider]);
+    // Return ALL models with original IDs + owned_by for grouping
+    // Catalog resolution requires original IDs (without provider prefix)
+    return modelsData.models.map((m) => ({
+      id: m.id,
+      owned_by: m.owned_by,
+    }));
+  }, [modelsData]);
 
   const providerRoute = (baseProvider || provider).toLowerCase();
 
@@ -238,6 +222,7 @@ export function CLIProviderEditor({
                 >
                   <CLIModelConfigTab
                     provider={provider}
+                    toolId={toolId}
                     catalog={catalog}
                     savedPresets={savedPresets}
                     currentModel={currentModel}

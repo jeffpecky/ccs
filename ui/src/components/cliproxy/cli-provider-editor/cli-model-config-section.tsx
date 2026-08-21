@@ -36,9 +36,6 @@ function getPresetUpdates(
   };
 }
 
-// Tools that use Claude-style model mapping (Default, Opus, Sonnet, Haiku)
-const CLAUDE_STYLE_TOOLS = ['claude-code'];
-
 // Tools that use simple model list + subagent (OpenCode, Codex, etc.)
 const SIMPLE_MODEL_TOOLS = ['opencode', 'codex', 'open-claw', 'hermes-agent'];
 
@@ -52,6 +49,7 @@ export function CLIModelConfigSection({
   providerModels,
   routing,
   provider,
+  toolId,
   extendedContextEnabled,
   onExtendedContextToggle,
   onApplyPreset,
@@ -118,7 +116,7 @@ export function CLIModelConfigSection({
   }, [resolvedCatalogModels]);
 
   const showPresets = presetGroups.length > 0 || savedPresets.length > 0;
-  const isSimpleModel = SIMPLE_MODEL_TOOLS.includes(provider);
+  const isSimpleModel = toolId ? SIMPLE_MODEL_TOOLS.includes(toolId) : false;
 
   // Simple model list UI for OpenCode, Codex, etc.
   if (isSimpleModel) {
@@ -304,7 +302,7 @@ export function CLIModelConfigSection({
   );
 }
 
-// Simple model list UI for OpenCode, Codex, etc.
+// Simple model list UI for OpenCode, Codex, etc. - Same layout as Claude Code but with 2 fields
 function SimpleModelConfigUI({
   currentModel,
   providerModels,
@@ -318,145 +316,63 @@ function SimpleModelConfigUI({
   routing?: ModelConfigSectionProps['routing'];
   onUpdateEnvValue: (key: string, value: string) => void;
 }) {
-  const [selectedModels, setSelectedModels] = useState<string[]>(() => {
-    // Parse existing models from currentModel (comma-separated or single)
+  // Parse subagent model from comma-separated list (second item if exists)
+  const [subagentModel, setSubagentModel] = useState<string>(() => {
     if (currentModel) {
-      return currentModel.split(',').map((m) => m.trim()).filter(Boolean);
+      const parts = currentModel.split(',').map((m) => m.trim()).filter(Boolean);
+      return parts[1] || '';
     }
-    return [];
+    return '';
   });
-  const [activeModel, setActiveModel] = useState<string>(currentModel || '');
-  const [subagentModel, setSubagentModel] = useState<string>('');
-  const [showModelSelector, setShowModelSelector] = useState(false);
 
-  const handleAddModel = (modelId: string) => {
-    if (!selectedModels.includes(modelId)) {
-      const newModels = [...selectedModels, modelId];
-      setSelectedModels(newModels);
-      // Update the env value with comma-separated list
-      onUpdateEnvValue('ANTHROPIC_MODEL', newModels.join(', '));
-      // Set as active if first model
-      if (!activeModel) {
-        setActiveModel(modelId);
-      }
+  const handleDefaultModelChange = (model: string) => {
+    // Keep subagent model if it exists
+    if (subagentModel) {
+      onUpdateEnvValue('ANTHROPIC_MODEL', `${model}, ${subagentModel}`);
+    } else {
+      onUpdateEnvValue('ANTHROPIC_MODEL', model);
     }
   };
 
-  const handleRemoveModel = (modelId: string) => {
-    const newModels = selectedModels.filter((m) => m !== modelId);
-    setSelectedModels(newModels);
-    onUpdateEnvValue('ANTHROPIC_MODEL', newModels.join(', '));
-    // Clear active if removed
-    if (activeModel === modelId) {
-      setActiveModel(newModels[0] || '');
+  const handleSubagentModelChange = (model: string) => {
+    setSubagentModel(model);
+    // Get default model from current value
+    const defaultModel = currentModel?.split(',')[0]?.trim() || '';
+    if (model) {
+      onUpdateEnvValue('ANTHROPIC_MODEL', `${defaultModel}, ${model}`);
+    } else {
+      onUpdateEnvValue('ANTHROPIC_MODEL', defaultModel);
     }
   };
 
-  const handleSetActive = (modelId: string) => {
-    setActiveModel(modelId === activeModel ? '' : modelId);
-  };
+  const defaultModel = currentModel?.split(',')[0]?.trim() || '';
 
   return (
     <div className="space-y-4">
-      {/* Models */}
       <div>
-        <h3 className="text-sm font-medium mb-2">Models</h3>
-        <p className="text-xs text-muted-foreground mb-3">
-          Add models you want to use. Click a model to set it as active.
+        <h3 className="text-sm font-medium mb-2">Model Mapping</h3>
+        <p className="text-xs text-muted-foreground mb-4">
+          Configure which models to use for each role
         </p>
-        <div className="flex flex-wrap gap-1.5 min-h-[32px] px-2 py-1.5 bg-muted/30 rounded border">
-          {selectedModels.length === 0 ? (
-            <span className="text-xs text-muted-foreground">No models selected</span>
-          ) : (
-            selectedModels.map((model) => (
-              <span
-                key={model}
-                onClick={() => handleSetActive(model)}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs cursor-pointer transition-colors ${
-                  model === activeModel
-                    ? 'bg-primary/10 text-primary border border-primary'
-                    : 'bg-muted text-muted-foreground border border-transparent hover:border-border'
-                }`}
-                title={model === activeModel ? 'Click to clear active' : 'Click to set as active'}
-              >
-                {model === activeModel && <Star className="w-3 h-3 fill-current" />}
-                {model}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRemoveModel(model);
-                  }}
-                  className="ml-0.5 hover:text-destructive"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))
-          )}
-        </div>
-        <div className="flex items-center gap-2 mt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-7"
-            onClick={() => setShowModelSelector(!showModelSelector)}
-          >
-            <Plus className="w-3 h-3 mr-1" />
-            Add Model
-          </Button>
-          {selectedModels.length > 0 && activeModel && (
-            <span className="text-xs text-muted-foreground">
-              Active: <span className="text-primary">{activeModel}</span>
-            </span>
-          )}
-          {selectedModels.length > 0 && !activeModel && (
-            <span className="text-xs text-yellow-600">Click a model to set active</span>
-          )}
-        </div>
-        {showModelSelector && (
-          <div className="mt-2 p-2 border rounded bg-muted/30">
-            <FlexibleModelSelector
-              label=""
-              description=""
-              value={undefined}
-              onChange={(model) => {
-                handleAddModel(model);
-                setShowModelSelector(false);
-              }}
-              catalog={catalog}
-              allModels={providerModels}
-              routing={routing}
-            />
-          </div>
-        )}
-      </div>
-
-      <Separator />
-
-      {/* Subagent Model */}
-      <div>
-        <h3 className="text-sm font-medium mb-2">Subagent Model</h3>
-        <p className="text-xs text-muted-foreground mb-3">
-          Model used for spawned subagents (explorer, reviewer, etc.)
-        </p>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={subagentModel}
-            onChange={(e) => setSubagentModel(e.target.value)}
-            placeholder={activeModel || 'provider/model-id (defaults to main model)'}
-            className="flex-1 px-2 py-1.5 bg-background rounded border text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
+        <div className="space-y-4">
+          <FlexibleModelSelector
+            label="Default Model"
+            description="Used when no specific role is requested"
+            value={defaultModel}
+            onChange={handleDefaultModelChange}
+            catalog={catalog}
+            allModels={providerModels}
+            routing={routing}
           />
-          {subagentModel && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2"
-              onClick={() => setSubagentModel('')}
-            >
-              <X className="w-3 h-3" />
-            </Button>
-          )}
+          <FlexibleModelSelector
+            label="Subagent Model"
+            description="Model used for spawned subagents (explorer, reviewer, etc.)"
+            value={subagentModel}
+            onChange={handleSubagentModelChange}
+            catalog={catalog}
+            allModels={providerModels}
+            routing={routing}
+          />
         </div>
       </div>
     </div>

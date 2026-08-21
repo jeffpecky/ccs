@@ -21,6 +21,7 @@ export interface SettingsResponse {
 
 export interface CLIProviderEditorProps {
   provider: string;
+  toolId?: string;
   displayName: string;
   authStatus: AuthStatus;
   catalog?: ProviderCatalog;
@@ -77,6 +78,7 @@ export interface ModelConfigSectionProps {
   providerModels: Array<{ id: string; owned_by: string }>;
   routing?: CliproxyProviderRoutingHints;
   provider: string;
+  toolId?: string;
   extendedContextEnabled?: boolean;
   onExtendedContextToggle?: (enabled: boolean) => void;
   onApplyPreset: (updates: Record<string, string>) => void;
