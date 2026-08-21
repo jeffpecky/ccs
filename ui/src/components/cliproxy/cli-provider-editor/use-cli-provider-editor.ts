@@ -24,9 +24,16 @@ function checkMissingFields(settings: { env?: Record<string, string> }): string[
   return REQUIRED_ENV_KEYS.filter((key) => !env[key]?.trim());
 }
 
+const NATIVE_CONFIG_TOOLS: Record<string, string> = {
+  'claude-code': '/api/cli-tools/claude-settings',
+  codex: '/api/cli-tools/codex-settings',
+  opencode: '/api/cli-tools/opencode-settings',
+};
+
 export function useCLIProviderEditor(
   provider: string,
-  catalog?: ProviderCatalog
+  catalog?: ProviderCatalog,
+  toolId?: string
 ): UseCLIProviderEditorReturn {
   const [rawJsonEdits, setRawJsonEdits] = useState<string | null>(null);
   const [conflictDialog, setConflictDialog] = useState(false);
@@ -163,12 +170,33 @@ export function useCLIProviderEditor(
 
       if (res.status === 409) throw new Error('CONFLICT');
       if (!res.ok) throw new Error('Failed to save');
+
+      // Also write to CLI tool's native config file
+      const nativeEndpoint = toolId ? NATIVE_CONFIG_TOOLS[toolId] : undefined;
+      if (nativeEndpoint) {
+        const env = settingsToSave.env || {};
+        const nativeRes = await fetch(nativeEndpoint, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ env }),
+        });
+        if (!nativeRes.ok) {
+          const err = await nativeRes.json().catch(() => ({}));
+          console.error('Failed to write native config:', err);
+        }
+      }
+
       return res.json();
     },
     onSuccess: (responseData) => {
       queryClient.invalidateQueries({ queryKey: ['settings', provider] });
       setRawJsonEdits(null);
-      if (responseData?.warning) {
+      const nativeEndpoint = toolId ? NATIVE_CONFIG_TOOLS[toolId] : undefined;
+      if (nativeEndpoint) {
+        toast.success(i18n.t('settings.saved'), {
+          description: 'Also written to CLI tool config',
+        });
+      } else if (responseData?.warning) {
         toast.success(i18n.t('settings.saved'), {
           description: responseData.warning,
         });

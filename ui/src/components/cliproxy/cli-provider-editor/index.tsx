@@ -99,7 +99,7 @@ export function CLIProviderEditor({
     conflictDialog,
     handleConflictResolve,
     missingRequiredFields,
-  } = useCLIProviderEditor(provider, catalog);
+  } = useCLIProviderEditor(provider, catalog, toolId);
 
   // Fetch effective API key for presets (uses configured value, not hardcoded)
   const { data: authTokens } = useQuery<{ apiKey: { value: string } }>({
