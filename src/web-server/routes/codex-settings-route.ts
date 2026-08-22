@@ -138,15 +138,16 @@ router.get('/', async (_req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    // Accept either individual fields or raw env object
-    let { model, baseUrl, apiKey, subagentModel, wireApi, env: rawEnv } = req.body;
+    // Accept either individual fields or raw env/model object
+    let { model, baseUrl, apiKey, subagentModel, wireApi, env: rawEnv, model: rawModel } = req.body;
 
-    // If raw env object provided, extract values from it
-    if (rawEnv && typeof rawEnv === 'object') {
-      baseUrl = rawEnv.ANTHROPIC_BASE_URL || rawEnv.OPENAI_BASE_URL || '';
-      apiKey = rawEnv.ANTHROPIC_AUTH_TOKEN || rawEnv.OPENAI_API_KEY || '';
-      model = rawEnv.ANTHROPIC_MODEL || rawEnv.OPENAI_MODEL || '';
-      subagentModel = rawEnv.ANTHROPIC_DEFAULT_SONNET_MODEL || rawEnv.OPENAI_SUB_AGENT_MODEL || '';
+    // If raw env or model object provided, extract values from it
+    const raw = rawModel || rawEnv;
+    if (raw && typeof raw === 'object') {
+      baseUrl = raw.OPENAI_BASE_URL || '';
+      apiKey = raw.OPENAI_API_KEY || '';
+      model = raw.OPENAI_MODEL || '';
+      subagentModel = raw.OPENAI_SUB_AGENT_MODEL || '';
     }
 
     if (!model) {

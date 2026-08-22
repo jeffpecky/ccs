@@ -28,7 +28,7 @@ export interface OpenCodeSettingsResponse {
   path: string;
 }
 
-export type AnySettingsResponse = SettingsResponse | OpenCodeSettingsResponse;
+export type AnySettingsResponse = SettingsResponse | OpenCodeSettingsResponse | CodexSettingsResponse | DroidSettingsResponse;
 
 export interface CLIProviderEditorProps {
   provider: string;
@@ -142,14 +142,43 @@ export interface OpenCodeEditorReturn extends Omit<BaseEditorReturn, 'data' | 'c
   subagentModel?: string;
 }
 
+/** Codex settings response - uses 'model' key like OpenCode */
+export interface CodexSettingsResponse {
+  profile: string;
+  settings: {
+    model?: Record<string, string>;
+  };
+  mtime: number;
+  path: string;
+}
+
 /** Codex editor return type - uses OPENAI_MODEL + OPENAI_SUB_AGENT_MODEL */
-export interface CodexEditorReturn extends BaseEditorReturn {
+export interface CodexEditorReturn extends Omit<BaseEditorReturn, 'data' | 'currentSettings'> {
+  data: CodexSettingsResponse | undefined;
+  currentSettings: { model?: Record<string, string> };
   currentModel?: string;
   subagentModel?: string;
 }
 
-/** Factory Droid editor return type - uses OPENAI_MODEL + OPENAI_SUB_AGENT_MODEL */
-export interface DroidEditorReturn extends BaseEditorReturn {
+/** Factory Droid settings response - uses 'custom_models' array */
+export interface DroidSettingsResponse {
+  profile: string;
+  settings: {
+    custom_models?: Array<{
+      model: string;
+      base_url: string;
+      api_key: string;
+      provider: string;
+    }>;
+  };
+  mtime: number;
+  path: string;
+}
+
+/** Factory Droid editor return type - uses custom_models array */
+export interface DroidEditorReturn extends Omit<BaseEditorReturn, 'data' | 'currentSettings'> {
+  data: DroidSettingsResponse | undefined;
+  currentSettings: { custom_models?: Array<{ model: string; base_url: string; api_key: string; provider: string }> };
   currentModel?: string;
   subagentModel?: string;
 }

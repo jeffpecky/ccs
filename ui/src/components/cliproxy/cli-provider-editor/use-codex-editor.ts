@@ -8,18 +8,18 @@ import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import i18n from '@/lib/i18n';
-import type { SettingsResponse, CodexEditorReturn } from './types';
+import type { CodexSettingsResponse, CodexEditorReturn } from './types';
 import type { ProviderCatalog } from '../provider-model-selector';
 import { isValidProvider } from '@/lib/provider-config';
 import { CLIPROXY_DEFAULT_PORT } from '@/lib/preset-utils';
 import { useAuthApiKey, getEffectiveApiKey } from '@/hooks/use-auth-api-key';
 
 // Codex-specific required fields
-const REQUIRED_ENV_KEYS = ['CODEX_BASE_URL', 'CODEX_API_KEY'] as const;
+const REQUIRED_ENV_KEYS = ['OPENAI_BASE_URL', 'OPENAI_API_KEY'] as const;
 
-function checkMissingFields(settings: { env?: Record<string, string> }): string[] {
-  const env = settings?.env || {};
-  return REQUIRED_ENV_KEYS.filter((key) => !env[key]?.trim());
+function checkMissingFields(settings: { model?: Record<string, string> }): string[] {
+  const model = settings?.model || {};
+  return REQUIRED_ENV_KEYS.filter((key) => !model[key]?.trim());
 }
 
 const NATIVE_CONFIG_TOOLS: Record<string, string> = {
@@ -41,7 +41,7 @@ export function useCodexEditor(
   const effectiveApiKey = getEffectiveApiKey(authTokens);
   const effectivePort = port ?? CLIPROXY_DEFAULT_PORT;
 
-  const { data, isLoading, refetch } = useQuery<SettingsResponse>({
+  const { data, isLoading, refetch } = useQuery<CodexSettingsResponse>({
     queryKey: ['settings', provider],
     queryFn: async () => {
       const res = await fetch(`/api/settings/${provider}/raw`);
@@ -51,7 +51,7 @@ export function useCodexEditor(
           : `~/.ccs/profiles/${provider}/settings.json`;
         return {
           profile: provider,
-          settings: { env: {} },
+          settings: { model: {} },
           mtime: Date.now(),
           path: fallbackPath,
         };
@@ -65,7 +65,7 @@ export function useCodexEditor(
   const rawJsonContent = useMemo(() => {
     if (rawJsonEdits !== null) return rawJsonEdits;
     if (settings) return JSON.stringify(settings, null, 2);
-    return '{\n  "env": {}\n}';
+    return '{\n  "model": {}\n}';
   }, [rawJsonEdits, settings]);
 
   const handleRawJsonChange = useCallback((value: string) => {
@@ -76,17 +76,17 @@ export function useCodexEditor(
     try {
       return JSON.parse(rawJsonContent);
     } catch {
-      return settings || { env: {} };
+      return settings || { model: {} };
     }
   }, [rawJsonContent, settings]);
   // Codex model fields (uses OPENAI_MODEL per backend route)
-  const currentModel = currentSettings?.env?.OPENAI_MODEL;
-  const subagentModel = currentSettings?.env?.OPENAI_SUB_AGENT_MODEL;
+  const currentModel = currentSettings?.model?.OPENAI_MODEL;
+  const subagentModel = currentSettings?.model?.OPENAI_SUB_AGENT_MODEL;
 
   const updateEnvValue = useCallback(
     (key: string, value: string) => {
-      const newEnv = { ...(currentSettings?.env || {}), [key]: value };
-      const newSettings = { ...currentSettings, env: newEnv };
+      const newModel = { ...(currentSettings?.model || {}), [key]: value };
+      const newSettings = { ...currentSettings, model: newModel };
       setRawJsonEdits(JSON.stringify(newSettings, null, 2));
     },
     [currentSettings]
@@ -94,8 +94,8 @@ export function useCodexEditor(
 
   const updateEnvValues = useCallback(
     (updates: Record<string, string>) => {
-      const newEnv = { ...(currentSettings?.env || {}), ...updates };
-      const newSettings = { ...currentSettings, env: newEnv };
+      const newModel = { ...(currentSettings?.model || {}), ...updates };
+      const newSettings = { ...currentSettings, model: newModel };
       setRawJsonEdits(JSON.stringify(newSettings, null, 2));
     },
     [currentSettings]
@@ -121,15 +121,15 @@ export function useCodexEditor(
     mutationFn: async () => {
       const settingsToSave = JSON.parse(rawJsonContent);
 
-      // Auto-fill CODEX_BASE_URL and CODEX_API_KEY from Auth tab if missing
-      const env = settingsToSave.env || {};
-      if (!env.CODEX_BASE_URL?.trim()) {
-        env.CODEX_BASE_URL = `http://127.0.0.1:${effectivePort}/v1`;
+      // Auto-fill OPENAI_BASE_URL and OPENAI_API_KEY from Auth tab if missing
+      const model = settingsToSave.model || {};
+      if (!model.OPENAI_BASE_URL?.trim()) {
+        model.OPENAI_BASE_URL = `http://127.0.0.1:${effectivePort}/v1`;
       }
-      if (!env.CODEX_API_KEY?.trim()) {
-        env.CODEX_API_KEY = effectiveApiKey;
+      if (!model.OPENAI_API_KEY?.trim()) {
+        model.OPENAI_API_KEY = effectiveApiKey;
       }
-      settingsToSave.env = env;
+      settingsToSave.model = model;
 
       const res = await fetch(`/api/settings/${provider}`, {
         method: 'PUT',
@@ -148,7 +148,7 @@ export function useCodexEditor(
         const nativeRes = await fetch(nativeEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ env }),
+          body: JSON.stringify({ model }),
         });
         if (!nativeRes.ok) {
           const err = await nativeRes.json().catch(() => ({}));

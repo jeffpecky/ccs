@@ -199,6 +199,7 @@ export function GrokBuildEditor({
               profileEnv={data?.settings?.env}
               missingRequiredFields={missingRequiredFields}
               hideGlobalEnvIndicator
+              toolName="Grok Build"
             />
           </div>
         </div>

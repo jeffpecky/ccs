@@ -196,9 +196,9 @@ export function DroidEditor({
               isRawJsonValid={isRawJsonValid}
               rawJsonEdits={rawJsonEdits}
               onRawJsonChange={handleRawJsonChange}
-              profileEnv={data?.settings?.env}
               missingRequiredFields={missingRequiredFields}
               hideGlobalEnvIndicator
+              toolName="Factory Droid"
             />
           </div>
         </div>

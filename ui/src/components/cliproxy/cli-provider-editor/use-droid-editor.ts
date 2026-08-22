@@ -8,18 +8,17 @@ import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import i18n from '@/lib/i18n';
-import type { SettingsResponse, DroidEditorReturn } from './types';
+import type { DroidSettingsResponse, DroidEditorReturn } from './types';
 import type { ProviderCatalog } from '../provider-model-selector';
 import { isValidProvider } from '@/lib/provider-config';
 import { CLIPROXY_DEFAULT_PORT } from '@/lib/preset-utils';
 import { useAuthApiKey, getEffectiveApiKey } from '@/hooks/use-auth-api-key';
 
 // Factory Droid-specific required fields
-const REQUIRED_ENV_KEYS = ['FACTORY_BASE_URL', 'FACTORY_API_KEY'] as const;
-
-function checkMissingFields(settings: { env?: Record<string, string> }): string[] {
-  const env = settings?.env || {};
-  return REQUIRED_ENV_KEYS.filter((key) => !env[key]?.trim());
+function checkMissingFields(settings: { custom_models?: unknown[] }): string[] {
+  const models = settings?.custom_models || [];
+  if (models.length === 0) return ['custom_models'];
+  return [];
 }
 
 const NATIVE_CONFIG_TOOLS: Record<string, string> = {
@@ -41,7 +40,7 @@ export function useDroidEditor(
   const effectiveApiKey = getEffectiveApiKey(authTokens);
   const effectivePort = port ?? CLIPROXY_DEFAULT_PORT;
 
-  const { data, isLoading, refetch } = useQuery<SettingsResponse>({
+  const { data, isLoading, refetch } = useQuery<DroidSettingsResponse>({
     queryKey: ['settings', provider],
     queryFn: async () => {
       const res = await fetch(`/api/settings/${provider}/raw`);
@@ -51,7 +50,7 @@ export function useDroidEditor(
           : `~/.ccs/profiles/${provider}/settings.json`;
         return {
           profile: provider,
-          settings: { env: {} },
+          settings: { custom_models: [] },
           mtime: Date.now(),
           path: fallbackPath,
         };
@@ -65,7 +64,7 @@ export function useDroidEditor(
   const rawJsonContent = useMemo(() => {
     if (rawJsonEdits !== null) return rawJsonEdits;
     if (settings) return JSON.stringify(settings, null, 2);
-    return '{\n  "env": {}\n}';
+    return '{\n  "custom_models": []\n}';
   }, [rawJsonEdits, settings]);
 
   const handleRawJsonChange = useCallback((value: string) => {
@@ -76,29 +75,50 @@ export function useDroidEditor(
     try {
       return JSON.parse(rawJsonContent);
     } catch {
-      return settings || { env: {} };
+      return settings || { custom_models: [] };
     }
   }, [rawJsonContent, settings]);
-  // Factory Droid model fields (uses OPENAI_MODEL per backend route)
-  const currentModel = currentSettings?.env?.OPENAI_MODEL;
-  const subagentModel = currentSettings?.env?.OPENAI_SUB_AGENT_MODEL;
+  // Factory Droid model fields (extracted from custom_models array)
+  const currentModel = currentSettings?.custom_models?.[0]?.model;
+  const subagentModel = currentSettings?.custom_models?.[1]?.model;
 
   const updateEnvValue = useCallback(
     (key: string, value: string) => {
-      const newEnv = { ...(currentSettings?.env || {}), [key]: value };
-      const newSettings = { ...currentSettings, env: newEnv };
+      const models = [...(currentSettings?.custom_models || [])];
+      if (key === 'OPENAI_MODEL') {
+        if (models[0]) {
+          models[0] = { ...models[0], model: value };
+        } else {
+          models.push({
+            model: value,
+            base_url: `http://127.0.0.1:${effectivePort}/v1`,
+            api_key: effectiveApiKey,
+            provider: 'openai',
+          });
+        }
+      } else if (key === 'OPENAI_SUB_AGENT_MODEL') {
+        if (models[1]) {
+          models[1] = { ...models[1], model: value };
+        } else {
+          models.push({
+            model: value,
+            base_url: `http://127.0.0.1:${effectivePort}/v1`,
+            api_key: effectiveApiKey,
+            provider: 'openai',
+          });
+        }
+      }
+      const newSettings = { ...currentSettings, custom_models: models };
       setRawJsonEdits(JSON.stringify(newSettings, null, 2));
     },
-    [currentSettings]
+    [currentSettings, effectivePort, effectiveApiKey]
   );
 
   const updateEnvValues = useCallback(
     (updates: Record<string, string>) => {
-      const newEnv = { ...(currentSettings?.env || {}), ...updates };
-      const newSettings = { ...currentSettings, env: newEnv };
-      setRawJsonEdits(JSON.stringify(newSettings, null, 2));
+      Object.entries(updates).forEach(([key, value]) => updateEnvValue(key, value));
     },
-    [currentSettings]
+    [updateEnvValue]
   );
 
   const isRawJsonValid = useMemo(() => {
@@ -121,15 +141,17 @@ export function useDroidEditor(
     mutationFn: async () => {
       const settingsToSave = JSON.parse(rawJsonContent);
 
-      // Auto-fill FACTORY_BASE_URL and FACTORY_API_KEY from Auth tab if missing
-      const env = settingsToSave.env || {};
-      if (!env.FACTORY_BASE_URL?.trim()) {
-        env.FACTORY_BASE_URL = `http://127.0.0.1:${effectivePort}/v1`;
+      // Auto-fill base_url and api_key from Auth tab for all models if missing
+      const models = settingsToSave.custom_models || [];
+      for (const m of models) {
+        if (!m.base_url?.trim()) {
+          m.base_url = `http://127.0.0.1:${effectivePort}/v1`;
+        }
+        if (!m.api_key?.trim()) {
+          m.api_key = effectiveApiKey;
+        }
       }
-      if (!env.FACTORY_API_KEY?.trim()) {
-        env.FACTORY_API_KEY = effectiveApiKey;
-      }
-      settingsToSave.env = env;
+      settingsToSave.custom_models = models;
 
       const res = await fetch(`/api/settings/${provider}`, {
         method: 'PUT',
@@ -148,7 +170,7 @@ export function useDroidEditor(
         const nativeRes = await fetch(nativeEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ env }),
+          body: JSON.stringify({ custom_models: models }),
         });
         if (!nativeRes.ok) {
           const err = await nativeRes.json().catch(() => ({}));

@@ -33,6 +33,7 @@ import cliToolsRoutes from './cli-tools-routes';
 import claudeSettingsRoutes from './claude-settings-route';
 import codexSettingsRoutes from './codex-settings-route';
 import opencodeSettingsRoutes from './opencode-settings-route';
+import factoryDroidSettingsRoutes from './factory-droid-settings-route';
 import headroomRoutes from './headroom-routes';
 
 // Create the main API router
@@ -126,6 +127,7 @@ apiRoutes.use('/bar', barRoutes);
 apiRoutes.use('/cli-tools/claude-settings', claudeSettingsRoutes);
 apiRoutes.use('/cli-tools/codex-settings', codexSettingsRoutes);
 apiRoutes.use('/cli-tools/opencode-settings', opencodeSettingsRoutes);
+apiRoutes.use('/cli-tools/factory-droid-settings', factoryDroidSettingsRoutes);
 apiRoutes.use('/cli-tools', cliToolsRoutes);
 
 // ==================== Token Saver / Headroom ====================

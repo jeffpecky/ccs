@@ -196,9 +196,10 @@ export function CodexEditor({
               isRawJsonValid={isRawJsonValid}
               rawJsonEdits={rawJsonEdits}
               onRawJsonChange={handleRawJsonChange}
-              profileEnv={data?.settings?.env}
+              profileEnv={data?.settings?.model}
               missingRequiredFields={missingRequiredFields}
               hideGlobalEnvIndicator
+              toolName="Codex CLI"
             />
           </div>
         </div>
