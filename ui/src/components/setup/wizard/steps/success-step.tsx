@@ -35,3 +35,4 @@ export function SuccessStep({ variantName, onClose }: SuccessStepProps) {
     </div>
   );
 }
+

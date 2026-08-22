@@ -177,3 +177,4 @@ export function HealthPriorityCard({ check }: HealthPriorityCardProps) {
     </motion.div>
   );
 }
+

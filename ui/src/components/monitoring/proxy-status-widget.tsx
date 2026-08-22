@@ -699,3 +699,4 @@ export function ProxyStatusWidget() {
     </TooltipProvider>
   );
 }
+

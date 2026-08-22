@@ -174,7 +174,7 @@ export function ProviderEditor({
     const effectivePort = port ?? CLIPROXY_DEFAULT_PORT;
     updateEnvValues({
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${effectivePort}/api/provider/${providerRoute}`,
-      ANTHROPIC_AUTH_TOKEN: effectiveApiKey,
+      ANTHROPIC_API_KEY: effectiveApiKey,
       ...updates,
     });
     toast.success(`Applied "${updates.ANTHROPIC_MODEL?.split('/').pop() || 'preset'}" preset`);
@@ -194,7 +194,7 @@ export function ProviderEditor({
     const effectivePort = port ?? CLIPROXY_DEFAULT_PORT;
     updateEnvValues({
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${effectivePort}/api/provider/${providerRoute}`,
-      ANTHROPIC_AUTH_TOKEN: effectiveApiKey,
+      ANTHROPIC_API_KEY: effectiveApiKey,
       ANTHROPIC_MODEL: values.default,
       ANTHROPIC_DEFAULT_OPUS_MODEL: values.opus,
       ANTHROPIC_DEFAULT_SONNET_MODEL: values.sonnet,
@@ -380,3 +380,4 @@ export { ProviderInfoTab } from './provider-info-tab';
 export { ProviderEditorHeader } from './provider-editor-header';
 export { ModelConfigTab } from './model-config-tab';
 export { useProviderEditor } from './use-provider-editor';
+

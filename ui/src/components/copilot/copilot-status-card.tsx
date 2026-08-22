@@ -201,3 +201,4 @@ export function CopilotStatusCard() {
     </Card>
   );
 }
+

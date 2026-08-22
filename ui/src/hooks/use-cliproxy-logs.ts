@@ -228,3 +228,4 @@ export function useLogsFilter(logs: LogEntry[]) {
     setSearchQuery,
   };
 }
+

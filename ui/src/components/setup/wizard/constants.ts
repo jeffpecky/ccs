@@ -40,3 +40,4 @@ export function getStepProgress(step: string): number {
   if (step === 'account') return 1; // Same as auth
   return ALL_STEPS.indexOf(step);
 }
+

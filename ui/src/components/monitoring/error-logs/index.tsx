@@ -221,3 +221,4 @@ export { LogContentPanel } from './log-content-panel';
 export { TabButton, StatusBadge } from './ui-primitives';
 export { OverviewTab, HeadersTab, BodyTab, RawTab } from './tab-components';
 export type { TabType, ErrorLogItemProps, LogContentPanelProps } from './types';
+

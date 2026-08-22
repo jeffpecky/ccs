@@ -19,6 +19,17 @@ export interface SettingsResponse {
   path: string;
 }
 
+export interface OpenCodeSettingsResponse {
+  profile: string;
+  settings: {
+    model?: Record<string, string>;
+  };
+  mtime: number;
+  path: string;
+}
+
+export type AnySettingsResponse = SettingsResponse | OpenCodeSettingsResponse;
+
 export interface CLIProviderEditorProps {
   provider: string;
   toolId?: string;
@@ -60,6 +71,8 @@ export interface RawEditorSectionProps {
   onRawJsonChange: (value: string) => void;
   profileEnv?: Record<string, string>;
   missingRequiredFields?: string[];
+  hideGlobalEnvIndicator?: boolean;
+  toolName?: string;
 }
 
 export interface ModelConfigSectionProps {
@@ -88,7 +101,8 @@ export interface ModelConfigSectionProps {
   isDeletePending?: boolean;
 }
 
-export interface UseCLIProviderEditorReturn {
+/** Shared base return type for all editor hooks */
+interface BaseEditorReturn {
   data: SettingsResponse | undefined;
   isLoading: boolean;
   refetch: () => void;
@@ -97,12 +111,6 @@ export interface UseCLIProviderEditorReturn {
   isRawJsonValid: boolean;
   hasChanges: boolean;
   currentSettings: { env?: Record<string, string> };
-  currentModel?: string;
-  opusModel?: string;
-  sonnetModel?: string;
-  haikuModel?: string;
-  extendedContextEnabled: boolean;
-  toggleExtendedContext: (enabled: boolean) => void;
   handleRawJsonChange: (value: string) => void;
   updateEnvValue: (key: string, value: string) => void;
   updateEnvValues: (updates: Record<string, string>) => void;
@@ -115,3 +123,50 @@ export interface UseCLIProviderEditorReturn {
   handleConflictResolve: (overwrite: boolean) => Promise<void>;
   missingRequiredFields: string[];
 }
+
+/** Claude Code editor return type - uses Anthropic model tiers */
+export interface ClaudeEditorReturn extends BaseEditorReturn {
+  currentModel?: string;
+  opusModel?: string;
+  sonnetModel?: string;
+  haikuModel?: string;
+  extendedContextEnabled: boolean;
+  toggleExtendedContext: (enabled: boolean) => void;
+}
+
+/** OpenCode editor return type - uses OPENCODE_MODEL + OPENCODE_SUB_AGENT_MODEL */
+export interface OpenCodeEditorReturn extends Omit<BaseEditorReturn, 'data' | 'currentSettings'> {
+  data: OpenCodeSettingsResponse | undefined;
+  currentSettings: { model?: Record<string, string> };
+  currentModel?: string;
+  subagentModel?: string;
+}
+
+/** Codex editor return type - uses OPENAI_MODEL + OPENAI_SUB_AGENT_MODEL */
+export interface CodexEditorReturn extends BaseEditorReturn {
+  currentModel?: string;
+  subagentModel?: string;
+}
+
+/** Factory Droid editor return type - uses OPENAI_MODEL + OPENAI_SUB_AGENT_MODEL */
+export interface DroidEditorReturn extends BaseEditorReturn {
+  currentModel?: string;
+  subagentModel?: string;
+}
+
+/** Grok Build editor return type - uses OPENAI_MODEL + OPENAI_SUB_AGENT_MODEL */
+export interface GrokBuildEditorReturn extends BaseEditorReturn {
+  currentModel?: string;
+  subagentModel?: string;
+}
+
+/** @deprecated Use ClaudeEditorReturn, OpenCodeEditorReturn, etc. instead */
+export interface UseCLIProviderEditorReturn extends BaseEditorReturn {
+  currentModel?: string;
+  opusModel?: string;
+  sonnetModel?: string;
+  haikuModel?: string;
+  extendedContextEnabled: boolean;
+  toggleExtendedContext: (enabled: boolean) => void;
+}
+

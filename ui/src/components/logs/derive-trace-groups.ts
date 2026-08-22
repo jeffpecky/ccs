@@ -159,3 +159,4 @@ export function deriveTraceGroups(entries: LogsEntry[]): DerivedItem[] {
     return bt.localeCompare(at);
   });
 }
+

@@ -20,3 +20,4 @@ export interface LogContentPanelProps {
   name: string | null;
   absolutePath?: string;
 }
+

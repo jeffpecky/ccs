@@ -17,7 +17,7 @@ import {
 import { supportsExtendedContext } from '@/lib/model-catalogs';
 import { isValidProvider } from '@/lib/provider-config';
 
-const REQUIRED_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN'] as const;
+const REQUIRED_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY'] as const;
 
 function checkMissingFields(settings: { env?: Record<string, string> }): string[] {
   const env = settings?.env || {};
@@ -251,3 +251,4 @@ export function useCLIProviderEditor(
     missingRequiredFields: missingFields,
   };
 }
+

@@ -90,3 +90,4 @@ export function InfoTab({ rawSettings }: InfoTabProps) {
     </TabsContent>
   );
 }
+

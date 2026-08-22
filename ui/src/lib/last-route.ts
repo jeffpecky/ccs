@@ -7,3 +7,4 @@ export function storeLastRoute(pathname: string, search = '', hash = ''): void {
     // Ignore storage failures (private mode, quota, etc.)
   }
 }
+

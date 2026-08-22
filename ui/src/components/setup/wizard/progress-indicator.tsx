@@ -19,3 +19,4 @@ export function ProgressIndicator({ currentProgress, allSteps }: ProgressIndicat
     </div>
   );
 }
+

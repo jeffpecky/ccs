@@ -360,3 +360,4 @@ export function ControlPanelEmbed({ port = CLIPROXY_DEFAULT_PORT }: ControlPanel
     </div>
   );
 }
+

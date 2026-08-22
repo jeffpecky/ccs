@@ -27,3 +27,4 @@ export const ACCOUNT_COLORS = [
   '#3a7371', // Deep Cyan
   '#7c5fc4', // Deep Purple
 ];
+

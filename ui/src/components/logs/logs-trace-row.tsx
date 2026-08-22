@@ -134,3 +134,4 @@ function LogsTraceRowImpl({
 }
 
 export const LogsTraceRow = memo(LogsTraceRowImpl);
+

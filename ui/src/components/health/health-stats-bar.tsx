@@ -85,3 +85,4 @@ export function HealthStatsBar({ total, passed, warnings, errors, info }: Health
     </div>
   );
 }
+

@@ -98,3 +98,4 @@ export function generateConnectionEvents(accounts: AccountData[]): ConnectionEve
   // Sort by timestamp descending (most recent first)
   return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 }
+

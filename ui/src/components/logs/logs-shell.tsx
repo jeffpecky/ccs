@@ -356,3 +356,4 @@ export function LogsShell({ workspace, updateConfig }: LogsShellProps) {
     </div>
   );
 }
+

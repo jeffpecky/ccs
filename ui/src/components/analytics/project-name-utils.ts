@@ -28,3 +28,4 @@ export function getProjectDisplayName(path: string): string {
   // Return the last segment (leaf folder name)
   return segments[segments.length - 1] || '';
 }
+

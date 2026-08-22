@@ -26,3 +26,4 @@ export function HeroSection({ version }: HeroSectionProps) {
     </div>
   );
 }
+

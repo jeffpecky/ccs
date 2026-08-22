@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Save, Loader2, RefreshCw, Globe, Network } from 'lucide-react';
 import { ProviderLogo } from '../provider-logo';
 import { CLIToolLogo } from '../cli-tool-logo';
-import type { SettingsResponse } from './types';
+import type { AnySettingsResponse } from './types';
 import { useTranslation } from 'react-i18next';
 
 interface CLIProviderEditorHeaderProps {
@@ -16,7 +16,7 @@ interface CLIProviderEditorHeaderProps {
   displayName: string;
   logoProvider?: string;
   toolId?: string;
-  data?: SettingsResponse;
+  data?: AnySettingsResponse;
   isLoading: boolean;
   hasChanges: boolean;
   isRawJsonValid: boolean;
@@ -119,3 +119,4 @@ export function CLIProviderEditorHeader({
     </div>
   );
 }
+

@@ -144,3 +144,4 @@ export function LogContentPanel({ name, absolutePath }: LogContentPanelProps) {
     </div>
   );
 }
+

@@ -23,3 +23,4 @@ export function UsageCommand({ label, command }: UsageCommandProps) {
     </div>
   );
 }
+

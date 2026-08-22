@@ -189,3 +189,4 @@ export const LogsRow = memo(LogsRowImpl, (prev, next) => {
     prev.repeatCount === next.repeatCount
   );
 });
+

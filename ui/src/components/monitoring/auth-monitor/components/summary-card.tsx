@@ -35,3 +35,4 @@ export function SummaryCard({ icon, label, value, color }: SummaryCardProps) {
     </div>
   );
 }
+

@@ -17,6 +17,8 @@ export function CLIRawEditorSection({
   onRawJsonChange,
   profileEnv,
   missingRequiredFields = [],
+  hideGlobalEnvIndicator = false,
+  toolName = 'Claude Code',
 }: RawEditorSectionProps) {
   const { t } = useTranslation();
   const hasMissingFields = missingRequiredFields.length > 0;
@@ -49,7 +51,7 @@ export function CLIRawEditorSection({
               </code>
               <p className="text-xs text-muted-foreground mt-1">
                 Apply a preset from Model Config tab or add these fields manually. Without them,
-                Claude Code will fail with 404 errors.
+                {toolName} will fail with errors.
               </p>
             </div>
           </div>
@@ -66,12 +68,15 @@ export function CLIRawEditorSection({
           </div>
         </div>
         {/* Global Env Indicator */}
-        <div className="mx-6 mb-4">
-          <div className="border rounded-md overflow-hidden">
-            <GlobalEnvIndicator profileEnv={profileEnv} />
+        {!hideGlobalEnvIndicator && (
+          <div className="mx-6 mb-4">
+            <div className="border rounded-md overflow-hidden">
+              <GlobalEnvIndicator profileEnv={profileEnv} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </Suspense>
   );
 }
+

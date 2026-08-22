@@ -49,3 +49,4 @@ export function StatusBadge({ code }: { code: number }) {
     </span>
   );
 }
+

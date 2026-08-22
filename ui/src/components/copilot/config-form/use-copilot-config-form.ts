@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import type { ModelPreset } from './types';
 
 /** Required env vars for Copilot settings (informational only - runtime fills defaults) */
-const REQUIRED_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN'] as const;
+const REQUIRED_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY'] as const;
 
 /** Check settings for missing fields (for UI warnings) */
 function checkMissingFields(settings: { env?: Record<string, string> } | undefined): string[] {
@@ -269,3 +269,4 @@ export function useCopilotConfigForm() {
     missingRequiredFields: missingFields,
   };
 }
+

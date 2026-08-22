@@ -91,3 +91,4 @@ export function HealthGauge({ passed, total, status, size = 'md' }: HealthGaugeP
     </div>
   );
 }
+

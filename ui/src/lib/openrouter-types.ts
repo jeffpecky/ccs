@@ -71,3 +71,4 @@ export interface CategorizedModel extends OpenRouterModel {
   isFree: boolean;
   isExacto: boolean; // Models with :exacto suffix - optimized for tool use
 }
+

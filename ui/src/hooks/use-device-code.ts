@@ -136,3 +136,4 @@ export function useDeviceCode() {
     [state.isOpen, state.prompt, state.error, handleClose, handleOpenUrl, handleCopyCode]
   );
 }
+

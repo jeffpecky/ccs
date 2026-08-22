@@ -53,3 +53,4 @@ export function LogsEmpty({ variant, onClearFilters }: LogsEmptyProps) {
     </div>
   );
 }
+

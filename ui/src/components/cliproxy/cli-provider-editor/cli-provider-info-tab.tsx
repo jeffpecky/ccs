@@ -8,7 +8,7 @@ import { CopyButton } from '@/components/ui/copy-button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Info, Shield } from 'lucide-react';
 import { UsageCommand } from './usage-command';
-import type { SettingsResponse } from './types';
+import type { AnySettingsResponse } from './types';
 import type { AuthStatus, CliTarget } from '@/lib/api-client';
 import { getProviderSection, isPlusExtraProvider } from '@/lib/provider-config';
 import { useTranslation } from 'react-i18next';
@@ -18,7 +18,7 @@ interface CLIProviderInfoTabProps {
   displayName: string;
   baseProvider?: string;
   defaultTarget?: CliTarget;
-  data?: SettingsResponse;
+  data?: AnySettingsResponse;
   authStatus: AuthStatus;
   supportsModelConfig?: boolean;
 }
@@ -167,3 +167,4 @@ export function CLIProviderInfoTab({
     </ScrollArea>
   );
 }
+

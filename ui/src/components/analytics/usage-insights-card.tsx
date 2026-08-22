@@ -178,3 +178,4 @@ export function UsageInsightsCard({
 function SkeletonIcon() {
   return <div className="w-4 h-4 bg-muted rounded-full animate-pulse" />;
 }
+

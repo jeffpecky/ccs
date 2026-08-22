@@ -3,7 +3,7 @@
  * Presets and model mapping configuration UI
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -122,9 +122,11 @@ export function CLIModelConfigSection({
   if (isSimpleModel) {
     return <SimpleModelConfigUI
       currentModel={currentModel}
+      subagentModel={sonnetModel}
       providerModels={providerModels}
       catalog={catalog}
       routing={routing}
+      toolId={toolId}
       onUpdateEnvValue={onUpdateEnvValue}
     />;
   }
@@ -309,47 +311,38 @@ export function CLIModelConfigSection({
 // Simple model list UI for OpenCode, Codex, etc. - Same layout as Claude Code but with 2 fields
 function SimpleModelConfigUI({
   currentModel,
+  subagentModel,
   providerModels,
   catalog,
   routing,
+  toolId,
   onUpdateEnvValue,
 }: {
   currentModel?: string;
+  subagentModel?: string;
   providerModels: Array<{ id: string; owned_by: string }>;
   catalog?: ModelConfigSectionProps['catalog'];
   routing?: ModelConfigSectionProps['routing'];
+  toolId?: string;
   onUpdateEnvValue: (key: string, value: string) => void;
 }) {
-  // Parse subagent model from comma-separated list (second item if exists)
-  const [subagentModel, setSubagentModel] = useState<string>(() => {
-    if (currentModel) {
-      const parts = currentModel.split(',').map((m) => m.trim()).filter(Boolean);
-      return parts[1] || '';
-    }
-    return '';
-  });
+  // Tool-specific env var names (matching backend routes)
+  const envVarNames: Record<string, { model: string; subagent: string }> = {
+    opencode: { model: 'OPENCODE_MODEL', subagent: 'OPENCODE_SUB_AGENT_MODEL' },
+    codex: { model: 'OPENAI_MODEL', subagent: 'OPENAI_SUB_AGENT_MODEL' },
+    'factory-droid': { model: 'OPENAI_MODEL', subagent: 'OPENAI_SUB_AGENT_MODEL' },
+    'grok-build': { model: 'OPENAI_MODEL', subagent: 'OPENAI_SUB_AGENT_MODEL' },
+  };
+
+  const vars = envVarNames[toolId || ''] || { model: 'OPENCODE_MODEL', subagent: 'OPENCODE_SUB_AGENT_MODEL' };
 
   const handleDefaultModelChange = (model: string) => {
-    // Keep subagent model if it exists
-    if (subagentModel) {
-      onUpdateEnvValue('ANTHROPIC_MODEL', `${model}, ${subagentModel}`);
-    } else {
-      onUpdateEnvValue('ANTHROPIC_MODEL', model);
-    }
+    onUpdateEnvValue(vars.model, model);
   };
 
   const handleSubagentModelChange = (model: string) => {
-    setSubagentModel(model);
-    // Get default model from current value
-    const defaultModel = currentModel?.split(',')[0]?.trim() || '';
-    if (model) {
-      onUpdateEnvValue('ANTHROPIC_MODEL', `${defaultModel}, ${model}`);
-    } else {
-      onUpdateEnvValue('ANTHROPIC_MODEL', defaultModel);
-    }
+    onUpdateEnvValue(vars.subagent, model);
   };
-
-  const defaultModel = currentModel?.split(',')[0]?.trim() || '';
 
   return (
     <div className="space-y-4">
@@ -362,7 +355,7 @@ function SimpleModelConfigUI({
           <FlexibleModelSelector
             label="Default Model"
             description="Used when no specific role is requested"
-            value={defaultModel}
+            value={currentModel}
             onChange={handleDefaultModelChange}
             catalog={catalog}
             allModels={providerModels}
@@ -384,3 +377,4 @@ function SimpleModelConfigUI({
     </div>
   );
 }
+

@@ -362,3 +362,4 @@ function estimateCost(tokens: number): number {
   const avgCostPerMillion = 3 * 0.3 + 15 * 0.7;
   return (tokens / 1000000) * avgCostPerMillion;
 }
+

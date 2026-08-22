@@ -490,3 +490,4 @@ export function CliproxyEditDialog({ variant, open, onOpenChange }: CliproxyEdit
     </Dialog>
   );
 }
+

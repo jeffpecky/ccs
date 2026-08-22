@@ -53,3 +53,4 @@ export function LogsShortcutsDialog({ open, onOpenChange }: LogsShortcutsDialogP
     </Dialog>
   );
 }
+

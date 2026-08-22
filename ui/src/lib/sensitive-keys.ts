@@ -10,7 +10,7 @@
  * More specific than substring matching to avoid false positives.
  */
 export const SENSITIVE_KEY_PATTERNS = [
-  /^ANTHROPIC_AUTH_TOKEN$/, // Exact match for Anthropic auth token
+  /^ANTHROPIC_API_KEY$/, // Exact match for Anthropic auth token
   /_API_KEY$/, // Keys ending with _API_KEY
   /_AUTH_TOKEN$/, // Keys ending with _AUTH_TOKEN
   /_SECRET$/, // Keys ending with _SECRET
@@ -33,3 +33,4 @@ export const SENSITIVE_KEY_PATTERNS = [
 export function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERNS.some((pattern) => pattern.test(key));
 }
+

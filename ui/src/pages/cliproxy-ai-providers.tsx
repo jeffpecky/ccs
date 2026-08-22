@@ -551,7 +551,7 @@ function buildSettingsPreview(
 ) {
   const env: Record<string, string> = {
     ANTHROPIC_BASE_URL: `${source.target}${family.routePath}`,
-    ANTHROPIC_AUTH_TOKEN: 'ccs-internal-managed',
+    ANTHROPIC_API_KEY: 'ccs-internal-managed',
   };
   const primaryModel = parseModelAliasLines(draft.modelAliasesText).find((item) =>
     item.name.trim()
@@ -1823,3 +1823,4 @@ export function CliproxyAiProvidersPage() {
     </div>
   );
 }
+

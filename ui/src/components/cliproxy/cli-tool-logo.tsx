@@ -55,3 +55,4 @@ export function CLIToolLogo({ toolId, className, size = 'md' }: CLIToolLogoProps
     </div>
   );
 }
+

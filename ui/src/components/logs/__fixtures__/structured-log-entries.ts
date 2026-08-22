@@ -165,3 +165,4 @@ for (let i = 0; i < 60; i += 1) {
 export const STRUCTURED_LOG_ENTRIES: LogsEntry[] = [...traces, ...standalones].sort((a, b) =>
   b.timestamp.localeCompare(a.timestamp)
 );
+

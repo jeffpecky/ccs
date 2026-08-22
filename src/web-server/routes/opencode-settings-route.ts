@@ -64,8 +64,8 @@ router.get('/', async (_req: Request, res: Response) => {
     }
 
     const provider = (config.provider as Record<string, unknown>) || {};
-    const ccsProvider = provider.ccs as Record<string, unknown> | undefined;
-    const options = (ccsProvider?.options as Record<string, string>) || {};
+    const openaiProvider = provider.openai as Record<string, unknown> | undefined;
+    const options = (openaiProvider?.options as Record<string, string>) || {};
 
     const activeModel = (config.model as string) || '';
     const configured = Boolean(options.baseURL);
@@ -75,15 +75,16 @@ router.get('/', async (_req: Request, res: Response) => {
     const explorer = agentConfig.explorer as Record<string, unknown> | undefined;
     const subagentModel = (explorer?.model as string) || '';
 
+    // Return simple format for frontend
     res.json({
       installed: true,
       configPath: expandHome(configPath),
       configured,
       config: {
-        model: activeModel.replace(/^ccs\//, ''),
         baseUrl: options.baseURL || '',
         apiKey: options.apiKey || '',
-        subagentModel: subagentModel.replace(/^ccs\//, ''),
+        model: activeModel,
+        subagentModel,
       },
     });
   } catch (error) {
@@ -98,15 +99,13 @@ router.get('/', async (_req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    // Accept either individual fields or raw env object
     let { model, baseUrl, apiKey, subagentModel, env: rawEnv } = req.body;
 
-    // If raw env object provided, extract values from it
     if (rawEnv && typeof rawEnv === 'object') {
-      baseUrl = rawEnv.ANTHROPIC_BASE_URL || rawEnv.OPENCODE_BASE_URL || '';
-      apiKey = rawEnv.ANTHROPIC_AUTH_TOKEN || rawEnv.OPENCODE_API_KEY || '';
-      model = rawEnv.ANTHROPIC_MODEL || rawEnv.OPENCODE_MODEL || '';
-      subagentModel = rawEnv.ANTHROPIC_DEFAULT_SONNET_MODEL || rawEnv.OPENCODE_SUB_AGENT_MODEL || '';
+      baseUrl = rawEnv.OPENCODE_BASE_URL || '';
+      apiKey = rawEnv.OPENCODE_API_KEY || '';
+      model = rawEnv.OPENCODE_MODEL || '';
+      subagentModel = rawEnv.OPENCODE_SUB_AGENT_MODEL || '';
     }
 
     if (!model) {
@@ -117,33 +116,23 @@ router.post('/', async (req: Request, res: Response) => {
     const configPath = expandHome('~/.config/opencode/opencode.json');
     const existing = readJsonFile(configPath) || {};
 
-    const providerName = 'ccs';
     const effectiveBaseUrl = baseUrl || 'http://127.0.0.1:8317/v1';
 
-    // Build provider config
+    // Build native OpenCode config format
     if (!existing.provider || typeof existing.provider !== 'object') {
       existing.provider = {};
     }
     const providers = existing.provider as Record<string, unknown>;
 
-    providers[providerName] = {
-      npm: '@ai-sdk/openai-compatible',
+    providers.openai = {
       options: {
         baseURL: effectiveBaseUrl,
-        apiKey: apiKey || 'no-key',
-      },
-      models: {
-        [model]: {
-          name: model,
-          attachmentModel: 'google/gemini-3.1-flash-lite-preview',
-          reasoning: false,
-          temperature: 0.7,
-        },
+        apiKey: apiKey || 'sk-dummy',
       },
     };
 
     // Set active model
-    existing.model = `${providerName}/${model}`;
+    existing.model = model;
 
     // Set sub-agent config
     if (subagentModel) {
@@ -154,16 +143,17 @@ router.post('/', async (req: Request, res: Response) => {
       agent.explorer = {
         description: 'Fast explorer subagent for codebase navigation',
         mode: 'subagent',
-        model: `${providerName}/${subagentModel}`,
+        model: subagentModel,
       };
     }
 
     writeJsonFile(configPath, existing);
 
+    // Return simple format for frontend
     res.json({
       success: true,
       configPath,
-      config: { model, baseUrl: effectiveBaseUrl, subagentModel: subagentModel || '' },
+      config: { baseUrl: effectiveBaseUrl, apiKey: apiKey || 'sk-dummy', model, subagentModel: subagentModel || '' },
     });
   } catch (error) {
     console.error('[opencode-settings] POST error:', (error as Error).message);
@@ -185,20 +175,13 @@ router.delete('/', async (_req: Request, res: Response) => {
       return;
     }
 
-    // Remove CCS provider
+    // Remove openai provider
     const providers = (existing.provider as Record<string, unknown>) || {};
-    delete providers.ccs;
+    delete providers.openai;
 
-    // Reset model if it was pointing to CCS
-    if (typeof existing.model === 'string' && existing.model.startsWith('ccs/')) {
+    // Reset model if it was set
+    if (typeof existing.model === 'string') {
       delete existing.model;
-    }
-
-    // Remove CCS sub-agent config
-    const agent = (existing.agent as Record<string, unknown>) || {};
-    const explorer = agent.explorer as Record<string, unknown> | undefined;
-    if (explorer && typeof explorer.model === 'string' && explorer.model.startsWith('ccs/')) {
-      delete agent.explorer;
     }
 
     writeJsonFile(configPath, existing);

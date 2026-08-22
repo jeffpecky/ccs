@@ -81,7 +81,7 @@ export async function applyDefaultPreset(
   const settings = {
     env: {
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${effectivePort}/api/provider/${provider}`,
-      ANTHROPIC_AUTH_TOKEN: effectiveApiKey,
+      ANTHROPIC_API_KEY: effectiveApiKey,
       ANTHROPIC_MODEL: mapping.default,
       ANTHROPIC_DEFAULT_OPUS_MODEL: mapping.opus,
       ANTHROPIC_DEFAULT_SONNET_MODEL: mapping.sonnet,
@@ -103,3 +103,4 @@ export async function applyDefaultPreset(
     return { success: false };
   }
 }
+

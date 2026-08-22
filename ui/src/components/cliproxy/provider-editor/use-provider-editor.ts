@@ -18,7 +18,7 @@ import { supportsExtendedContext } from '@/lib/model-catalogs';
 import { isValidProvider } from '@/lib/provider-config';
 
 /** Required env vars for CLIProxy providers (informational only - runtime fills defaults) */
-const REQUIRED_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN'] as const;
+const REQUIRED_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY'] as const;
 
 /** Check settings for missing fields (for UI warnings) */
 function checkMissingFields(settings: { env?: Record<string, string> }): string[] {
@@ -240,3 +240,4 @@ export function useProviderEditor(
     missingRequiredFields: missingFields,
   };
 }
+

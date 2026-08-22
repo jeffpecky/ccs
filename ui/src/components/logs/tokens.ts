@@ -65,3 +65,4 @@ export const ROW_INTERACTIVE =
 /** Calm focus ring used across logs interactive elements. */
 export const FOCUS_RING =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+
