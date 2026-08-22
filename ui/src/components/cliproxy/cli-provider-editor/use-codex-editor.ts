@@ -11,6 +11,8 @@ import i18n from '@/lib/i18n';
 import type { SettingsResponse, CodexEditorReturn } from './types';
 import type { ProviderCatalog } from '../provider-model-selector';
 import { isValidProvider } from '@/lib/provider-config';
+import { CLIPROXY_DEFAULT_PORT } from '@/lib/preset-utils';
+import { useAuthApiKey, getEffectiveApiKey } from '@/hooks/use-auth-api-key';
 
 // Codex-specific required fields
 const REQUIRED_ENV_KEYS = ['CODEX_BASE_URL', 'CODEX_API_KEY'] as const;
@@ -27,11 +29,17 @@ const NATIVE_CONFIG_TOOLS: Record<string, string> = {
 export function useCodexEditor(
   provider: string,
   _catalog?: ProviderCatalog,
-  toolId?: string
+  toolId?: string,
+  port?: number
 ): CodexEditorReturn {
   const [rawJsonEdits, setRawJsonEdits] = useState<string | null>(null);
   const [conflictDialog, setConflictDialog] = useState(false);
   const queryClient = useQueryClient();
+
+  // Fetch effective API key from Auth tab (shared hook)
+  const { data: authTokens } = useAuthApiKey();
+  const effectiveApiKey = getEffectiveApiKey(authTokens);
+  const effectivePort = port ?? CLIPROXY_DEFAULT_PORT;
 
   const { data, isLoading, refetch } = useQuery<SettingsResponse>({
     queryKey: ['settings', provider],
@@ -113,6 +121,16 @@ export function useCodexEditor(
     mutationFn: async () => {
       const settingsToSave = JSON.parse(rawJsonContent);
 
+      // Auto-fill CODEX_BASE_URL and CODEX_API_KEY from Auth tab if missing
+      const env = settingsToSave.env || {};
+      if (!env.CODEX_BASE_URL?.trim()) {
+        env.CODEX_BASE_URL = `http://127.0.0.1:${effectivePort}/v1`;
+      }
+      if (!env.CODEX_API_KEY?.trim()) {
+        env.CODEX_API_KEY = effectiveApiKey;
+      }
+      settingsToSave.env = env;
+
       const res = await fetch(`/api/settings/${provider}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -127,9 +145,8 @@ export function useCodexEditor(
 
       const nativeEndpoint = toolId ? NATIVE_CONFIG_TOOLS[toolId] : undefined;
       if (nativeEndpoint) {
-        const env = settingsToSave.env || {};
         const nativeRes = await fetch(nativeEndpoint, {
-          method: 'PUT',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ env }),
         });

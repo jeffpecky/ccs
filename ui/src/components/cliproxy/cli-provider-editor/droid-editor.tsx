@@ -103,7 +103,7 @@ export function DroidEditor({
     conflictDialog,
     handleConflictResolve,
     missingRequiredFields,
-  } = useDroidEditor(provider, catalog, toolId);
+  } = useDroidEditor(provider, catalog, toolId, port);
 
   const { data: modelsData } = useCliproxyModels();
   const providerModels = useMemo(() => {

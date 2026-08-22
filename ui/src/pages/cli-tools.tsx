@@ -85,16 +85,24 @@ export function CliToolsPage() {
   const installedCount = tools.filter((t) => t.status === 'installed').length;
 
   const getProviderForTool = (toolId: string) => {
-    const providerMap: Record<string, string> = { 'claude-code': 'claude', opencode: 'openai', codex: 'openai', 'open-claw': 'openai', 'claude-cowork': 'claude', 'hermes-agent': 'openai', 'factory-droid': 'openai', cursor: 'openai', cline: 'openai', 'kilo-code': 'openai', roo: 'openai', continue: 'openai', 'amp-cli': 'openai', 'qwen-code': 'openai', 'deepseek-tui': 'openai', jcode: 'openai', 'grok-build': 'openai', 'devin-cli': 'openai' };
-    return providerMap[toolId] || 'openai';
+    const providerMap: Record<string, string> = { 'claude-code': 'claude', opencode: 'opencode', codex: 'codex', 'open-claw': 'open-claw', 'claude-cowork': 'claude', 'hermes-agent': 'hermes-agent', 'factory-droid': 'factory-droid', cursor: 'cursor', cline: 'cline', 'kilo-code': 'kilo-code', roo: 'roo', continue: 'continue', 'amp-cli': 'amp-cli', 'qwen-code': 'qwen-code', 'deepseek-tui': 'deepseek-tui', jcode: 'jcode', 'grok-build': 'grok-build', 'devin-cli': 'devin-cli' };
+    return providerMap[toolId] || toolId;
   };
 
-  const getEditorProps = (tool: CLITool) => ({
-    provider: getProviderForTool(tool.id), toolId: tool.id, displayName: tool.name,
-    authStatus: providers.find((p) => p.provider === getProviderForTool(tool.id)) || { provider: getProviderForTool(tool.id), displayName: tool.name, authenticated: tool.status === 'installed', lastAuth: null, tokenFiles: 0, accounts: [] },
-    catalog: catalogs[getProviderForTool(tool.id)] || { provider: getProviderForTool(tool.id), displayName: tool.name, defaultModel: '', models: [] },
-    routing: routingHints[getProviderForTool(tool.id)], isRemoteMode,
-  });
+  const getEditorProps = (tool: CLITool) => {
+    const toolProvider = getProviderForTool(tool.id);
+    const rawCatalog = catalogs[toolProvider];
+    // CLI tool editors use a non-codex provider name to suppress codex effort/tier badges
+    const catalog = rawCatalog
+      ? { ...rawCatalog, provider: `cli-${toolProvider}`, models: (rawCatalog.models ?? []).map((m) => ({ ...m, codexMaxEffort: undefined, codexServiceTiers: undefined })) }
+      : { provider: `cli-${toolProvider}`, displayName: tool.name, defaultModel: '', models: [] };
+    return {
+      provider: toolProvider, toolId: tool.id, displayName: tool.name,
+      authStatus: providers.find((p) => p.provider === toolProvider) || { provider: toolProvider, displayName: tool.name, authenticated: tool.status === 'installed', lastAuth: null, tokenFiles: 0, accounts: [] },
+      catalog,
+      routing: routingHints[toolProvider], isRemoteMode,
+    };
+  };
 
   const renderEditor = (tool: CLITool) => {
     const props = getEditorProps(tool);

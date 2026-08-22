@@ -5,7 +5,6 @@
 
 /* eslint-disable react-refresh/only-export-components */
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2, Code2 } from 'lucide-react';
@@ -21,6 +20,7 @@ import { isDeniedAgyModelId } from '@/lib/utils';
 import i18n from '@/lib/i18n';
 import { useTranslation } from 'react-i18next';
 import { useCLIProviderEditor } from './use-cli-provider-editor';
+import { useAuthApiKey, getEffectiveApiKey } from '@/hooks/use-auth-api-key';
 import { CLICustomPresetDialog } from './cli-custom-preset-dialog';
 import { CLIRawEditorSection } from './cli-raw-editor-section';
 import { CLIProviderInfoTab } from './cli-provider-info-tab';
@@ -99,19 +99,11 @@ export function CLIProviderEditor({
     conflictDialog,
     handleConflictResolve,
     missingRequiredFields,
-  } = useCLIProviderEditor(provider, catalog, toolId);
+  } = useCLIProviderEditor(provider, catalog, toolId, port);
 
-  // Fetch effective API key for presets (uses configured value, not hardcoded)
-  const { data: authTokens } = useQuery<{ apiKey: { value: string } }>({
-    queryKey: ['auth-tokens-raw'],
-    queryFn: async () => {
-      const response = await fetch('/api/settings/auth/tokens/raw');
-      if (!response.ok) return { apiKey: { value: 'ccs-internal-managed' } };
-      return response.json();
-    },
-    staleTime: 60000, // Cache for 1 minute
-  });
-  const effectiveApiKey = authTokens?.apiKey?.value ?? 'ccs-internal-managed';
+  // Fetch effective API key for presets (shared hook)
+  const { data: authTokens } = useAuthApiKey();
+  const effectiveApiKey = getEffectiveApiKey(authTokens);
 
   const handleApplyPreset = (updates: Record<string, string>) => {
     if (
@@ -130,7 +122,7 @@ export function CLIProviderEditor({
     const effectivePort = port ?? CLIPROXY_DEFAULT_PORT;
     updateEnvValues({
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${effectivePort}/api/provider/${providerRoute}`,
-      ANTHROPIC_API_KEY: effectiveApiKey,
+      ANTHROPIC_AUTH_TOKEN: effectiveApiKey,
       ...updates,
     });
     toast.success(`Applied "${updates.ANTHROPIC_MODEL?.split('/').pop() || 'preset'}" preset`);
@@ -150,7 +142,7 @@ export function CLIProviderEditor({
     const effectivePort = port ?? CLIPROXY_DEFAULT_PORT;
     updateEnvValues({
       ANTHROPIC_BASE_URL: `http://127.0.0.1:${effectivePort}/api/provider/${providerRoute}`,
-      ANTHROPIC_API_KEY: effectiveApiKey,
+      ANTHROPIC_AUTH_TOKEN: effectiveApiKey,
       ANTHROPIC_MODEL: values.default,
       ANTHROPIC_DEFAULT_OPUS_MODEL: values.opus,
       ANTHROPIC_DEFAULT_SONNET_MODEL: values.sonnet,

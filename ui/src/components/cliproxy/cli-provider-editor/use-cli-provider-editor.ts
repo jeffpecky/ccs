@@ -16,8 +16,11 @@ import {
 } from '@/lib/extended-context-utils';
 import { supportsExtendedContext } from '@/lib/model-catalogs';
 import { isValidProvider } from '@/lib/provider-config';
+import { CLIPROXY_DEFAULT_PORT } from '@/lib/preset-utils';
+import { useAuthApiKey, getEffectiveApiKey } from '@/hooks/use-auth-api-key';
 
-const REQUIRED_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY'] as const;
+// Claude Code uses ANTHROPIC_AUTH_TOKEN in settings.json (not ANTHROPIC_API_KEY)
+const REQUIRED_ENV_KEYS = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN'] as const;
 
 function checkMissingFields(settings: { env?: Record<string, string> }): string[] {
   const env = settings?.env || {};
@@ -33,11 +36,17 @@ const NATIVE_CONFIG_TOOLS: Record<string, string> = {
 export function useCLIProviderEditor(
   provider: string,
   catalog?: ProviderCatalog,
-  toolId?: string
+  toolId?: string,
+  port?: number
 ): UseCLIProviderEditorReturn {
   const [rawJsonEdits, setRawJsonEdits] = useState<string | null>(null);
   const [conflictDialog, setConflictDialog] = useState(false);
   const queryClient = useQueryClient();
+
+  // Fetch effective API key from Auth tab (shared hook)
+  const { data: authTokens } = useAuthApiKey();
+  const effectiveApiKey = getEffectiveApiKey(authTokens);
+  const effectivePort = port ?? CLIPROXY_DEFAULT_PORT;
 
   const { data, isLoading, refetch } = useQuery<SettingsResponse>({
     queryKey: ['settings', provider],
@@ -159,6 +168,16 @@ export function useCLIProviderEditor(
     mutationFn: async () => {
       const settingsToSave = JSON.parse(rawJsonContent);
 
+      // Auto-fill ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN from Auth tab if missing
+      const env = settingsToSave.env || {};
+      if (!env.ANTHROPIC_BASE_URL?.trim()) {
+        env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${effectivePort}/v1`;
+      }
+      if (!env.ANTHROPIC_AUTH_TOKEN?.trim()) {
+        env.ANTHROPIC_AUTH_TOKEN = effectiveApiKey;
+      }
+      settingsToSave.env = env;
+
       const res = await fetch(`/api/settings/${provider}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -174,9 +193,8 @@ export function useCLIProviderEditor(
       // Also write to CLI tool's native config file
       const nativeEndpoint = toolId ? NATIVE_CONFIG_TOOLS[toolId] : undefined;
       if (nativeEndpoint) {
-        const env = settingsToSave.env || {};
         const nativeRes = await fetch(nativeEndpoint, {
-          method: 'PUT',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ env }),
         });

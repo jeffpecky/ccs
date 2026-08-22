@@ -103,7 +103,7 @@ export function OpenCodeEditor({
     conflictDialog,
     handleConflictResolve,
     missingRequiredFields,
-  } = useOpenCodeEditor(provider, catalog, toolId);
+  } = useOpenCodeEditor(provider, catalog, toolId, port);
 
   const { data: modelsData } = useCliproxyModels();
   const providerModels = useMemo(() => {

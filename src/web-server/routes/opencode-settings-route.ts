@@ -64,8 +64,8 @@ router.get('/', async (_req: Request, res: Response) => {
     }
 
     const provider = (config.provider as Record<string, unknown>) || {};
-    const openaiProvider = provider.openai as Record<string, unknown> | undefined;
-    const options = (openaiProvider?.options as Record<string, string>) || {};
+    const ccsProvider = provider.ccs as Record<string, unknown> | undefined;
+    const options = (ccsProvider?.options as Record<string, string>) || {};
 
     const activeModel = (config.model as string) || '';
     const configured = Boolean(options.baseURL);
@@ -99,13 +99,23 @@ router.get('/', async (_req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    let { model, baseUrl, apiKey, subagentModel, env: rawEnv } = req.body;
+    const { env: rawEnv } = req.body;
+    let { model, baseUrl, apiKey, subagentModel } = req.body;
 
+    // Handle env object format (from some integrations)
     if (rawEnv && typeof rawEnv === 'object') {
       baseUrl = rawEnv.OPENCODE_BASE_URL || '';
       apiKey = rawEnv.OPENCODE_API_KEY || '';
       model = rawEnv.OPENCODE_MODEL || '';
       subagentModel = rawEnv.OPENCODE_SUB_AGENT_MODEL || '';
+    }
+
+    // Handle model object format (from frontend: { model: { OPENCODE_BASE_URL, OPENCODE_API_KEY, ... } })
+    if (model && typeof model === 'object') {
+      baseUrl = baseUrl || model.OPENCODE_BASE_URL || '';
+      apiKey = apiKey || model.OPENCODE_API_KEY || '';
+      subagentModel = subagentModel || model.OPENCODE_SUB_AGENT_MODEL || '';
+      model = model.OPENCODE_MODEL || '';
     }
 
     if (!model) {
@@ -120,11 +130,11 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Build native OpenCode config format
     if (!existing.provider || typeof existing.provider !== 'object') {
-      existing.provider = {};
+      existing.provider = {}
     }
     const providers = existing.provider as Record<string, unknown>;
 
-    providers.openai = {
+    providers.ccs = {
       options: {
         baseURL: effectiveBaseUrl,
         apiKey: apiKey || 'sk-dummy',
@@ -175,9 +185,9 @@ router.delete('/', async (_req: Request, res: Response) => {
       return;
     }
 
-    // Remove openai provider
+    // Remove ccs provider
     const providers = (existing.provider as Record<string, unknown>) || {};
-    delete providers.openai;
+    delete providers.ccs;
 
     // Reset model if it was set
     if (typeof existing.model === 'string') {

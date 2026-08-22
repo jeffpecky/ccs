@@ -103,7 +103,7 @@ export function GrokBuildEditor({
     conflictDialog,
     handleConflictResolve,
     missingRequiredFields,
-  } = useGrokBuildEditor(provider, catalog, toolId);
+  } = useGrokBuildEditor(provider, catalog, toolId, port);
 
   const { data: modelsData } = useCliproxyModels();
   const providerModels = useMemo(() => {

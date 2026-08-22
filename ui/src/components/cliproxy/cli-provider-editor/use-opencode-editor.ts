@@ -11,6 +11,8 @@ import i18n from '@/lib/i18n';
 import type { OpenCodeSettingsResponse, OpenCodeEditorReturn } from './types';
 import type { ProviderCatalog } from '../provider-model-selector';
 import { isValidProvider } from '@/lib/provider-config';
+import { CLIPROXY_DEFAULT_PORT } from '@/lib/preset-utils';
+import { useAuthApiKey, getEffectiveApiKey } from '@/hooks/use-auth-api-key';
 
 // OpenCode-specific required fields
 const REQUIRED_ENV_KEYS = ['OPENCODE_BASE_URL', 'OPENCODE_API_KEY'] as const;
@@ -27,11 +29,17 @@ const NATIVE_CONFIG_TOOLS: Record<string, string> = {
 export function useOpenCodeEditor(
   provider: string,
   _catalog?: ProviderCatalog,
-  toolId?: string
+  toolId?: string,
+  port?: number
 ): OpenCodeEditorReturn {
   const [rawJsonEdits, setRawJsonEdits] = useState<string | null>(null);
   const [conflictDialog, setConflictDialog] = useState(false);
   const queryClient = useQueryClient();
+
+  // Fetch effective API key from Auth tab (shared hook)
+  const { data: authTokens } = useAuthApiKey();
+  const effectiveApiKey = getEffectiveApiKey(authTokens);
+  const effectivePort = port ?? CLIPROXY_DEFAULT_PORT;
 
   const { data, isLoading, refetch } = useQuery<OpenCodeSettingsResponse>({
     queryKey: ['settings', provider],
@@ -114,6 +122,16 @@ export function useOpenCodeEditor(
     mutationFn: async () => {
       const settingsToSave = JSON.parse(rawJsonContent);
 
+      // Auto-fill OPENCODE_BASE_URL and OPENCODE_API_KEY from Auth tab if missing
+      const model = settingsToSave.model || {};
+      if (!model.OPENCODE_BASE_URL?.trim()) {
+        model.OPENCODE_BASE_URL = `http://127.0.0.1:${effectivePort}/v1`;
+      }
+      if (!model.OPENCODE_API_KEY?.trim()) {
+        model.OPENCODE_API_KEY = effectiveApiKey;
+      }
+      settingsToSave.model = model;
+
       const res = await fetch(`/api/settings/${provider}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -128,7 +146,6 @@ export function useOpenCodeEditor(
 
       const nativeEndpoint = toolId ? NATIVE_CONFIG_TOOLS[toolId] : undefined;
       if (nativeEndpoint) {
-        const model = settingsToSave.model || {};
         const nativeRes = await fetch(nativeEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

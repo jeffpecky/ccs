@@ -103,7 +103,7 @@ export function CodexEditor({
     conflictDialog,
     handleConflictResolve,
     missingRequiredFields,
-  } = useCodexEditor(provider, catalog, toolId);
+  } = useCodexEditor(provider, catalog, toolId, port);
 
   const { data: modelsData } = useCliproxyModels();
   const providerModels = useMemo(() => {
