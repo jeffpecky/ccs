@@ -196,6 +196,7 @@ export const MODEL_CATALOG: Partial<Record<CLIProxyProvider, ProviderCatalog>> =
         tier: 'pro',
         description:
           'Newest Codex-released GPT-5 family model; falls back to GPT-5.4 on free plans',
+        nativeImageInput: true,
         thinking: {
           type: 'levels',
           levels: ['low', 'medium', 'high', 'xhigh'],

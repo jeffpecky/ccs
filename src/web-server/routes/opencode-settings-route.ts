@@ -9,8 +9,37 @@ import { Router, Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { MODEL_CATALOG } from '../../cliproxy/model-catalog';
 
 const router = Router();
+
+/**
+ * Look up a model across all provider catalogs to find its capabilities.
+ */
+function findModelCapabilities(modelId: string): { nativeImageInput?: boolean } | null {
+  for (const catalog of Object.values(MODEL_CATALOG)) {
+    const model = catalog.models.find((m) => m.id === modelId);
+    if (model) {
+      return { nativeImageInput: model.nativeImageInput };
+    }
+  }
+  return null;
+}
+
+/**
+ * Build OpenCode model definition with correct modalities.
+ */
+function buildOpenCodeModel(modelId: string): Record<string, unknown> {
+  const caps = findModelCapabilities(modelId);
+  const base: Record<string, unknown> = { name: modelId };
+  if (caps?.nativeImageInput) {
+    base.modalities = {
+      input: ['text', 'image'],
+      output: ['text'],
+    };
+  }
+  return base;
+}
 
 // ==================== Helpers ====================
 
@@ -83,8 +112,8 @@ router.get('/', async (_req: Request, res: Response) => {
       config: {
         baseUrl: options.baseURL || '',
         apiKey: options.apiKey || '',
-        model: activeModel,
-        subagentModel,
+        model: activeModel.replace(/^ccs\//, ''),
+        subagentModel: subagentModel.replace(/^ccs\//, ''),
       },
     });
   } catch (error) {
@@ -135,16 +164,22 @@ router.post('/', async (req: Request, res: Response) => {
     const providers = existing.provider as Record<string, unknown>;
 
     providers.ccs = {
+      npm: '@ai-sdk/openai-compatible',
+      name: 'CCS',
       options: {
         baseURL: effectiveBaseUrl,
         apiKey: apiKey || 'sk-dummy',
       },
+      models: {
+        [model]: buildOpenCodeModel(model),
+        ...(subagentModel && subagentModel !== model ? { [subagentModel]: buildOpenCodeModel(subagentModel) } : {}),
+      },
     };
 
-    // Set active model
-    existing.model = model;
+    // Set active model (prefixed with provider name)
+    existing.model = `ccs/${model}`;
 
-    // Set sub-agent config
+    // Set sub-agent config (prefixed with provider name)
     if (subagentModel) {
       if (!existing.agent || typeof existing.agent !== 'object') {
         existing.agent = {};
@@ -153,7 +188,7 @@ router.post('/', async (req: Request, res: Response) => {
       agent.explorer = {
         description: 'Fast explorer subagent for codebase navigation',
         mode: 'subagent',
-        model: subagentModel,
+        model: `ccs/${subagentModel}`,
       };
     }
 
