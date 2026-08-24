@@ -1528,6 +1528,39 @@ do {
   check(path.hasPrefix(home), "descriptor: defaultPath starts with home dir")
 }
 
+// (L3b) Descriptor command validation accepts optional --port and rejects other tails.
+do {
+  let base = BarLaunchDescriptor(
+    runtime: "/usr/bin/node",
+    args: ["/Users/kai/ccs.js", "bar", "serve"],
+    home: "/Users/kai",
+    ccsHome: nil)
+  let port = BarLaunchDescriptor(
+    runtime: "/usr/bin/node",
+    args: ["/Users/kai/ccs.js", "bar", "serve", "--port", "3999"],
+    home: "/Users/kai",
+    ccsHome: nil)
+  let bad = BarLaunchDescriptor(
+    runtime: "/usr/bin/node",
+    args: ["/Users/kai/ccs.js", "bar", "serve", "--evil"],
+    home: "/Users/kai",
+    ccsHome: nil)
+  let badPorts = ["0", "65536", "3999junk"].map { value in
+    BarLaunchDescriptor(
+      runtime: "/usr/bin/node",
+      args: ["/Users/kai/ccs.js", "bar", "serve", "--port", value],
+      home: "/Users/kai",
+      ccsHome: nil)
+  }
+
+  check(base.hasSafeServerArguments, "descriptor: base bar serve args accepted")
+  check(port.hasSafeServerArguments, "descriptor: --port bar serve args accepted")
+  check(!bad.hasSafeServerArguments, "descriptor: unknown trailing args rejected")
+  check(
+    badPorts.allSatisfy { !$0.hasSafeServerArguments },
+    "descriptor: invalid --port values rejected")
+}
+
 // (L4) Malformed JSON is non-decodable (no crash, just nil from try?).
 do {
   let bad = Data("{\"schema\": \"not-an-int\"}".utf8)
@@ -1668,6 +1701,9 @@ do {
 //   affordance, so ordering must be numeric (1.10.0 > 1.9.0), tolerate
 //   pre-release suffixes, and reject malformed input.
 do {
+  check(
+    BarUpdateChecker.releaseRepository == "jeffpecky/ccs",
+    "update checker: release repository matches fork")
   check(BarUpdateChecker.isNewer("1.8.0", than: "1.7.0"), "isNewer: newer minor (1.8.0 > 1.7.0)")
   check(BarUpdateChecker.isNewer("1.7.1", than: "1.7.0"), "isNewer: newer patch (1.7.1 > 1.7.0)")
   check(BarUpdateChecker.isNewer("2.0.0", than: "1.9.9"), "isNewer: newer major (2.0.0 > 1.9.9)")

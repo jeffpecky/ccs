@@ -71,11 +71,10 @@ struct BarServerLauncher: Sendable {
 
   /// Validate the descriptor schema and constrain it to the expected CCS bar
   /// server command shape: runtime absolute path + absolute entry point +
-  /// exactly "bar serve". This blocks shell descriptors such as
+  /// "bar serve" with an optional validated port. This blocks shell descriptors such as
   /// /bin/sh -c attacker-command while preserving the installed launch path.
   private func isSafeDescriptor(_ descriptor: BarLaunchDescriptor) -> Bool {
-    guard descriptor.schema == 1, descriptor.args.count == 3 else { return false }
-    guard descriptor.args[1] == "bar", descriptor.args[2] == "serve" else { return false }
+    guard descriptor.schema == 1, descriptor.hasSafeServerArguments else { return false }
     guard isAbsolutePath(descriptor.runtime), isAbsolutePath(descriptor.args[0]) else { return false }
     guard descriptor.home == home else { return false }
     if let ccsHome = descriptor.ccsHome, !ccsHome.isEmpty, !isAbsolutePath(ccsHome) {

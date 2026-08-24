@@ -63,9 +63,9 @@ jobs:
         run: |
           # gh lives in Homebrew on the self-hosted runner; ensure it is on PATH.
           export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-          gh release upload ccs-bar-latest macos-bar/dist/CCS-Bar.app.zip --clobber
+          gh release upload ccs-bar-latest macos-bar/dist/CCS-Bar.app.zip --repo jeffpecky/ccs --clobber
           printf '%s\n' "${VERSION}" > version.txt
-          gh release upload ccs-bar-latest version.txt --clobber
+          gh release upload ccs-bar-latest version.txt --repo jeffpecky/ccs --clobber
           echo "[OK] Published version.txt (${VERSION}) to ccs-bar-latest"
           rm -f version.txt
           notes="$(mktemp)"
@@ -77,6 +77,6 @@ jobs:
 
           Built automatically from main when macos-bar changes.
           NOTES
-          gh release edit ccs-bar-latest --target "$GITHUB_SHA" --title "CCS Bar v${VERSION}" --notes-file "$notes"
+          gh release edit ccs-bar-latest --repo jeffpecky/ccs --target "$GITHUB_SHA" --title "CCS Bar v${VERSION}" --notes-file "$notes"
           rm -f "$notes"
           echo "[OK] Published CCS Bar v${VERSION} to ccs-bar-latest"

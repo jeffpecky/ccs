@@ -495,6 +495,9 @@ export async function handleBarLaunch(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Failed to write bar.json: ${msg}`);
+    spawnedChild?.kill();
+    await rollbackPriorServer();
+    process.exitCode = 1;
     return;
   }
 

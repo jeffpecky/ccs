@@ -32,7 +32,11 @@ import { createBarLaunchDescriptor } from './launch-descriptor';
 const BAR_RELEASE_TAG = 'ccs-bar-latest';
 const BAR_APP_NAME = 'CCS Bar.app';
 const BAR_ASSET_NAME = 'CCS-Bar.app.zip';
-const BAR_GITHUB_REPO = 'kaitranntt/ccs';
+const BAR_GITHUB_REPO = 'jeffpecky/ccs';
+
+export function getBarReleaseApiUrl(tag: string): string {
+  return `https://api.github.com/repos/${BAR_GITHUB_REPO}/releases/tags/${tag}`;
+}
 
 /**
  * Allowlist of hostnames from which we will accept asset downloads.
@@ -112,6 +116,8 @@ export interface InstallDeps {
    * Throws on failure; caller catches and aborts install.
    */
   removeExistingApp: (appPath: string) => void;
+  copyPath: (from: string, to: string) => void;
+  renamePath: (from: string, to: string) => void;
   /**
    * Write launch.json so the Swift app can spawn the server without a shell PATH.
    * Called after successful install so the descriptor is always fresh.
@@ -161,7 +167,7 @@ export function validateDownloadUrl(url: string): void {
 
 async function defaultFetchReleaseAsset(tag: string, asset: string): Promise<ReleaseAssetResult> {
   const { request } = await import('undici');
-  const apiUrl = `https://api.github.com/repos/${BAR_GITHUB_REPO}/releases/tags/${tag}`;
+  const apiUrl = getBarReleaseApiUrl(tag);
   const { statusCode, body } = await request(apiUrl, {
     headers: {
       'User-Agent': 'ccs-cli',
@@ -414,6 +420,14 @@ function defaultRemoveExistingApp(appPath: string): void {
   fs.rmSync(appPath, { recursive: true, force: true });
 }
 
+function defaultCopyPath(from: string, to: string): void {
+  fs.cpSync(from, to, { recursive: true });
+}
+
+function defaultRenamePath(from: string, to: string): void {
+  fs.renameSync(from, to);
+}
+
 function defaultWriteLaunchDescriptor(jsonPath: string, descriptor: LaunchJson): void {
   fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
   fs.writeFileSync(jsonPath, JSON.stringify(descriptor, null, 2));
@@ -504,6 +518,8 @@ export async function handleBarInstall(
   const promptLaunch = deps.promptLaunch ?? defaultPromptLaunch;
   const isBarRunning = deps.isBarRunning ?? defaultIsBarRunning;
   const removeExistingApp = deps.removeExistingApp ?? defaultRemoveExistingApp;
+  const copyPath = deps.copyPath ?? defaultCopyPath;
+  const renamePath = deps.renamePath ?? defaultRenamePath;
   const writeLaunchDescriptor = deps.writeLaunchDescriptor ?? defaultWriteLaunchDescriptor;
   const ccsDir = (deps.getCcsDir ?? defaultGetCcsDir)();
   const appsDir = (deps.getAppsDir ?? defaultGetAppsDir)();
@@ -616,9 +632,13 @@ export async function handleBarInstall(
     }
   }
 
-  // 3b. New bundle verified in staging — now safe to remove the old install.
+  // 3b. Keep a recovery copy until the staged bundle reaches its final path.
+  const backupPath = path.join(stagingDir, `${BAR_APP_NAME}.previous`);
+  let hasBackup = false;
   if (fs.existsSync(appPath)) {
     try {
+      copyPath(appPath, backupPath);
+      hasBackup = true;
       removeExistingApp(appPath);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -631,10 +651,19 @@ export async function handleBarInstall(
 
   // 3c. Atomic-ish rename: move staged bundle into the final location.
   try {
-    fs.renameSync(stagedApp, appPath);
+    renamePath(stagedApp, appPath);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Could not move staged app into place: ${msg}`);
+    if (hasBackup) {
+      try {
+        renamePath(backupPath, appPath);
+      } catch (restoreErr) {
+        const restoreMsg = restoreErr instanceof Error ? restoreErr.message : String(restoreErr);
+        console.error(`[X] Could not restore the previous CCS Bar.app: ${restoreMsg}`);
+      }
+    }
+    process.exitCode = 1;
     cleanupStaging();
     return;
   }

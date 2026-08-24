@@ -308,6 +308,28 @@ function makeDetachedDeps(ccsDir: string, port = 4242) {
 }
 
 describe('bar.json contract (launch subcommand)', () => {
+  it('stops a spawned server and fails when bar.json cannot be written', async () => {
+    const ccsDir = path.join(tempHome, '.ccs');
+    fs.mkdirSync(path.join(ccsDir, 'bar.json'), { recursive: true });
+    let killed = false;
+
+    const { handleBarLaunch } = await loadLaunchSubcommand();
+    await handleBarLaunch([], {
+      ...makeDetachedDeps(ccsDir, 4242),
+      spawnDetachedServer: () =>
+        ({
+          kill: () => {
+            killed = true;
+            return true;
+          },
+        }) as never,
+    });
+
+    expect(killed).toBe(true);
+    expect(process.exitCode).toBe(1);
+    expect(consoleOutput.join('\n')).toMatch(/Failed to write bar\.json/i);
+  });
+
   it('writes ~/.ccs/bar.json with correct shape when server starts', async () => {
     const ccsDir = path.join(tempHome, '.ccs');
     fs.mkdirSync(ccsDir, { recursive: true });
@@ -410,7 +432,7 @@ describe('bar.json contract (launch subcommand)', () => {
 
 describe('bar install subcommand', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
   const FAKE_VERSION = '1.2.3';
 
   /** Create the fake CCS Bar.app in appsDir so the post-extract assertion passes. */
@@ -586,7 +608,7 @@ describe('bar install subcommand', () => {
 
 describe('bar install: redirect-following download (#8)', () => {
   const REDIRECT_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
   const FINAL_URL = 'https://objects.githubusercontent.com/download/CCS-Bar.app.zip';
   const FAKE_VERSION = '1.0.0';
 
@@ -635,7 +657,7 @@ describe('bar install: redirect-following download (#8)', () => {
 
 describe('bar install: HTTP status code validation (#11)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   it('reports descriptive error when downloadAndExtract throws on non-200', async () => {
     const { handleBarInstall } = await loadInstallSubcommand();
@@ -691,7 +713,7 @@ describe('bar install: host allowlist validation (#9)', () => {
   it('validateDownloadUrl accepts github.com URLs', async () => {
     const { validateDownloadUrl } = await loadInstallSubcommand();
     expect(() =>
-      validateDownloadUrl('https://github.com/kaitranntt/ccs/releases/download/tag/CCS-Bar.app.zip')
+      validateDownloadUrl('https://github.com/jeffpecky/ccs/releases/download/tag/CCS-Bar.app.zip')
     ).not.toThrow();
   });
 
@@ -712,7 +734,7 @@ describe('bar install: host allowlist validation (#9)', () => {
   it('validateDownloadUrl rejects http:// (non-HTTPS)', async () => {
     const { validateDownloadUrl } = await loadInstallSubcommand();
     expect(() =>
-      validateDownloadUrl('http://github.com/kaitranntt/ccs/releases/download/tag/file.zip')
+      validateDownloadUrl('http://github.com/jeffpecky/ccs/releases/download/tag/file.zip')
     ).toThrow(/HTTPS|https/i);
   });
 
@@ -764,7 +786,7 @@ describe('bar install: host allowlist validation (#9)', () => {
 
 describe('bar install: compat capability handshake', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function fakeExtract(appsDir: string) {
     return async (_url: string, dest: string) => {
@@ -887,7 +909,7 @@ describe('bar install: compat capability handshake', () => {
 
 describe('bar install: post-extract app-exists assertion (#12)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   it('prints [OK] only when CCS Bar.app exists after extraction', async () => {
     const appsDir = path.join(tempHome, 'Applications');
@@ -970,7 +992,7 @@ describe('bar install: post-extract app-exists assertion (#12)', () => {
 
 describe('bar install: Info.plist version extraction regression tests', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function fakeExtract(appsDir: string) {
     return async (_url: string, dest: string) => {
@@ -1092,7 +1114,7 @@ describe('bar install: Info.plist version extraction regression tests', () => {
     await handleBarInstall([], {
       fetchReleaseAsset: async () => ({
         downloadUrl:
-          'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip',
+          'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip',
       }),
       downloadAndExtract: async (_url: string, dest: string) => {
         // Recreate the bundle with its Info.plist fixture after the old bundle is removed.
@@ -1145,7 +1167,7 @@ describe('bar install: Info.plist version extraction regression tests', () => {
     await handleBarInstall([], {
       fetchReleaseAsset: async () => ({
         downloadUrl:
-          'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip',
+          'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip',
       }),
       downloadAndExtract: async (_url: string, dest: string) => {
         // Recreate bare bundle — no Info.plist, matching the test's intent.
@@ -1390,7 +1412,7 @@ describe('version subcommand', () => {
 
 describe('bar install: redirect host re-validation (fix #6)', () => {
   const INITIAL_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
   const EVIL_REDIRECT_URL = 'https://evil.example.com/CCS-Bar.app.zip';
   const FAKE_VERSION = '1.0.0';
 
@@ -1443,7 +1465,7 @@ describe('bar install: redirect host re-validation (fix #6)', () => {
 
 describe('bar install: zip-slip guard (fix #14)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
   const FAKE_VERSION = '1.0.0';
 
   it('rejects download when downloadAndExtract detects a zip-slip entry', async () => {
@@ -1510,7 +1532,7 @@ describe('bar install: zip-slip guard (fix #14)', () => {
 
 describe('bar install: stale version-pin removal on null plist read (Fix 1)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function fakeExtract(appsDir: string) {
     return async (_url: string, dest: string) => {
@@ -2133,7 +2155,7 @@ describe('defaultFindRunningServer: priority over response speed (GH-1500)', () 
 
 describe('bar install: already-installed detection (GH-1504)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   it('shows existing version when app is already installed', async () => {
     const appsDir = path.join(tempHome, 'Applications');
@@ -2225,7 +2247,7 @@ describe('bar install: already-installed detection (GH-1504)', () => {
 
 describe('bar install: quarantine handling (GH-1504)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function fakeExtract(appsDir: string) {
     return async (_url: string, dest: string) => {
@@ -2291,7 +2313,7 @@ describe('bar install: quarantine handling (GH-1504)', () => {
 
 describe('bar install: Gatekeeper quarantine preservation', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function fakeExtract(appsDir: string) {
     return async (_url: string, dest: string) => {
@@ -2356,7 +2378,7 @@ describe('bar install: Gatekeeper quarantine preservation', () => {
 
 describe('bar install: launch flags and prompt (GH-1504)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function fakeExtract(appsDir: string) {
     return async (_url: string, dest: string) => {
@@ -2485,7 +2507,7 @@ describe('bar install: launch flags and prompt (GH-1504)', () => {
 
 describe('bar install: stdin-TTY gate for launch prompt (Finding 2)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function fakeExtract(appsDir: string) {
     return async (_url: string, dest: string) => {
@@ -2573,7 +2595,7 @@ describe('bar install: stdin-TTY gate for launch prompt (Finding 2)', () => {
 
 describe('bar install: already-running detection (Finding 3)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function fakeExtract(appsDir: string) {
     return async (_url: string, dest: string) => {
@@ -2731,7 +2753,7 @@ describe('bar install: whitespace-only CFBundleShortVersionString yields null (F
     await handleBarInstall([], {
       fetchReleaseAsset: async () => ({
         downloadUrl:
-          'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip',
+          'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip',
       }),
       downloadAndExtract: async (_url: string, dest: string) => {
         // Recreate bundle with the whitespace-only plist fixture.
@@ -2773,7 +2795,7 @@ describe('bar install: whitespace-only CFBundleShortVersionString yields null (F
 
 describe('bar install: stage-then-swap safety (Data Loss finding)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function baseDeps(
     appsDir: string,
@@ -2938,6 +2960,40 @@ describe('bar install: stage-then-swap safety (Data Loss finding)', () => {
     expect(allOutput).toMatch(/\[X\].*Could not remove.*CCS Bar\.app/);
   });
 
+  it('restores the prior app when final staged rename fails', async () => {
+    const appsDir = path.join(tempHome, 'Applications');
+    const appPath = path.join(appsDir, 'CCS Bar.app');
+    fs.mkdirSync(appPath, { recursive: true });
+    fs.writeFileSync(path.join(appPath, 'sentinel'), 'old-install');
+    let renameCalls = 0;
+
+    const { handleBarInstall } = await loadInstallSubcommand();
+    await handleBarInstall([], {
+      ...baseDeps(appsDir),
+      downloadAndExtract: async (_url: string, dest: string) => {
+        fs.mkdirSync(path.join(dest, 'CCS Bar.app'), { recursive: true });
+      },
+      renamePath: (from: string, to: string) => {
+        renameCalls += 1;
+        if (renameCalls === 1) throw new Error('final rename failed');
+        fs.renameSync(from, to);
+      },
+    });
+
+    expect(fs.readFileSync(path.join(appPath, 'sentinel'), 'utf8')).toBe('old-install');
+    expect(process.exitCode).toBe(1);
+    expect(consoleOutput.join('\n')).toMatch(/Could not move staged app into place/i);
+  });
+
+  it('targets this fork release repository', async () => {
+    const { getBarReleaseApiUrl } = await import(
+      `../../../src/commands/bar/install-subcommand?test=${Date.now()}-${++moduleSeq}`
+    );
+    expect(getBarReleaseApiUrl('ccs-bar-latest')).toBe(
+      'https://api.github.com/repos/jeffpecky/ccs/releases/tags/ccs-bar-latest'
+    );
+  });
+
   it('fresh install (no pre-existing bundle): removeExistingApp not invoked, install proceeds', async () => {
     const appsDir = path.join(tempHome, 'Applications');
     // Do NOT pre-create the app bundle.
@@ -2968,7 +3024,7 @@ describe('bar install: stage-then-swap safety (Data Loss finding)', () => {
 
 describe('bar install: silent-decline fix — hint on user decline (review finding)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function baseDeps(
     appsDir: string,
@@ -3637,7 +3693,7 @@ describe('bar raw socket probes: absolute deadline for malformed streaming peers
 
 describe('bar install: --await-quit waits for the running app to quit (GH-1588)', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function baseDeps(appsDir: string, isBarRunning: () => Promise<boolean>) {
     return {

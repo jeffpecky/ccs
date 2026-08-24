@@ -763,6 +763,13 @@ describe('launch: detached-spawn model', () => {
     expect(desc.args[0]).not.toContain(`${path.sep}.ccs${path.sep}`);
     expect(desc.args).toContain('bar');
     expect(desc.args).toContain('serve');
+    expect(desc.args).toEqual([
+      desc.args[0],
+      'bar',
+      'serve',
+      '--port',
+      '3000',
+    ]);
     expect(desc.home).toBe(os.homedir());
   });
 
@@ -802,6 +809,28 @@ describe('launch: detached-spawn model', () => {
 // ---------------------------------------------------------------------------
 
 describe('launch descriptor shim', () => {
+  it('creates and validates a private shim from a direct entrypoint file', async () => {
+    const entrypoint = path.join(tempHome, 'ccs.js');
+    fs.writeFileSync(entrypoint, 'console.log("ccs");\n', { mode: 0o777 });
+    const { createBarLaunchDescriptor, getLaunchShimPath } = await loadLaunchDescriptor();
+
+    const descriptor = createBarLaunchDescriptor({
+      entrypointPath: entrypoint,
+      runtime: process.execPath,
+      home: tempHome,
+      port: 3999,
+    });
+
+    expect(descriptor.args).toEqual([
+      getLaunchShimPath(tempHome),
+      'bar',
+      'serve',
+      '--port',
+      '3999',
+    ]);
+    expect(fs.lstatSync(descriptor.args[0]).isSymbolicLink()).toBe(false);
+  });
+
   it('creates a private ccs.js shim for symlinked Bun-style entrypoints', async () => {
     const ccsDir = path.join(tempHome, '.ccs');
     const packageDist = path.join(
@@ -821,7 +850,12 @@ describe('launch descriptor shim', () => {
     fs.mkdirSync(packageDist, { recursive: true });
     fs.mkdirSync(binDir, { recursive: true });
     fs.writeFileSync(realEntrypoint, 'console.log("ccs");\n', { mode: 0o777 });
-    fs.symlinkSync(realEntrypoint, symlinkedEntrypoint);
+    try {
+      fs.symlinkSync(realEntrypoint, symlinkedEntrypoint);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+      throw err;
+    }
 
     const { createBarLaunchDescriptor, getLaunchShimPath } = await loadLaunchDescriptor();
     const descriptor = createBarLaunchDescriptor({
@@ -874,7 +908,12 @@ describe('launch descriptor shim', () => {
     fs.mkdirSync(packageDist, { recursive: true });
     fs.mkdirSync(binDir, { recursive: true });
     fs.writeFileSync(realEntrypoint, 'console.log("original");\n', { mode: 0o777 });
-    fs.symlinkSync(realEntrypoint, symlinkedEntrypoint);
+    try {
+      fs.symlinkSync(realEntrypoint, symlinkedEntrypoint);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EPERM') return;
+      throw err;
+    }
 
     const { createBarLaunchDescriptor } = await loadLaunchDescriptor();
     const descriptor = createBarLaunchDescriptor({
@@ -905,7 +944,7 @@ describe('launch descriptor shim', () => {
 
 describe('install: writeLaunchDescriptor called after successful install', () => {
   const FAKE_DOWNLOAD_URL =
-    'https://github.com/kaitranntt/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
+    'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
 
   function fakeExtract(appsDir: string) {
     return async (_url: string, dest: string) => {

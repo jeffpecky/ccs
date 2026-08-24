@@ -9,7 +9,7 @@ public struct BarLaunchDescriptor: Codable, Sendable {
   public let schema: Int
   /// Absolute path to the node/bun/runtime binary (`process.execPath`).
   public let runtime: String
-  /// Arguments to pass to `runtime`: [absoluteEntryScript, "bar", "serve"].
+  /// Arguments to pass to `runtime`, optionally ending in `--port <1...65535>`.
   public let args: [String]
   /// Working directory for the spawned server (`os.homedir()`).
   public let home: String
@@ -22,6 +22,14 @@ public struct BarLaunchDescriptor: Codable, Sendable {
     self.args = args
     self.home = home
     self.ccsHome = ccsHome
+  }
+
+  public var hasSafeServerArguments: Bool {
+    guard args.count == 3 || args.count == 5 else { return false }
+    guard args[1] == "bar", args[2] == "serve" else { return false }
+    if args.count == 3 { return true }
+    guard args[3] == "--port", let port = Int(args[4]) else { return false }
+    return (1...65535).contains(port)
   }
 
   /// Default path for the launch descriptor under `~/.ccs/bar/launch.json`.

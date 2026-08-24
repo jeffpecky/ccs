@@ -28,6 +28,13 @@ export interface BarServerStopDeps {
   ) => Promise<'exited' | 'identity-mismatch' | 'timeout'>;
 }
 
+export interface ProcessExitWaitDeps {
+  platform: NodeJS.Platform;
+  isWindowsProcessRunning: (pid: number) => boolean;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+}
+
 export function parseBarServerProcessRecord(raw: string): BarServerProcessRecord | null {
   try {
     const parsed = JSON.parse(raw) as Partial<BarServerProcessRecord>;
@@ -85,21 +92,38 @@ export function getProcessBirthIdentity(pid: number): string | null {
 export async function waitForProcessExit(
   pid: number,
   birthIdentity: string,
-  timeoutMs: number
+  timeoutMs: number,
+  deps: Partial<ProcessExitWaitDeps> = {}
 ): Promise<'exited' | 'identity-mismatch' | 'timeout'> {
-  if (process.platform === 'win32') {
-    // Node maps SIGTERM to synchronous TerminateProcess on Windows. PID probes
-    // can remain stale until the ChildProcess handle is reaped, so do not poll it.
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-    return 'exited';
-  }
+  const platform = deps.platform ?? process.platform;
+  const now = deps.now ?? Date.now;
+  const sleep = deps.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const isWindowsProcessRunning =
+    deps.isWindowsProcessRunning ??
+    ((targetPid: number) => {
+      try {
+        const output = execFileSync(
+          'tasklist.exe',
+          ['/FI', `PID eq ${targetPid}`, '/FO', 'CSV', '/NH'],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 1_000 }
+        );
+        return output.split(/\r?\n/).some((line) => line.includes(`","${targetPid}","`));
+      } catch {
+        return true;
+      }
+    });
 
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  const deadline = now() + timeoutMs;
+  while (now() < deadline) {
+    if (platform === 'win32') {
+      if (!isWindowsProcessRunning(pid)) return 'exited';
+      await sleep(100);
+      continue;
+    }
     const currentIdentity = getProcessBirthIdentity(pid);
     if (currentIdentity === null) return 'exited';
     if (currentIdentity !== birthIdentity) return 'identity-mismatch';
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    await sleep(100);
   }
   return 'timeout';
 }

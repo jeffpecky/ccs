@@ -16,6 +16,7 @@ import {
   stopDetachedBarServer,
   stopBarServerProcessFile,
   stopRecordedBarServer,
+  waitForProcessExit,
 } from '../../../src/commands/bar/bar-process-control';
 import { parsePortFlag, validatePortArgs } from '../../../src/commands/bar/port-arg';
 import { handleBarServe } from '../../../src/commands/bar/serve-subcommand';
@@ -90,6 +91,36 @@ describe('verified Bar process stopping', () => {
     });
     expect(outcome.result).toBe('identity-mismatch');
     expect(signaled).toBe(false);
+  });
+
+  it('polls Windows process state until exit instead of assuming SIGTERM succeeded', async () => {
+    const states = [true, true, false];
+    let sleeps = 0;
+
+    const outcome = await waitForProcessExit(4321, 'birth-a', 1_000, {
+      platform: 'win32',
+      isWindowsProcessRunning: () => states.shift() ?? false,
+      sleep: async () => {
+        sleeps += 1;
+      },
+    });
+
+    expect(outcome).toBe('exited');
+    expect(sleeps).toBe(2);
+  });
+
+  it('returns timeout when Windows target remains alive for the bounded wait', async () => {
+    let now = 0;
+    const outcome = await waitForProcessExit(4321, 'birth-a', 250, {
+      platform: 'win32',
+      isWindowsProcessRunning: () => true,
+      now: () => now,
+      sleep: async () => {
+        now += 100;
+      },
+    });
+
+    expect(outcome).toBe('timeout');
   });
 
   it('preserves server.pid and bar.json on mismatch, EPERM, and timeout', async () => {
