@@ -5,66 +5,63 @@ namespace CCSBar.Core;
 
 public static class BarJson
 {
-    public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)
-    {
-        PropertyNameCaseInsensitive = false,
-    };
+    public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web) { PropertyNameCaseInsensitive = false, UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip };
 }
 
 public sealed record QuotaWindowDetail(
-    string Key,
-    string Label,
-    double UsedPercent,
-    double RemainingPercent,
+    [property: JsonRequired] string Key,
+    [property: JsonRequired] string Label,
+    [property: JsonRequired] double UsedPercent,
+    [property: JsonRequired] double RemainingPercent,
     string? ResetAt = null,
     int? WindowMinutes = null);
 
 public sealed record BarSummaryRow(
-    [property: JsonPropertyName("account_id")] string AccountId,
-    string Provider,
-    string? DisplayName = null,
-    string? Tier = null,
-    bool Paused = false,
-    [property: JsonPropertyName("quota_percentage")] double? QuotaPercentage = null,
-    string QuotaStatus = "error",
-    [property: JsonPropertyName("next_reset")] string? NextReset = null,
-    [property: JsonPropertyName("is_default")] bool IsDefault = false,
-    [property: JsonPropertyName("last_activity_at")] string? LastActivityAt = null,
-    [property: JsonPropertyName("today_cost")] double? TodayCost = null,
-    string Health = "ok",
-    bool Cached = false,
-    string? FetchedAt = null,
-    bool NeedsReauth = false,
-    string? Surface = null,
-    string? Profile = null,
-    [property: JsonPropertyName("is_subscription")] bool? IsSubscription = null,
-    [property: JsonPropertyName("quota_windows")] IReadOnlyList<QuotaWindowDetail>? QuotaWindows = null,
-    [property: JsonPropertyName("stale_as_of")] string? StaleAsOf = null)
+    [property: JsonPropertyName("account_id"), JsonRequired] string AccountId,
+    [property: JsonRequired] string Provider,
+    [property: JsonPropertyName("display_name")] string? DisplayName,
+    string? Tier,
+    [property: JsonRequired] bool Paused,
+    [property: JsonPropertyName("quota_percentage")] double? QuotaPercentage,
+    [property: JsonPropertyName("quota_status"), JsonRequired] string QuotaStatus,
+    [property: JsonPropertyName("next_reset")] string? NextReset,
+    [property: JsonPropertyName("is_default"), JsonRequired] bool IsDefault,
+    [property: JsonPropertyName("last_activity_at")] string? LastActivityAt,
+    [property: JsonPropertyName("today_cost")] double? TodayCost,
+    [property: JsonRequired] string Health,
+    [property: JsonRequired] bool Cached,
+    [property: JsonPropertyName("fetched_at")] string? FetchedAt,
+    [property: JsonPropertyName("needs_reauth"), JsonRequired] bool NeedsReauth,
+    string? Surface,
+    string? Profile,
+    [property: JsonPropertyName("is_subscription")] bool? IsSubscription,
+    [property: JsonPropertyName("quota_windows")] IReadOnlyList<QuotaWindowDetail>? QuotaWindows,
+    [property: JsonPropertyName("stale_as_of")] string? StaleAsOf)
 {
     [JsonIgnore] public string Id => $"{Provider}:{AccountId}";
     [JsonIgnore] public string HealthDot => Health switch { "error" => "X", "warning" => "!", _ => "OK" };
 }
 
-public sealed record BarAnalyticsWindow(double Cost = 0, int Requests = 0);
-public sealed record BarAnalyticsDay(string Date, double Cost, int Requests);
-public sealed record BarAnalyticsHour(string Hour, double Cost, int Requests);
-public sealed record BarAnalyticsModel(string Model, double Cost, int Requests);
-public sealed record BarAnalyticsSurface(string Source, string Surface, double Cost, int Requests);
+public sealed record BarAnalyticsWindow([property: JsonRequired] double Cost, [property: JsonRequired] int Requests);
+public sealed record BarAnalyticsDay([property: JsonRequired] string Date, [property: JsonRequired] double Cost, [property: JsonRequired] int Requests);
+public sealed record BarAnalyticsHour([property: JsonRequired] string Hour, [property: JsonRequired] double Cost, [property: JsonRequired] int Requests);
+public sealed record BarAnalyticsModel([property: JsonRequired] string Model, [property: JsonRequired] double Cost, [property: JsonRequired] int Requests);
+public sealed record BarAnalyticsSurface([property: JsonRequired] string Source, [property: JsonRequired] string Surface, [property: JsonRequired] double Cost, [property: JsonRequired] int Requests);
 
-public sealed class BarAnalytics
+public sealed record BarAnalytics
 {
-    public BarAnalyticsWindow Today { get; init; } = new();
-    public BarAnalyticsWindow Last7d { get; init; } = new();
-    public BarAnalyticsWindow Last30d { get; init; } = new();
-    public BarAnalyticsWindow MonthToDate { get; init; } = new();
-    public BarAnalyticsWindow AllTime { get; init; } = new();
-    public IReadOnlyList<BarAnalyticsDay> ByDay { get; init; } = [];
+    [JsonRequired] public BarAnalyticsWindow Today { get; init; } = null!;
+    [JsonRequired] public BarAnalyticsWindow Last7d { get; init; } = null!;
+    [JsonRequired] public BarAnalyticsWindow Last30d { get; init; } = null!;
+    public BarAnalyticsWindow MonthToDate { get; init; } = new(0, 0);
+    [JsonRequired] public BarAnalyticsWindow AllTime { get; init; } = null!;
+    [JsonRequired] public IReadOnlyList<BarAnalyticsDay> ByDay { get; init; } = null!;
     public IReadOnlyList<BarAnalyticsHour> ByHour { get; init; } = [];
-    public IReadOnlyList<BarAnalyticsModel> TopModels { get; init; } = [];
-    public string TopModelsWindow { get; init; } = "";
+    [JsonRequired] public IReadOnlyList<BarAnalyticsModel> TopModels { get; init; } = null!;
+    [JsonRequired] public string TopModelsWindow { get; init; } = null!;
     public string? LastActivityAt { get; init; }
     public int? DaysSinceLastActivity { get; init; }
-    public bool HasRecentData { get; init; }
-    public string GeneratedAt { get; init; } = "";
+    [JsonRequired] public bool HasRecentData { get; init; }
+    [JsonRequired] public string GeneratedAt { get; init; } = null!;
     public IReadOnlyList<BarAnalyticsSurface> BySurface { get; init; } = [];
 }

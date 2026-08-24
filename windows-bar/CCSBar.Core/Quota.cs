@@ -29,10 +29,26 @@ public static class BarQuota
         .ThenBy(x => x.WindowMinutes ?? int.MaxValue)
         .ThenBy(x => KeyRank(x.Key))
         .FirstOrDefault();
+    public static string? PaceClause(double usedPercent, double remainingPercent, string? resetAt, int? windowMinutes, DateTimeOffset now)
+    {
+        if (usedPercent >= 100 || remainingPercent <= 0) return ResetCountdown(resetAt, now) is { } reset ? $"limit reached, {reset}" : "limit reached";
+        if (DateTimeOffset.TryParse(resetAt, out var resetDate) && resetDate <= now) return null;
+        var burn = BurnMinutesRemaining(usedPercent, DateTimeOffset.TryParse(resetAt, out resetDate) ? resetDate : null, windowMinutes, now);
+        if (remainingPercent >= 85 || burn is null) return windowMinutes is not null && resetAt is not null ? "plenty at this pace" : null;
+        if (burn < 5) return ResetCountdown(resetAt, now) is { } reset ? $"limit reached, {reset}" : "limit reached";
+        if (!DateTimeOffset.TryParse(resetAt, out resetDate) || burn >= (resetDate - now).TotalMinutes) return null;
+        return $"~{CompactDuration(burn.Value)} left at this pace";
+    }
+    public static (string Label, double RemainingPercent)? HeadroomLeader(IEnumerable<BarSummaryRow> rows)
+    {
+        var eligible = rows.Select(x => (Label: x.DisplayName ?? x.Provider, Window: SelectBindingWindow(x.QuotaWindows ?? []))).Where(x => x.Window is not null).Select(x => (x.Label, x.Window!.RemainingPercent)).ToList();
+        if (eligible.Count < 2) return null;
+        return eligible.OrderByDescending(x => x.RemainingPercent).ThenBy(x => x.Label, StringComparer.Ordinal).First();
+    }
     public static string CompactDuration(int minutes)
     {
         var hours = minutes / 60;
         return hours >= 24 ? $"{hours / 24}d {hours % 24}h" : hours > 0 ? $"{hours}h {minutes % 60}m" : $"{minutes % 60}m";
     }
-    private static int KeyRank(string key) => key switch { "5h" => 0, "week" or "7d" => 1, "opus" => 2, "sonnet" => 3, _ => 4 };
+    private static int KeyRank(string key) => key switch { "five_hour" => 0, "seven_day" => 1, "seven_day_opus" => 2, "seven_day_sonnet" => 3, _ => 4 };
 }

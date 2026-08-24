@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -8,82 +9,110 @@ public static class BarAuth
 {
     public const string NonceHeader = "x-ccs-bar-nonce";
     public const string TokenHeader = "x-ccs-bar-token";
-
-    public static string Proof(string token, string nonce) =>
-        Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(token), Encoding.UTF8.GetBytes(nonce))).ToLowerInvariant();
-
+    public static string Proof(string token, string nonce) => Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(token), Encoding.UTF8.GetBytes(nonce))).ToLowerInvariant();
     public static bool Verify(string token, string nonce, string proof)
     {
         try { return proof.Length == 64 && CryptographicOperations.FixedTimeEquals(Convert.FromHexString(Proof(token, nonce)), Convert.FromHexString(proof)); }
         catch (FormatException) { return false; }
     }
-
-    public static void Authenticate(HttpRequestMessage request, string? token)
+    public static void Authenticate(HttpRequestMessage request, string token)
     {
-        if (token is null) return;
         var nonce = Guid.NewGuid().ToString("N");
         request.Headers.Add(NonceHeader, nonce);
         request.Headers.Add(TokenHeader, Proof(token, nonce));
     }
 }
 
+public enum BarDiscoveryState { Ready, Missing, Unreadable, Malformed, Unsafe }
+public sealed record BarDiscoveryLoadResult(BarDiscoveryState State, BarDiscovery? Value = null, string? Path = null);
 public sealed record BarDiscovery(string BaseUrl, int Port, string AuthMode)
 {
-    public Uri ResolvedUri => Uri.TryCreate(BaseUrl, UriKind.Absolute, out var uri) ? uri : new Uri($"http://127.0.0.1:{Port}");
+    public Uri? ResolvedUri => IsSafe(out var uri) ? uri : null;
     public static string DefaultPath(string home) => Path.Combine(home, ".ccs", "bar.json");
-    public static BarDiscovery Load(string home) => JsonSerializer.Deserialize<BarDiscovery>(File.ReadAllText(DefaultPath(home)), BarJson.Options) ?? throw new JsonException();
+    public static BarDiscoveryLoadResult Load(string home)
+    {
+        var path = DefaultPath(home);
+        if (!File.Exists(path)) return new(BarDiscoveryState.Missing, Path: path);
+        string json;
+        try { json = File.ReadAllText(path); }
+        catch (IOException) { return new(BarDiscoveryState.Unreadable, Path: path); }
+        catch (UnauthorizedAccessException) { return new(BarDiscoveryState.Unreadable, Path: path); }
+        BarDiscovery? value;
+        try { value = JsonSerializer.Deserialize<BarDiscovery>(json, BarJson.Options); }
+        catch (JsonException) { return new(BarDiscoveryState.Malformed, Path: path); }
+        return value is null ? new(BarDiscoveryState.Malformed, Path: path) : value.IsSafe(out _) ? new(BarDiscoveryState.Ready, value, path) : new(BarDiscoveryState.Unsafe, Path: path);
+    }
+    public bool IsSafe(out Uri? uri)
+    {
+        uri = null;
+        if (AuthMode != "loopback" || Port is < 1 or > 65535 || !Uri.TryCreate(BaseUrl, UriKind.Absolute, out var parsed) || parsed.Scheme != Uri.UriSchemeHttp || parsed.Port != Port || !IPAddress.TryParse(parsed.Host, out var address) || !IPAddress.IsLoopback(address) || parsed.AbsolutePath != "/" || !string.IsNullOrEmpty(parsed.Query) || !string.IsNullOrEmpty(parsed.Fragment)) return false;
+        uri = parsed;
+        return true;
+    }
+}
+
+public interface ILaunchTrustValidator
+{
+    bool IsTrustedFile(string path);
+    bool IsTrustedDirectory(string path);
 }
 
 public sealed record BarLaunchDescriptor(int Schema, string Runtime, IReadOnlyList<string> Args, string Home, string? CcsHome)
 {
-    public bool HasSafeServerArguments =>
-        Schema == 1 && Args.Count is 3 or 5 && Args[1] == "bar" && Args[2] == "serve" &&
-        (Args.Count == 3 || Args[3] == "--port" && int.TryParse(Args[4], out var port) && port is >= 1 and <= 65535);
-
     public static string DefaultPath(string home) => Path.Combine(home, ".ccs", "bar", "launch.json");
-    public static BarLaunchDescriptor Load(string home) => JsonSerializer.Deserialize<BarLaunchDescriptor>(File.ReadAllText(DefaultPath(home)), BarJson.Options) ?? throw new JsonException();
+    public static BarLaunchDescriptor? Load(string home, ILaunchTrustValidator trust)
+    {
+        var path = DefaultPath(home);
+        if (!trust.IsTrustedFile(path)) return null;
+        try { var value = JsonSerializer.Deserialize<BarLaunchDescriptor>(File.ReadAllText(path), BarJson.Options); return value?.IsSafe(home, trust) == true ? value : null; }
+        catch (JsonException) { return null; } catch (IOException) { return null; } catch (UnauthorizedAccessException) { return null; }
+    }
+    public bool IsSafe(string expectedHome, ILaunchTrustValidator trust)
+    {
+        if (Schema != 1 || Args.Count is not (3 or 5) || Args[1] != "bar" || Args[2] != "serve" || Args.Count == 5 && (Args[3] != "--port" || !int.TryParse(Args[4], out var port) || port is < 1 or > 65535)) return false;
+        if (!Path.IsPathFullyQualified(Runtime) || !Path.IsPathFullyQualified(Args[0]) || !Path.IsPathFullyQualified(Home) || !Path.GetFullPath(Home).Equals(Path.GetFullPath(expectedHome), StringComparison.OrdinalIgnoreCase) || CcsHome is not null && (!Path.IsPathFullyQualified(CcsHome) || CcsHome.Length == 0)) return false;
+        var expectedShim = Path.Combine(expectedHome, "AppData", "Local", "CCS Bar", "launcher", "ccs.js");
+        if (Path.GetFileName(Runtime).ToLowerInvariant() is not ("node.exe" or "bun.exe") || !Path.GetFullPath(Args[0]).Equals(Path.GetFullPath(expectedShim), StringComparison.OrdinalIgnoreCase)) return false;
+        return trust.IsTrustedFile(Runtime) && trust.IsTrustedFile(Args[0]) && trust.IsTrustedDirectory(Home) && (CcsHome is null || trust.IsTrustedDirectory(CcsHome));
+    }
 }
 
-public sealed class BarServerProbe(HttpClient http, string? authToken)
+public sealed class BarServerProbe
 {
     public static readonly int[] FallbackPorts = [3000, 3001, 3002, 8000, 8080];
-    public static string AuthTokenPath(string home) => Path.Combine(home, ".ccs", "bar", ".auth-token");
-    public static string? LoadAuthToken(string home)
+    readonly HttpClient http; readonly string? authToken; readonly TimeSpan probeTimeout;
+    public BarServerProbe(HttpClient http, string? authToken = null, TimeSpan? probeTimeout = null, string? home = null, IReadOnlyDictionary<string, string?>? environment = null)
+    { this.http = http; this.authToken = authToken ?? LoadAuthToken(home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), environment); this.probeTimeout = probeTimeout ?? TimeSpan.FromSeconds(1.5); }
+    public static string CcsHome(string home, IReadOnlyDictionary<string, string?>? environment = null) => environment is not null && environment.TryGetValue("CCS_HOME", out var value) && !string.IsNullOrWhiteSpace(value) ? value : Path.Combine(home, ".ccs");
+    public static string AuthTokenPath(string home, IReadOnlyDictionary<string, string?>? environment = null) => Path.Combine(CcsHome(home, environment), "bar", ".auth-token");
+    public static string? LoadAuthToken(string home, IReadOnlyDictionary<string, string?>? environment = null)
     {
-        try
-        {
-            var token = File.ReadAllText(AuthTokenPath(home)).Trim();
-            return token.Length == 64 && token.All(Uri.IsHexDigit) ? token : null;
-        }
-        catch { return null; }
+        try { var token = File.ReadAllText(AuthTokenPath(home, environment)).Trim(); return token.Length == 64 && token.All(Uri.IsHexDigit) ? token : null; }
+        catch (IOException) { return null; } catch (UnauthorizedAccessException) { return null; }
     }
-
     public async Task<Uri?> FindLiveServerAsync(BarDiscovery? discovery, CancellationToken cancellationToken = default)
     {
-        var ports = (discovery is null ? [] : new[] { discovery.Port }).Concat(FallbackPorts).Distinct();
-        foreach (var port in ports)
-        {
+        var discoveryPort = discovery?.IsSafe(out _) == true ? new[] { discovery.Port } : [];
+        foreach (var port in discoveryPort.Concat(FallbackPorts).Distinct())
             foreach (var host in new[] { "127.0.0.1", "[::1]" })
-            {
-                var baseUri = new Uri($"http://{host}:{port}");
-                if (await IsLiveAsync(baseUri, cancellationToken)) return baseUri;
-            }
-        }
+                if (await IsLiveAsync(new Uri($"http://{host}:{port}"), cancellationToken)) return new Uri($"http://{host}:{port}");
         return null;
     }
-
-    private async Task<bool> IsLiveAsync(Uri baseUri, CancellationToken cancellationToken)
+    async Task<bool> IsLiveAsync(Uri baseUri, CancellationToken cancellationToken)
     {
         if (authToken is null) return false;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(probeTimeout);
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUri, "api/bar/summary"));
+        request.Options.Set(new HttpRequestOptionsKey<TimeSpan>("CCSBar.Timeout"), probeTimeout);
         BarAuth.Authenticate(request, authToken);
         try
         {
-            using var response = await http.SendAsync(request, cancellationToken);
-            if (response.StatusCode != System.Net.HttpStatusCode.OK || !response.Headers.TryGetValues(BarAuth.TokenHeader, out var values)) return false;
-            var nonce = request.Headers.GetValues(BarAuth.NonceHeader).Single();
-            return BarAuth.Verify(authToken, nonce, values.Single());
+            using var response = await http.SendAsync(request, timeout.Token);
+            if (response.StatusCode != HttpStatusCode.OK || !response.Headers.TryGetValues(BarAuth.TokenHeader, out var values)) return false;
+            return BarAuth.Verify(authToken, request.Headers.GetValues(BarAuth.NonceHeader).Single(), values.Single());
         }
-        catch { return false; }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return false; }
+        catch (HttpRequestException) { return false; }
     }
 }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.RegularExpressions;
 
 namespace CCSBar.Core;
@@ -61,7 +62,11 @@ public static class BarPreferencesCodec
     };
     private static IReadOnlyList<int> ParseLevels(string value) => value.Split(',').Select(x => int.TryParse(x.Trim(), out var n) ? (int?)n : null).Where(x => x is not null).Select(x => Math.Clamp(x!.Value, 0, 100)).Distinct().OrderDescending().ToArray();
     private static bool Bool(IReadOnlyDictionary<string, object?> v, string key, bool fallback) => v.TryGetValue(key, out var x) && x is bool b ? b : fallback;
-    private static double Double(IReadOnlyDictionary<string, object?> v, string key, double fallback) => v.TryGetValue(key, out var x) && x is IConvertible c ? c.ToDouble(CultureInfo.InvariantCulture) : fallback;
+    private static double Double(IReadOnlyDictionary<string, object?> v, string key, double fallback)
+    {
+        try { return v.TryGetValue(key, out var x) && x is IConvertible c ? c.ToDouble(CultureInfo.InvariantCulture) : fallback; }
+        catch (FormatException) { return fallback; } catch (InvalidCastException) { return fallback; } catch (OverflowException) { return fallback; }
+    }
     private static BarGlanceMode ParseMode(string value) => value switch { "todaySpend" => BarGlanceMode.TodaySpend, "monthSpend" => BarGlanceMode.MonthSpend, "lowestQuota" => BarGlanceMode.LowestQuota, "accountCount" => BarGlanceMode.AccountCount, _ => BarGlanceMode.Auto };
     private static string ModeText(BarGlanceMode value) => value switch { BarGlanceMode.TodaySpend => "todaySpend", BarGlanceMode.MonthSpend => "monthSpend", BarGlanceMode.LowestQuota => "lowestQuota", BarGlanceMode.AccountCount => "accountCount", _ => "auto" };
 }
@@ -69,18 +74,38 @@ public static class BarPreferencesCodec
 public static partial class BarUpdate
 {
     public const string ReleaseRepository = "jeffpecky/ccs";
-    [GeneratedRegex(@"^\d+\.\d+\.\d+([-.0-9A-Za-z]*)?$")]
+    public static readonly Uri VersionUri = new($"https://github.com/{ReleaseRepository}/releases/download/ccs-bar-latest/version.txt");
+    [GeneratedRegex(@"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$")]
     private static partial Regex SemverRegex();
     public static bool IsNewer(string latest, string current)
     {
         var left = Parse(latest); var right = Parse(current);
         if (left is null || right is null) return false;
-        return left.Value.CompareTo(right.Value) > 0;
+        return left.CompareTo(right) > 0;
     }
-    private static (int Major, int Minor, int Patch)? Parse(string value)
+    public static async Task<string?> FetchLatestPublishedVersionAsync(HttpClient http, CancellationToken cancellationToken = default)
     {
-        if (!SemverRegex().IsMatch(value)) return null;
-        var parts = value.Split('-', 2)[0].Split('.');
-        return parts.Length >= 3 && int.TryParse(parts[0], out var major) && int.TryParse(parts[1], out var minor) && int.TryParse(parts[2], out var patch) ? (major, minor, patch) : null;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); timeout.CancelAfter(TimeSpan.FromSeconds(8));
+        using var request = new HttpRequestMessage(HttpMethod.Get, VersionUri); request.Headers.CacheControl = new() { NoCache = true }; request.Options.Set(new HttpRequestOptionsKey<TimeSpan>("CCSBar.Timeout"), TimeSpan.FromSeconds(8));
+        try { using var response = await http.SendAsync(request, timeout.Token); if (response.StatusCode != HttpStatusCode.OK) return null; var value = (await response.Content.ReadAsStringAsync(timeout.Token)).Trim(); return Parse(value) is null ? null : value; }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return null; } catch (HttpRequestException) { return null; }
+    }
+    private static SemVersion? Parse(string value) => SemverRegex().Match(value) is { Success: true } match && int.TryParse(match.Groups[1].Value, out var major) && int.TryParse(match.Groups[2].Value, out var minor) && int.TryParse(match.Groups[3].Value, out var patch) ? new(major, minor, patch, match.Groups[4].Success ? match.Groups[4].Value.Split('.') : []) : null;
+    private sealed record SemVersion(int Major, int Minor, int Patch, IReadOnlyList<string> Pre) : IComparable<SemVersion>
+    {
+        public int CompareTo(SemVersion? other)
+        {
+            if (other is null) return 1;
+            foreach (var pair in new[] { (Major, other.Major), (Minor, other.Minor), (Patch, other.Patch) }) if (pair.Item1 != pair.Item2) return pair.Item1.CompareTo(pair.Item2);
+            if (Pre.Count == 0 || other.Pre.Count == 0) return Pre.Count == other.Pre.Count ? 0 : Pre.Count == 0 ? 1 : -1;
+            for (var i = 0; i < Math.Max(Pre.Count, other.Pre.Count); i++)
+            {
+                if (i == Pre.Count || i == other.Pre.Count) return Pre.Count.CompareTo(other.Pre.Count);
+                var aNum = int.TryParse(Pre[i], out var a); var bNum = int.TryParse(other.Pre[i], out var b);
+                var comparison = aNum && bNum ? a.CompareTo(b) : aNum != bNum ? aNum ? -1 : 1 : string.CompareOrdinal(Pre[i], other.Pre[i]);
+                if (comparison != 0) return comparison;
+            }
+            return 0;
+        }
     }
 }
