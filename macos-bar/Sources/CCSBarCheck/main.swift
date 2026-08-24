@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import SwiftUI  // for ColorScheme equality in the theme-token checks
 import CCSBarCore
 
@@ -1570,6 +1571,15 @@ do {
 
 // MARK: - BarServerProbe ordering and selection
 
+let probeAuthToken = String(repeating: "a", count: 64)
+
+func probeProof(_ nonce: String) -> String {
+  let code = HMAC<SHA256>.authenticationCode(
+    for: Data(nonce.utf8),
+    using: SymmetricKey(data: Data(probeAuthToken.utf8)))
+  return code.map { String(format: "%02x", $0) }.joined()
+}
+
 // Mock transport that returns 200 for exactly one (host, port) combination and
 // times out (throws) for everything else. Used to verify probe ordering.
 final class SelectiveTransport: HTTPTransport, @unchecked Sendable {
@@ -1586,8 +1596,10 @@ final class SelectiveTransport: HTTPTransport, @unchecked Sendable {
     let urlStr = request.url?.absoluteString ?? ""
     probed.append(urlStr)
     if urlStr.hasPrefix(successPrefix) {
+      let nonce = request.value(forHTTPHeaderField: "x-ccs-bar-nonce") ?? ""
       let http = HTTPURLResponse(
-        url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        url: request.url!, statusCode: 200, httpVersion: nil,
+        headerFields: ["x-ccs-bar-token": probeProof(nonce)])!
       return (Data(), http)
     }
     // Simulate connection refused — throw so the probe moves on.
@@ -1601,7 +1613,7 @@ final class SelectiveTransport: HTTPTransport, @unchecked Sendable {
 do {
   // bar.json says port 9999 (unusual, not in fallbacks). We make 127.0.0.1:9999 succeed.
   let transport = SelectiveTransport(successPrefix: "http://127.0.0.1:9999")
-  let probe = BarServerProbe(transport: transport)
+  let probe = BarServerProbe(transport: transport, authToken: probeAuthToken)
   let discovery = BarDiscovery(baseUrl: "http://127.0.0.1:9999", port: 9999, authMode: "loopback")
   let result = await probe.findLiveServer(discovery: discovery)
 
@@ -1617,7 +1629,7 @@ do {
 // Make port 3001 on 127.0.0.1 the live one. bar.json points at dead port 9999.
 do {
   let transport = SelectiveTransport(successPrefix: "http://127.0.0.1:3001")
-  let probe = BarServerProbe(transport: transport)
+  let probe = BarServerProbe(transport: transport, authToken: probeAuthToken)
   let discovery = BarDiscovery(baseUrl: "http://127.0.0.1:9999", port: 9999, authMode: "loopback")
   let result = await probe.findLiveServer(discovery: discovery)
 
@@ -1639,7 +1651,7 @@ do {
 // was tried before [::1] for the same port.
 do {
   let transport = SelectiveTransport(successPrefix: "http://[::1]:3000")
-  let probe = BarServerProbe(transport: transport)
+  let probe = BarServerProbe(transport: transport, authToken: probeAuthToken)
   // No bar.json — nil discovery.
   let result = await probe.findLiveServer(discovery: nil)
 
@@ -1663,7 +1675,7 @@ do {
       throw URLError(.cannotConnectToHost)
     }
   }
-  let probe = BarServerProbe(transport: DeadTransport())
+  let probe = BarServerProbe(transport: DeadTransport(), authToken: probeAuthToken)
   let result = await probe.findLiveServer(discovery: nil)
   check(result == nil, "probe: returns nil when no server responds")
 }
@@ -1677,7 +1689,7 @@ do {
       return (Data(), http)
     }
   }
-  let probe = BarServerProbe(transport: Status404Transport())
+  let probe = BarServerProbe(transport: Status404Transport(), authToken: probeAuthToken)
   let result = await probe.findLiveServer(discovery: nil)
   check(result == nil, "probe: 404 response treated as dead (not live)")
 }
@@ -1686,7 +1698,7 @@ do {
 //      (e.g. 3000), that port is not probed twice.
 do {
   let transport = SelectiveTransport(successPrefix: "http://127.0.0.1:3000")
-  let probe = BarServerProbe(transport: transport)
+  let probe = BarServerProbe(transport: transport, authToken: probeAuthToken)
   // bar.json port == 3000, which is also in the fallback list.
   let discovery = BarDiscovery(baseUrl: "http://127.0.0.1:3000", port: 3000, authMode: "loopback")
   _ = await probe.findLiveServer(discovery: discovery)
@@ -1695,6 +1707,39 @@ do {
   let port3000Count = transport.probed.filter { $0.contains(":3000/") }.count
   // Expect exactly 1 probe for 3000 on 127.0.0.1 (finds it immediately; stops before ::1).
   check(port3000Count == 1, "probe: bar.json port 3000 deduped — probed once, not twice")
+}
+
+do {
+  final class AuthTransport: HTTPTransport, @unchecked Sendable {
+    let proof: (String) -> String?
+    var nonce: String?
+
+    init(proof: @escaping (String) -> String?) { self.proof = proof }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+      nonce = request.value(forHTTPHeaderField: "x-ccs-bar-nonce")
+      let headers = nonce.flatMap(proof).map { ["x-ccs-bar-token": $0] }
+      let http = HTTPURLResponse(
+        url: request.url!, statusCode: 200, httpVersion: nil, headerFields: headers)!
+      return (Data(), http)
+    }
+  }
+
+  let valid = AuthTransport(proof: probeProof)
+  let accepted = await BarServerProbe(transport: valid, authToken: probeAuthToken)
+    .findLiveServer(discovery: BarDiscovery(baseUrl: "http://127.0.0.1:3000", port: 3000, authMode: "loopback"))
+  check(valid.nonce?.count == 32, "probe auth: nonce header sent")
+  check(accepted != nil, "probe auth: valid proof accepted")
+
+  let missing = AuthTransport(proof: { _ in nil })
+  let missingResult = await BarServerProbe(transport: missing, authToken: probeAuthToken)
+    .findLiveServer(discovery: nil)
+  check(missingResult == nil, "probe auth: missing proof rejected")
+
+  let invalid = AuthTransport(proof: { _ in String(repeating: "0", count: 64) })
+  let invalidResult = await BarServerProbe(transport: invalid, authToken: probeAuthToken)
+    .findLiveServer(discovery: nil)
+  check(invalidResult == nil, "probe auth: invalid proof rejected")
 }
 
 // (BarUpdateChecker) Semver comparison drives the in-app "Update available"

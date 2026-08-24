@@ -299,42 +299,17 @@ async function defaultDownloadAndExtract(
       );
     }
 
-    // Fix #14: zip-slip guard — inspect entries before extraction.
-    // `unzip -l` lists entries in a machine-readable format; we scan for ".." or
-    // absolute paths that would escape the destination directory.
+    // Inspect every archive entry, including directories, before extraction.
     try {
-      const { stdout: listing } = await execFileAsync('unzip', ['-l', tmpZip]);
-      const lines = listing.split('\n');
-      for (const line of lines) {
-        // Entry lines look like: "  <size>  <date> <time>  <path>"
-        // We extract the path from the last whitespace-delimited field.
-        const match = /^\s+\d+\s+[\d-]+\s+[\d:]+\s+(.+)$/.exec(line);
-        if (!match || !match[1]) continue;
-        const entryPath = match[1].trim();
-        if (!entryPath || entryPath.endsWith('/')) continue; // skip directory entries
-
-        // Reject absolute paths and paths with traversal components
-        if (path.isAbsolute(entryPath) || entryPath.includes('..')) {
-          try {
-            fs.unlinkSync(tmpZip);
-          } catch {
-            /* ignore */
-          }
-          throw new Error(
-            `Zip-slip detected: archive entry "${entryPath}" contains a path traversal ` +
-              `component. Refusing to extract.`
-          );
-        }
-      }
+      const { stdout: listing } = await execFileAsync('unzip', ['-Z1', tmpZip]);
+      validateArchiveListing(listing);
     } catch (err) {
-      // If the guard itself throws (e.g. zip-slip detected above), propagate it.
-      // If it's a system error (unzip not available), let extraction proceed and
-      // surface the issue then.
-      if ((err as Error).message?.includes('Zip-slip')) throw err;
-      // Warn but continue — extraction will likely also fail if unzip is missing
-      console.error(
-        `[!] Zip entry scan failed (will attempt extraction): ${(err as Error).message}`
-      );
+      try {
+        fs.unlinkSync(tmpZip);
+      } catch {
+        /* ignore */
+      }
+      throw new Error(`Archive listing failed: ${(err as Error).message}`);
     }
 
     // Extract the zip into dest
@@ -348,6 +323,24 @@ async function defaultDownloadAndExtract(
     }
 
     break;
+  }
+}
+
+export function validateArchiveListing(listing: string | null): void {
+  if (listing === null) throw new Error('Archive listing failed');
+  for (const rawEntry of listing.split(/\r?\n/)) {
+    const entryPath = rawEntry.trim();
+    if (!entryPath) continue;
+    const normalized = entryPath.replace(/\\/g, '/');
+    if (
+      normalized.startsWith('/') ||
+      /^[A-Za-z]:\//.test(normalized) ||
+      normalized.split('/').includes('..')
+    ) {
+      throw new Error(
+        `Zip-slip detected: archive entry "${entryPath}" contains a path traversal component. Refusing to extract.`
+      );
+    }
   }
 }
 
@@ -545,6 +538,7 @@ export async function handleBarInstall(
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Failed to fetch release asset: ${msg}`);
     console.error('[i] Check your network connection and try again.');
+    process.exitCode = 1;
     return;
   }
 
@@ -562,6 +556,7 @@ export async function handleBarInstall(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Could not create staging directory in ${appsDir}: ${msg}`);
+    process.exitCode = 1;
     return;
   }
 
@@ -580,6 +575,7 @@ export async function handleBarInstall(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Download or extraction failed: ${msg}`);
+    process.exitCode = 1;
     cleanupStaging();
     return;
   }
@@ -598,6 +594,7 @@ export async function handleBarInstall(
     const found = extracted.length > 0 ? extracted.join(', ') : '(none)';
     console.error(`[X] Extraction succeeded but "${BAR_APP_NAME}" was not found in staging.`);
     console.error(`[i] Files found in staging: ${found}`);
+    process.exitCode = 1;
     cleanupStaging();
     return;
   }
@@ -644,6 +641,16 @@ export async function handleBarInstall(
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[X] Could not remove the existing CCS Bar.app: ${msg}`);
       console.error('[i] Close any running instance and try again.');
+      if (hasBackup) {
+        try {
+          fs.rmSync(appPath, { recursive: true, force: true });
+          renamePath(backupPath, appPath);
+        } catch (restoreErr) {
+          const restoreMsg = restoreErr instanceof Error ? restoreErr.message : String(restoreErr);
+          console.error(`[X] Could not restore the previous CCS Bar.app: ${restoreMsg}`);
+        }
+      }
+      process.exitCode = 1;
       cleanupStaging();
       return;
     }

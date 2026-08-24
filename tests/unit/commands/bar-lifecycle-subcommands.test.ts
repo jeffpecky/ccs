@@ -436,6 +436,7 @@ describe('status: running state reporting', () => {
       getCcsDir: () => ccsDir,
       readPidFile: () => processRecord(12345),
       isProcessAlive: () => true,
+      getProcessBirthIdentity: () => 'test-birth',
       probeServer: async () => true,
       readBarJsonBaseUrl: () => 'http://127.0.0.1:3000',
     });
@@ -505,12 +506,32 @@ describe('status: running state reporting', () => {
       getCcsDir: () => ccsDir,
       readPidFile: () => processRecord(12345),
       isProcessAlive: () => true,
+      getProcessBirthIdentity: () => 'test-birth',
       probeServer: async () => false,
       readBarJsonBaseUrl: () => 'http://127.0.0.1:3000',
     });
 
     expect(allOutput()).toMatch(/alive|running/i);
     expect(allOutput()).toMatch(/probe failed|starting up|not reachable/i);
+  });
+
+  it('refuses to report running when PID birth identity changed', async () => {
+    const ccsDir = path.join(tempHome, '.ccs');
+    const { handleBarStatus } = await loadStatusSubcommand();
+
+    await handleBarStatus([], {
+      getCcsDir: () => ccsDir,
+      readPidFile: () => processRecord(12345, 'recorded-birth'),
+      isProcessAlive: () => true,
+      getProcessBirthIdentity: () => 'replacement-birth',
+      probeServer: async () => {
+        throw new Error('identity mismatch must stop before HTTP probe');
+      },
+      readBarJsonBaseUrl: () => 'http://127.0.0.1:3000',
+    });
+
+    expect(allOutput()).toMatch(/identity.*mismatch|different process/i);
+    expect(allOutput()).not.toMatch(/\[OK\].*running/i);
   });
 });
 

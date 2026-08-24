@@ -1468,6 +1468,17 @@ describe('bar install: zip-slip guard (fix #14)', () => {
     'https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/CCS-Bar.app.zip';
   const FAKE_VERSION = '1.0.0';
 
+  it('validates directory entries and aborts when archive listing fails', async () => {
+    const { validateArchiveListing } = await loadInstallSubcommand();
+
+    expect(() =>
+      validateArchiveListing(
+        '        0  2026-08-24 00:00   CCS Bar.app/Contents/../../../escaped-directory/'
+      )
+    ).toThrow(/Zip-slip/);
+    expect(() => validateArchiveListing(null)).toThrow(/listing failed/i);
+  });
+
   it('rejects download when downloadAndExtract detects a zip-slip entry', async () => {
     const { handleBarInstall } = await loadInstallSubcommand();
 
@@ -2958,6 +2969,29 @@ describe('bar install: stage-then-swap safety (Data Loss finding)', () => {
 
     const allOutput = consoleOutput.join('\n');
     expect(allOutput).toMatch(/\[X\].*Could not remove.*CCS Bar\.app/);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('restores backup when removal partially deletes existing app before failing', async () => {
+    const appsDir = path.join(tempHome, 'Applications');
+    const appPath = path.join(appsDir, 'CCS Bar.app');
+    fs.mkdirSync(appPath, { recursive: true });
+    fs.writeFileSync(path.join(appPath, 'sentinel'), 'old-install');
+    const { handleBarInstall } = await loadInstallSubcommand();
+
+    await handleBarInstall([], {
+      ...baseDeps(appsDir),
+      downloadAndExtract: async (_url: string, dest: string) => {
+        fs.mkdirSync(path.join(dest, 'CCS Bar.app'), { recursive: true });
+      },
+      removeExistingApp: (target: string) => {
+        fs.rmSync(path.join(target, 'sentinel'));
+        throw new Error('partial removal');
+      },
+    });
+
+    expect(fs.readFileSync(path.join(appPath, 'sentinel'), 'utf8')).toBe('old-install');
+    expect(process.exitCode).toBe(1);
   });
 
   it('restores the prior app when final staged rename fails', async () => {

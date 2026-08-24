@@ -56,6 +56,10 @@ jobs:
         working-directory: macos-bar
         run: ./Scripts/package_app.sh "${{ steps.ver.outputs.version }}"
 
+      - name: Run CCS Bar checks
+        working-directory: macos-bar
+        run: swift run ccs-bar-check
+
       - name: Publish to ccs-bar-latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -63,6 +67,9 @@ jobs:
         run: |
           # gh lives in Homebrew on the self-hosted runner; ensure it is on PATH.
           export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+          if ! gh release view ccs-bar-latest --repo jeffpecky/ccs >/dev/null 2>&1; then
+            gh release create ccs-bar-latest --repo jeffpecky/ccs --target "$GITHUB_SHA" --title "CCS Bar v${VERSION}" --notes "CCS Bar floating release"
+          fi
           gh release upload ccs-bar-latest macos-bar/dist/CCS-Bar.app.zip --repo jeffpecky/ccs --clobber
           printf '%s\n' "${VERSION}" > version.txt
           gh release upload ccs-bar-latest version.txt --repo jeffpecky/ccs --clobber

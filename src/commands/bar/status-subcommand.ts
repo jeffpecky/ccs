@@ -8,7 +8,11 @@
 import * as fs from 'fs';
 import { getCcsDir } from '../../config/config-loader-facade';
 import { getBarJsonPath, getServerPidPath } from './bar-paths';
-import { parseBarServerProcessRecord, parseLegacyServerPid } from './bar-process-control';
+import {
+  getProcessBirthIdentity,
+  parseBarServerProcessRecord,
+  parseLegacyServerPid,
+} from './bar-process-control';
 
 // ---------------------------------------------------------------------------
 // Types — injectable deps
@@ -28,6 +32,7 @@ export interface StatusDeps {
    * Returns true when alive, false otherwise.
    */
   isProcessAlive: (pid: number) => boolean;
+  getProcessBirthIdentity: (pid: number) => string | null;
   /**
    * Probe whether the server is reachable at GET {baseUrl}/api/bar/summary.
    * Returns true on HTTP 200, false otherwise. Never throws.
@@ -103,6 +108,7 @@ export async function handleBarStatus(
   const ccsDir = (deps.getCcsDir ?? defaultGetCcsDir)();
   const readPidFile = deps.readPidFile ?? defaultReadPidFile;
   const isProcessAlive = deps.isProcessAlive ?? defaultIsProcessAlive;
+  const readProcessBirthIdentity = deps.getProcessBirthIdentity ?? getProcessBirthIdentity;
   const probeServer = deps.probeServer ?? defaultProbeServer;
   const readBarJsonBaseUrl = deps.readBarJsonBaseUrl ?? defaultReadBarJsonBaseUrl;
 
@@ -130,13 +136,19 @@ export async function handleBarStatus(
     console.log(`[!] CCS Bar server: server.pid is invalid ("${pidRaw}")`);
     return;
   }
-  const { pid } = processRecord;
+  const { pid, birthIdentity } = processRecord;
 
   // 2. Check process liveness.
   const alive = isProcessAlive(pid);
   if (!alive) {
     console.log(`[!] CCS Bar server: PID ${pid} is no longer running (stale server.pid)`);
     console.log('[i] Run `ccs bar stop` to clean up, then `ccs bar` to restart.');
+    return;
+  }
+
+  if (readProcessBirthIdentity(pid) !== birthIdentity) {
+    console.log(`[!] CCS Bar server: PID ${pid} belongs to a different process (birth identity mismatch)`);
+    console.log('[i] Run `ccs bar stop` to preserve and inspect recovery state.');
     return;
   }
 

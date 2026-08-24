@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 // MARK: - BarLaunchDescriptor (written by ccs bar install / ccs bar, decoded by the Swift app)
 
@@ -48,7 +49,7 @@ public struct BarLaunchDescriptor: Codable, Sendable {
 ///   1. bar.json port (if available)
 ///   2. 3000, 3001, 3002, 8000, 8080
 ///   Each port is tried on 127.0.0.1 then ::1.
-///   Liveness check: GET /api/bar/summary -> 200.
+///   Liveness check: GET /api/bar/summary -> 200 with authenticated nonce proof.
 ///
 /// The transport is injectable so the check harness can test ordering without
 /// a live server.
@@ -57,9 +58,16 @@ public struct BarServerProbe: Sendable {
   static let fallbackPorts = [3000, 3001, 3002, 8000, 8080]
 
   private let transport: HTTPTransport
+  private let authToken: String?
 
   public init(transport: HTTPTransport = URLSessionTransport()) {
     self.transport = transport
+    self.authToken = Self.loadAuthToken()
+  }
+
+  public init(transport: HTTPTransport, authToken: String?) {
+    self.transport = transport
+    self.authToken = authToken
   }
 
   /// Probe for a live CCS server. Returns the base URL of the first responding
@@ -107,14 +115,51 @@ public struct BarServerProbe: Sendable {
     return nil
   }
 
-  /// Returns true if GET {baseURL}/api/bar/summary responds with HTTP 200.
+  private static func loadAuthToken(home: String = NSHomeDirectory()) -> String? {
+    let ccsDir = ProcessInfo.processInfo.environment["CCS_HOME"] ??
+      URL(fileURLWithPath: home).appendingPathComponent(".ccs").path
+    let tokenPath = URL(fileURLWithPath: ccsDir).appendingPathComponent("bar/.auth-token")
+    guard
+      let token = try? String(contentsOf: tokenPath, encoding: .utf8)
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+      token.range(of: "^[a-fA-F0-9]{64}$", options: .regularExpression) != nil
+    else { return nil }
+    return token
+  }
+
+  private static func hexData(_ value: String) -> Data? {
+    guard value.count == 64,
+      value.range(of: "^[a-fA-F0-9]{64}$", options: .regularExpression) != nil
+    else { return nil }
+    var data = Data()
+    var index = value.startIndex
+    while index < value.endIndex {
+      let next = value.index(index, offsetBy: 2)
+      guard let byte = UInt8(value[index..<next], radix: 16) else { return nil }
+      data.append(byte)
+      index = next
+    }
+    return data
+  }
+
+  /// Returns true only when HTTP 200 includes HMAC-SHA256(token, nonce).
   private func isLive(baseURL: URL) async -> Bool {
+    guard let authToken else { return false }
+    let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
     let url = baseURL.appendingPathComponent("api/bar/summary")
     var req = URLRequest(url: url)
     req.timeoutInterval = 2.0
+    req.setValue(nonce, forHTTPHeaderField: "x-ccs-bar-nonce")
     do {
       let (_, http) = try await transport.send(req)
-      return http.statusCode == 200
+      guard http.statusCode == 200,
+        let proof = http.value(forHTTPHeaderField: "x-ccs-bar-token"),
+        let proofData = Self.hexData(proof)
+      else { return false }
+      return HMAC<SHA256>.isValidAuthenticationCode(
+        proofData,
+        authenticating: Data(nonce.utf8),
+        using: SymmetricKey(data: Data(authToken.utf8)))
     } catch {
       return false
     }
