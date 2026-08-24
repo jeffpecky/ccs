@@ -258,6 +258,35 @@ public sealed class ViewModelTests
     }
 
     [TestMethod]
+    public async Task ViewModel_SerializesRefreshAndLatestRequestWins()
+    {
+        var client = new ControlledBarDataClient(); var connector = new FakeConnector(client); var vm = new BarViewModel(connector, new MemoryBarSettings(), new FakeClock());
+        var first = vm.ReconnectAndLoadAsync(false); await client.Started.Task;
+        var second = vm.ForceRefreshAsync(); client.Release.TrySetResult();
+        await Task.WhenAll(first, second);
+        Assert.AreEqual(1, client.MaxConcurrent);
+        Assert.AreEqual(1, client.ForcedLoads);
+    }
+
+    [TestMethod]
+    public async Task ViewModel_RetryDoesNotLaunchButStartDoes()
+    {
+        var connector = new FakeConnector(null); var vm = new BarViewModel(connector, new MemoryBarSettings(), new FakeClock());
+        await vm.RetryAsync(); await vm.StartAsync();
+        CollectionAssert.AreEqual(new[] { false, true }, connector.Launches.ToArray());
+    }
+
+    [TestMethod]
+    public async Task ViewModel_DeliversOnlyNewAlertsAndStopsDeterministically()
+    {
+        var settings = new MemoryBarSettings { Alerts = new(QuotaLevelsValue: [50]) }; var notifier = new RecordingNotifier();
+        var client = new FakeBarDataClient { Rows = [Row with { QuotaPercentage = 40, NextReset = "2026-08-25T00:00:00Z" }], Analytics = Analytics };
+        var vm = new BarViewModel(new FakeConnector(client), settings, new FakeClock(), notifier: notifier);
+        await vm.ReconnectAndLoadAsync(false); await vm.LoadAsync(false); await vm.DisposeAsync();
+        Assert.AreEqual(1, notifier.Delivered.Count);
+    }
+
+    [TestMethod]
     public async Task ViewModel_DebouncesOpenRefreshButForceRefreshNeverDebounces()
     {
         var clock = new FakeClock(); var client = new FakeBarDataClient { Rows = [Row], Analytics = Analytics };
@@ -319,10 +348,19 @@ public sealed class ViewModelTests
         Assert.AreEqual("#5B63D9", BarThemePalette.Dark.Subscription);
         Assert.AreEqual("#F5F5F7", BarThemePalette.Light.WindowSurface);
     }
+
+    [TestMethod]
+    public void Formatting_ProvidesSubscriptionTagsAndLastActiveFallback()
+    {
+        var baseRow = Row with { Provider = "claude-code", Surface = "ccsx", Profile = "default", IsSubscription = true };
+        Assert.AreEqual("default", BarRows.AccountTag(baseRow));
+        Assert.AreEqual("ccsx", BarRows.AccountTag(baseRow with { Profile = "work" }));
+        Assert.AreEqual("Last active yesterday", BarFormatting.LastActiveLabel("2026-08-23T00:00:00Z", null, DateTimeOffset.Parse("2026-08-24T12:00:00Z")));
+    }
 }
 
 sealed class FakeClock : IBarClock { public DateTimeOffset Now { get; set; } = DateTimeOffset.Parse("2026-08-24T00:00:00Z"); }
-sealed class FakeConnector(IBarDataClient? client) : IBarConnector { public IBarDataClient? Client { get; set; } = client; public Task<IBarDataClient?> ConnectAsync(CancellationToken cancellationToken) => Task.FromResult(Client); }
+sealed class FakeConnector(IBarDataClient? client) : IBarConnector { public IBarDataClient? Client { get; set; } = client; public List<bool> Launches { get; } = []; public Task<IBarDataClient?> ConnectAsync(bool launch, CancellationToken cancellationToken) { Launches.Add(launch); return Task.FromResult(Client); } }
 sealed class FakeBarDataClient : IBarDataClient
 {
     public IReadOnlyList<BarSummaryRow> Rows { get; set; } = []; public BarAnalytics? Analytics { get; set; } public Exception? SummaryError { get; set; } public int ForcedLoads { get; private set; }
@@ -330,6 +368,16 @@ sealed class FakeBarDataClient : IBarDataClient
     public Task<BarAnalytics?> AnalyticsAsync(CancellationToken ct) => Task.FromResult(Analytics);
     public Task PauseAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task ResumeAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task SoloAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task SetDefaultAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task TierLockAsync(BarSummaryRow row, string? tier, CancellationToken ct) => Task.CompletedTask;
 }
+
+sealed class ControlledBarDataClient : IBarDataClient
+{
+    int concurrent; public int MaxConcurrent { get; private set; } public int ForcedLoads { get; private set; } public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously); public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public async Task<IReadOnlyList<BarSummaryRow>> SummaryAsync(bool force, CancellationToken ct) { if (force) ForcedLoads++; var current = Interlocked.Increment(ref concurrent); MaxConcurrent = Math.Max(MaxConcurrent, current); Started.TrySetResult(); try { await Release.Task.WaitAsync(ct); return []; } finally { Interlocked.Decrement(ref concurrent); } }
+    public Task<BarAnalytics?> AnalyticsAsync(CancellationToken ct) => Task.FromResult<BarAnalytics?>(null);
+    public Task PauseAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task ResumeAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task SoloAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task SetDefaultAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task TierLockAsync(BarSummaryRow row, string? tier, CancellationToken ct) => Task.CompletedTask;
+}
+
+sealed class RecordingNotifier : IBarNotifier { public List<BarNotification> Delivered { get; } = []; public void Deliver(IReadOnlyList<BarNotification> notifications) => Delivered.AddRange(notifications); }
 
 sealed class MemoryBarSettings : IBarSettings
 {

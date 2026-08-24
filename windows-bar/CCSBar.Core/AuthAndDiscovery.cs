@@ -102,10 +102,11 @@ public sealed class BarServerProbe
     }
     public async Task<Uri?> FindLiveServerAsync(BarDiscovery? discovery, CancellationToken cancellationToken = default)
     {
-        var discoveryPort = discovery?.IsSafe(out _) == true ? new[] { discovery.Port } : [];
-        foreach (var port in discoveryPort.Concat(FallbackPorts).Distinct())
-            foreach (var host in new[] { "127.0.0.1", "[::1]" })
-                if (await IsLiveAsync(new Uri($"http://{host}:{port}"), cancellationToken)) return new Uri($"http://{host}:{port}");
+        if (discovery?.ResolvedUri is { } discovered && await IsLiveAsync(discovered, cancellationToken)) return discovered;
+        var candidates = FallbackPorts.Where(port => port != discovery?.Port).SelectMany(port => new[] { new Uri($"http://127.0.0.1:{port}"), new Uri($"http://[::1]:{port}") }).ToArray();
+        using var found = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); using var gate = new SemaphoreSlim(4);
+        var tasks = candidates.Select(async uri => { await gate.WaitAsync(found.Token); try { return await IsLiveAsync(uri, found.Token) ? uri : null; } catch (OperationCanceledException) when (found.IsCancellationRequested && !cancellationToken.IsCancellationRequested) { return null; } finally { gate.Release(); } }).ToArray();
+        while (tasks.Length > 0) { var complete = await Task.WhenAny(tasks); tasks = tasks.Where(task => task != complete).ToArray(); if (await complete is { } live) { found.Cancel(); return live; } }
         return null;
     }
     async Task<bool> IsLiveAsync(Uri baseUri, CancellationToken cancellationToken)

@@ -51,6 +51,7 @@ public static class BarFormatting
     public static string? LastActiveLabel(string? iso, int? daysSince, DateTimeOffset now)
     {
         if (!DateTimeOffset.TryParse(iso, out var date)) return null;
+        daysSince ??= Math.Max(0, (now.Date - date.ToOffset(now.Offset).Date).Days);
         if (daysSince <= 0) return "Last active today";
         if (daysSince == 1) return "Last active yesterday";
         return $"Last active {date.ToString("MMM d", CultureInfo.InvariantCulture)}";
