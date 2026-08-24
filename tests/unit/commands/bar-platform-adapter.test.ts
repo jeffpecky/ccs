@@ -110,6 +110,26 @@ describe('bar platform adapter', () => {
     expect(fs.readFileSync(path.join(installDir, 'CCS Bar.exe'), 'utf8')).toBe('old');
   });
 
+  test('first install registration failure removes every created artifact', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-win-bar-first-fail-'));
+    const paths = { installDir: path.join(root, 'CCS Bar'), exe: path.join(root, 'CCS Bar', 'CCS Bar.exe'), startMenuShortcut: path.join(root, 'start.lnk'), startupShortcut: path.join(root, 'startup.lnk'), versionFile: path.join(root, '.version'), launchJson: path.join(root, 'launch.json') };
+    await installWindowsBar(['--no-launch'], {
+      paths,
+      fetchAsset: async () => ({ downloadUrl: 'https://github.com/example.zip', sha256: 'a'.repeat(64) }),
+      stageAsset: async (_url, staging) => { const app = path.join(staging, 'CCS Bar'); fs.mkdirSync(app, { recursive: true }); fs.writeFileSync(path.join(app, 'CCS Bar.exe'), 'new'); },
+      appRunning: async () => false,
+      registerShortcut: (shortcut) => { fs.writeFileSync(shortcut, 'link'); throw new Error('shortcut failed'); },
+      writeLaunchDescriptor: (file) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'descriptor'); },
+      launch: async () => {}, version: '1.2.3',
+    });
+    for (const artifact of [paths.installDir, paths.versionFile, paths.launchJson, paths.startMenuShortcut, paths.startupShortcut]) expect(fs.existsSync(artifact)).toBe(false);
+  });
+
+  test('platform adapter contains no Bun globals', () => {
+    const source = fs.readFileSync(path.join(import.meta.dir, '../../../src/commands/bar/platform-adapter.ts'), 'utf8');
+    expect(source).not.toMatch(/\bBun\b/);
+  });
+
   test('uninstall removes app and registrations but preserves CCS data', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-win-bar-uninstall-'));
     const paths = {

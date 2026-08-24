@@ -11,6 +11,7 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <AssemblyName>CCS Bar</AssemblyName>
+    <ApplicationIcon>..\..\ui\public\favicon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\CCSBar.Core\CCSBar.Core.csproj" />

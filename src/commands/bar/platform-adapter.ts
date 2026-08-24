@@ -2,13 +2,15 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { spawn } from 'child_process';
+import { execFile, execFileSync, spawn } from 'child_process';
+import { promisify } from 'util';
 import { getCcsDir } from '../../config/config-loader-facade';
 import { createBarLaunchDescriptor } from './launch-descriptor';
 
 const RELEASE_TAG = 'ccs-bar-latest';
 const REPOSITORY = 'jeffpecky/ccs';
 const WINDOWS_ASSET = 'CCS-Bar-windows-x64.zip';
+const execFileAsync = promisify(execFile);
 
 export interface WindowsBarPaths {
   installDir: string;
@@ -97,16 +99,16 @@ async function stageWindowsAsset(url: string, staging: string, expectedSha256: s
   if (actual !== expectedSha256.toLowerCase()) throw new Error('CCS Bar archive SHA-256 mismatch.');
   const zip = path.join(staging, WINDOWS_ASSET);
   fs.writeFileSync(zip, archive);
-  const child = Bun.spawn(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force', zip, staging], { stdout: 'pipe', stderr: 'pipe' });
-  if (await child.exited !== 0) throw new Error(`Archive extraction failed: ${await new Response(child.stderr).text()}`);
+  try { await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force', zip, staging]); }
+  catch (error) { throw new Error(`Archive extraction failed: ${error instanceof Error ? error.message : String(error)}`); }
   fs.rmSync(zip, { force: true });
 }
 
 function registerWindowsShortcut(shortcut: string, target: string): void {
   fs.mkdirSync(path.dirname(shortcut), { recursive: true });
   const script = '$w=New-Object -ComObject WScript.Shell;$s=$w.CreateShortcut($args[0]);$s.TargetPath=$args[1];$s.WorkingDirectory=(Split-Path $args[1]);$s.Save()';
-  const result = Bun.spawnSync(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script, shortcut, target]);
-  if (result.exitCode !== 0) throw new Error(`Shortcut registration failed: ${result.stderr.toString()}`);
+  try { execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script, shortcut, target], { stdio: 'pipe' }); }
+  catch (error) { throw new Error(`Shortcut registration failed: ${error instanceof Error ? error.message : String(error)}`); }
 }
 
 function writeWindowsLaunchDescriptor(file: string): void {
@@ -115,9 +117,12 @@ function writeWindowsLaunchDescriptor(file: string): void {
 }
 
 async function isWindowsBarRunning(): Promise<boolean> {
-  const result = Bun.spawnSync(['tasklist.exe', '/FI', 'IMAGENAME eq CCS Bar.exe', '/NH']);
-  return result.exitCode === 0 && result.stdout.toString().toLowerCase().includes('ccs bar.exe');
+  const script = '(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $args[0]} | Select-Object -First 1).ProcessId';
+  const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script, getWindowsBarPaths().exe]);
+  return /^\d+$/m.test(stdout.trim());
 }
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export async function installWindowsBar(args: string[], supplied: Partial<WindowsInstallDeps> = {}): Promise<void> {
   const paths = supplied.paths ?? getWindowsBarPaths();
@@ -137,6 +142,8 @@ export async function installWindowsBar(args: string[], supplied: Partial<Window
   const staging = fs.mkdtempSync(path.join(parent, '.ccs-bar-staging-'));
   const stagedApp = path.join(staging, 'CCS Bar');
   const backup = `${paths.installDir}.previous-${process.pid}`;
+  const registrations = [paths.versionFile, paths.launchJson, paths.startMenuShortcut, paths.startupShortcut];
+  const priorRegistrations = new Map(registrations.map((file) => [file, fs.existsSync(file) ? fs.readFileSync(file) : null]));
   let swapped = false;
   try {
     const asset = await deps.fetchAsset();
@@ -146,7 +153,7 @@ export async function installWindowsBar(args: string[], supplied: Partial<Window
       const deadline = Date.now() + 15_000;
       while (await deps.appRunning()) {
         if (Date.now() >= deadline) throw new Error('CCS Bar is still running. Quit it and retry update.');
-        await Bun.sleep(300);
+        await sleep(300);
       }
     }
     if (fs.existsSync(backup)) fs.rmSync(backup, { recursive: true, force: true });
@@ -171,9 +178,14 @@ export async function installWindowsBar(args: string[], supplied: Partial<Window
     if (args.includes('--launch')) await deps.launch();
     else if (!args.includes('--no-launch')) console.log('[i] Run `ccs bar` to launch.');
   } catch (error) {
-    if (swapped && fs.existsSync(backup)) {
+    if (swapped) {
       fs.rmSync(paths.installDir, { recursive: true, force: true });
-      deps.rename(backup, paths.installDir);
+      if (fs.existsSync(backup)) deps.rename(backup, paths.installDir);
+      for (const artifact of registrations) {
+        fs.rmSync(artifact, { force: true });
+        const prior = priorRegistrations.get(artifact);
+        if (prior) { fs.mkdirSync(path.dirname(artifact), { recursive: true }); fs.writeFileSync(artifact, prior); }
+      }
     }
     console.error(`[X] CCS Bar install failed: ${error instanceof Error ? error.message : String(error)}`);
     if (Object.keys(supplied).length === 0) process.exitCode = 1;
@@ -188,7 +200,10 @@ export async function uninstallWindowsBar(
 ): Promise<void> {
   const paths = supplied.paths ?? getWindowsBarPaths();
   try {
-    await (supplied.stopApp ?? (async () => { Bun.spawnSync(['taskkill.exe', '/IM', 'CCS Bar.exe', '/T']); }))();
+    await (supplied.stopApp ?? (async () => {
+      const script = 'Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $args[0]} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }';
+      execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script, paths.exe], { stdio: 'pipe' });
+    }))();
     fs.rmSync(paths.installDir, { recursive: true, force: true });
     fs.rmSync(paths.startMenuShortcut, { force: true });
     fs.rmSync(paths.startupShortcut, { force: true });

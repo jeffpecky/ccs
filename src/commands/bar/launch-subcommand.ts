@@ -29,6 +29,7 @@ import {
   BAR_AUTH_NONCE_HEADER,
   BAR_AUTH_TOKEN_HEADER,
   createBarAuthNonce,
+  createBarAuthProof,
   isMatchingBarAuthProof,
   getOrCreateBarAuthToken,
 } from '../../utils/bar-auth-token';
@@ -176,6 +177,7 @@ export async function defaultWaitForServerLive(baseUrl: string): Promise<void> {
   async function probe(): Promise<{ statusCode: number | null; tokenMatched: boolean }> {
     const url = new URL(`${baseUrl}/api/bar/summary`);
     const nonce = createBarAuthNonce();
+    const requestProof = createBarAuthProof(token, 'request', 'GET', url.pathname + url.search, nonce);
     return new Promise((resolve) => {
       let rawResponse = '';
       let settled = false;
@@ -190,7 +192,7 @@ export async function defaultWaitForServerLive(baseUrl: string): Promise<void> {
           new RegExp(`${BAR_AUTH_TOKEN_HEADER}:\\s*([^\\r\\n]+)`, 'i')
         );
         const proof = echoMatch ? echoMatch[1].trim() : '';
-        resolve({ statusCode, tokenMatched: isMatchingBarAuthProof(token, nonce, proof) });
+        resolve({ statusCode, tokenMatched: isMatchingBarAuthProof(token, 'response', 'GET', url.pathname + url.search, nonce, proof) });
       };
       const socket = net.connect(
         { host: url.hostname.replace(/^\[|\]$/g, ''), port: Number(url.port) },
@@ -198,7 +200,7 @@ export async function defaultWaitForServerLive(baseUrl: string): Promise<void> {
           // Do NOT include the token in the request; only send a fresh nonce so
           // the server can prove it knows the token without disclosing it.
           socket.write(
-            `GET ${url.pathname}${url.search} HTTP/1.1\r\nHost: ${url.host}\r\n${BAR_AUTH_NONCE_HEADER}: ${nonce}\r\nConnection: close\r\n\r\n`
+            `GET ${url.pathname}${url.search} HTTP/1.1\r\nHost: ${url.host}\r\n${BAR_AUTH_NONCE_HEADER}: ${nonce}\r\n${BAR_AUTH_TOKEN_HEADER}: ${requestProof}\r\nConnection: close\r\n\r\n`
           );
         }
       );
@@ -276,6 +278,7 @@ export async function handleBarLaunch(
   _args: string[],
   deps: Partial<LaunchDeps> = {}
 ): Promise<void> {
+  if (process.platform !== 'darwin' && process.platform !== 'win32' && Object.keys(deps).length === 0) throw new Error('CCS Bar supports macOS or Windows only.');
   const argError = validatePortArgs(_args);
   if (argError !== null) {
     console.error(`[X] ${argError}`);

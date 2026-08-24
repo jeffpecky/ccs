@@ -38,12 +38,31 @@ public sealed class AppServicesTests
         Assert.IsFalse(trust.IsTrustedFile(@"C:\Users\me\Desktop\ccs.js"));
     }
 
+    [TestMethod]
+    public void AppShutdown_UsesPostedDispatchAndUnsubscribesBeforeAwaitingWorkers()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "CCSBar.App", "App.xaml.cs"));
+        Assert.IsFalse(source.Contains("Dispatcher.Invoke"));
+        StringAssert.Contains(source, "PropertyChanged -=");
+        StringAssert.Contains(source, "BeginInvoke");
+    }
+
+    [TestMethod]
+    public void Executable_HasIconAndGlyphControlsHaveAutomationNames()
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..");
+        StringAssert.Contains(File.ReadAllText(Path.Combine(root, "CCSBar.App", "CCSBar.App.csproj")), "ApplicationIcon");
+        var xaml = File.ReadAllText(Path.Combine(root, "CCSBar.App", "MainWindow.xaml"));
+        StringAssert.Contains(xaml, "AutomationProperties.Name=\"Force refresh CCS data\"");
+    }
+
     sealed class FakePathSecurity : IWindowsPathSecurity
     {
         public HashSet<string> Reparse { get; } = new(StringComparer.OrdinalIgnoreCase);
         public bool FileExists(string path) => true;
         public bool DirectoryExists(string path) => true;
         public bool IsReparsePoint(string path) => Reparse.Contains(path);
+        public bool IsSafeExecutable(string path) => true;
         public string Canonicalize(string path) => Path.GetFullPath(path);
     }
 }

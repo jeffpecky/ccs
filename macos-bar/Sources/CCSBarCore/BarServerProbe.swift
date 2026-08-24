@@ -150,10 +150,7 @@ public struct BarServerProbe: Sendable {
     var req = URLRequest(url: url)
     req.timeoutInterval = 2.0
     req.setValue(nonce, forHTTPHeaderField: "x-ccs-bar-nonce")
-    let requestProof = HMAC<SHA256>.authenticationCode(
-      for: Data(nonce.utf8),
-      using: SymmetricKey(data: Data(authToken.utf8)))
-      .map { String(format: "%02x", $0) }.joined()
+    let requestProof = CCSBarClient.proof(authToken, "request", "GET", url, nonce)
     req.setValue(requestProof, forHTTPHeaderField: "x-ccs-bar-token")
     do {
       let (_, http) = try await transport.send(req)
@@ -161,10 +158,8 @@ public struct BarServerProbe: Sendable {
         let proof = http.value(forHTTPHeaderField: "x-ccs-bar-token"),
         let proofData = Self.hexData(proof)
       else { return false }
-      return HMAC<SHA256>.isValidAuthenticationCode(
-        proofData,
-        authenticating: Data(nonce.utf8),
-        using: SymmetricKey(data: Data(authToken.utf8)))
+      let expected = CCSBarClient.proof(authToken, "response", "GET", url, nonce)
+      return proofData == Self.hexData(expected)
     } catch {
       return false
     }

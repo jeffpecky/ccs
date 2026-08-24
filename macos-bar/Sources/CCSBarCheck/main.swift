@@ -27,8 +27,10 @@ struct RecordingTransport: HTTPTransport {
   let recorder: RequestRecorder
   func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
     recorder.lastRequest = request
+    let nonce = request.value(forHTTPHeaderField: "x-ccs-bar-nonce")!
+    let proof = CCSBarClient.proof(String(repeating: "a", count: 64), "response", request.httpMethod ?? "GET", request.url!, nonce)
     let http = HTTPURLResponse(
-      url: request.url!, statusCode: recorder.status, httpVersion: nil, headerFields: nil)!
+      url: request.url!, statusCode: recorder.status, httpVersion: nil, headerFields: ["x-ccs-bar-token": proof])!
     return (recorder.responseData, http)
   }
 }
@@ -266,10 +268,8 @@ func clientRequestIsSigned(_ request: URLRequest?) -> Bool {
     let nonce = request?.value(forHTTPHeaderField: "x-ccs-bar-nonce"),
     let proof = request?.value(forHTTPHeaderField: "x-ccs-bar-token")
   else { return false }
-  let expected = HMAC<SHA256>.authenticationCode(
-    for: Data(nonce.utf8),
-    using: SymmetricKey(data: Data(String(repeating: "a", count: 64).utf8)))
-    .map { String(format: "%02x", $0) }.joined()
+  guard let url = request?.url else { return false }
+  let expected = CCSBarClient.proof(String(repeating: "a", count: 64), "request", request?.httpMethod ?? "GET", url, nonce)
   return proof == expected
 }
 
@@ -1596,11 +1596,8 @@ do {
 
 let probeAuthToken = String(repeating: "a", count: 64)
 
-func probeProof(_ nonce: String) -> String {
-  let code = HMAC<SHA256>.authenticationCode(
-    for: Data(nonce.utf8),
-    using: SymmetricKey(data: Data(probeAuthToken.utf8)))
-  return code.map { String(format: "%02x", $0) }.joined()
+func probeProof(_ nonce: String, direction: String = "response", url: URL = URL(string: "http://127.0.0.1:3000/api/bar/summary")!) -> String {
+  CCSBarClient.proof(probeAuthToken, direction, "GET", url, nonce)
 }
 
 // Mock transport that returns 200 for exactly one (host, port) combination and
@@ -1622,7 +1619,7 @@ final class SelectiveTransport: HTTPTransport, @unchecked Sendable {
       let nonce = request.value(forHTTPHeaderField: "x-ccs-bar-nonce") ?? ""
       let http = HTTPURLResponse(
         url: request.url!, statusCode: 200, httpVersion: nil,
-        headerFields: ["x-ccs-bar-token": probeProof(nonce)])!
+        headerFields: ["x-ccs-bar-token": probeProof(nonce, url: request.url!)])!
       return (Data(), http)
     }
     // Simulate connection refused — throw so the probe moves on.
@@ -1743,18 +1740,18 @@ do {
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
       nonce = request.value(forHTTPHeaderField: "x-ccs-bar-nonce")
       requestProof = request.value(forHTTPHeaderField: "x-ccs-bar-token")
-      let headers = nonce.flatMap(proof).map { ["x-ccs-bar-token": $0] }
+      let headers = nonce.flatMap { proof($0) }.map { ["x-ccs-bar-token": $0] }
       let http = HTTPURLResponse(
         url: request.url!, statusCode: 200, httpVersion: nil, headerFields: headers)!
       return (Data(), http)
     }
   }
 
-  let valid = AuthTransport(proof: probeProof)
+  let valid = AuthTransport(proof: { probeProof($0) })
   let accepted = await BarServerProbe(transport: valid, authToken: probeAuthToken)
     .findLiveServer(discovery: BarDiscovery(baseUrl: "http://127.0.0.1:3000", port: 3000, authMode: "loopback"))
   check(valid.nonce?.count == 32, "probe auth: nonce header sent")
-  check(valid.requestProof == valid.nonce.map(probeProof), "probe auth: request proof sent")
+  check(valid.requestProof == valid.nonce.map { probeProof($0, direction: "request") }, "probe auth: request proof sent")
   check(accepted != nil, "probe auth: valid proof accepted")
 
   let missing = AuthTransport(proof: { _ in nil })

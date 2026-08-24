@@ -10,10 +10,15 @@ describe('Swift CCS Bar authenticated probe contract', () => {
       join(repoRoot, 'macos-bar/Sources/CCSBarCore/BarServerProbe.swift'),
       'utf8'
     );
+    const client = readFileSync(
+      join(repoRoot, 'macos-bar/Sources/CCSBarCore/CCSBarClient.swift'),
+      'utf8'
+    );
 
     expect(probe).toContain('x-ccs-bar-nonce');
     expect(probe).toContain('x-ccs-bar-token');
-    expect(probe).toContain('HMAC<SHA256>');
+    expect(probe).toContain('CCSBarClient.proof');
+    expect(client).toContain('HMAC<SHA256>');
     expect(probe).toContain('.auth-token');
     expect(probe).not.toMatch(/return http\.statusCode == 200/);
   });

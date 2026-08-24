@@ -15,6 +15,16 @@ public sealed class CoreTests
     const string AnalyticsJson = "{\"today\":{\"cost\":1,\"requests\":2},\"last7d\":{\"cost\":3,\"requests\":4},\"last30d\":{\"cost\":5,\"requests\":6},\"allTime\":{\"cost\":7,\"requests\":8},\"byDay\":[],\"topModels\":[],\"topModelsWindow\":\"30d\",\"lastActivityAt\":null,\"daysSinceLastActivity\":null,\"hasRecentData\":true,\"generatedAt\":\"now\"}";
 
     [TestMethod]
+    public void Auth_ProofsAreDirectionMethodAndPathBound()
+    {
+        var proof = BarAuth.Proof(Token, "request", "GET", "/api/bar/summary?b=2&a=1", "ab".PadRight(32, '0'));
+        Assert.IsTrue(BarAuth.Verify(Token, "request", "GET", "/api/bar/summary?a=1&b=2", "ab".PadRight(32, '0'), proof));
+        Assert.IsFalse(BarAuth.Verify(Token, "response", "GET", "/api/bar/summary?a=1&b=2", "ab".PadRight(32, '0'), proof));
+        Assert.IsFalse(BarAuth.Verify(Token, "request", "POST", "/api/bar/summary?a=1&b=2", "ab".PadRight(32, '0'), proof));
+        Assert.IsFalse(BarAuth.Verify(Token, "request", "GET", "/api/bar/analytics?a=1&b=2", "ab".PadRight(32, '0'), proof));
+    }
+
+    [TestMethod]
     public async Task Client_UsesBackendContractsAndAuthenticatesEveryRequest()
     {
         var handler = new RecordingHandler(request => AuthenticatedResponse(request, request.RequestUri!.AbsolutePath.EndsWith("analytics") ? AnalyticsJson : SummaryJson));
@@ -224,7 +234,7 @@ public sealed class CoreTests
 
     static QuotaWindowDetail Window(string key, double remaining, int minutes) => new(key, key, 100 - remaining, remaining, null, minutes);
     static BarSummaryRow Row(string id, double? quota = null, IReadOnlyList<QuotaWindowDetail>? windows = null, string? display = null, string? reset = null, bool paused = false, bool reauth = false) => new(id, "agy", display, null, paused, quota, quota is null ? "unsupported" : "ok", reset, false, null, null, "ok", false, null, reauth, null, null, false, windows, null);
-    static string ResponseProof(HttpRequestMessage request) => BarAuth.Proof(Token, request.Headers.GetValues(BarAuth.NonceHeader).Single());
+    static string ResponseProof(HttpRequestMessage request) => BarAuth.Proof(Token, "response", request.Method.Method, request.RequestUri!.PathAndQuery, request.Headers.GetValues(BarAuth.NonceHeader).Single());
     static HttpResponseMessage AuthenticatedResponse(HttpRequestMessage request, string content)
     {
         var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) };

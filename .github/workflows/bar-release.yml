@@ -32,8 +32,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build and publish CCS Bar
+  macos:
+    name: Build macOS CCS Bar
     if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, macos, ccs-bar]
     steps:
@@ -62,33 +62,10 @@ jobs:
         working-directory: macos-bar
         run: swift run ccs-bar-check
 
-      - name: Publish to ccs-bar-latest
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          # gh lives in Homebrew on the self-hosted runner; ensure it is on PATH.
-          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-          if ! gh release view ccs-bar-latest --repo jeffpecky/ccs >/dev/null 2>&1; then
-            gh release create ccs-bar-latest --repo jeffpecky/ccs --target "$GITHUB_SHA" --title "CCS Bar v${VERSION}" --notes "CCS Bar floating release"
-          fi
-          gh release upload ccs-bar-latest macos-bar/dist/CCS-Bar.app.zip --repo jeffpecky/ccs --clobber
-          printf '%s\n' "${VERSION}" > version.txt
-          gh release upload ccs-bar-latest version.txt --repo jeffpecky/ccs --clobber
-          echo "[OK] Published version.txt (${VERSION}) to ccs-bar-latest"
-          rm -f version.txt
-          notes="$(mktemp)"
-          cat > "$notes" <<NOTES
-          CCS Bar v${VERSION}
-
-          Install or update: ccs bar install
-          Ad-hoc signed: first launch may need right-click then Open.
-
-          Built automatically from main when macos-bar changes.
-          NOTES
-          gh release edit ccs-bar-latest --repo jeffpecky/ccs --target "$GITHUB_SHA" --title "CCS Bar v${VERSION}" --notes-file "$notes"
-          rm -f "$notes"
-          echo "[OK] Published CCS Bar v${VERSION} to ccs-bar-latest"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ccs-bar-macos
+          path: macos-bar/dist/CCS-Bar.app.zip
 
   windows:
     name: Build Windows CCS Bar
@@ -110,14 +87,25 @@ jobs:
           path: |
             windows-bar/dist/CCS-Bar-windows-x64.zip
             windows-bar/dist/CCS-Bar-windows-x64.zip.sha256
-      - name: Publish Windows assets to ccs-bar-latest
+  publish:
+    name: Publish complete CCS Bar release
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Stage metadata and publish atomically
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
         run: |
-          gh release view ccs-bar-latest --repo jeffpecky/ccs 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create ccs-bar-latest --repo jeffpecky/ccs --target $env:GITHUB_SHA --title 'CCS Bar' --notes 'CCS Bar floating release'
-            if ($LASTEXITCODE -ne 0) { gh release view ccs-bar-latest --repo jeffpecky/ccs | Out-Null }
-          }
-          gh release upload ccs-bar-latest windows-bar/dist/CCS-Bar-windows-x64.zip windows-bar/dist/CCS-Bar-windows-x64.zip.sha256 --repo jeffpecky/ccs --clobber
+          VERSION="$(tr -d '[:space:]' < macos-bar/VERSION)"
+          printf '{"version":"%s","sha":"%s","assets":["CCS-Bar.app.zip","CCS-Bar-windows-x64.zip","CCS-Bar-windows-x64.zip.sha256"]}\n' "$VERSION" "${{ github.sha }}" > artifacts/release-metadata.json
+          printf '%s\n' "$VERSION" > artifacts/version.txt
+          STAGE="ccs-bar-${{ github.sha }}"
+          gh release create "$STAGE" --repo jeffpecky/ccs --target "${{ github.sha }}" --title "CCS Bar v$VERSION" --notes "Staged complete platform release for ${{ github.sha }}"
+          gh release upload "$STAGE" artifacts/* --repo jeffpecky/ccs
+          gh release delete ccs-bar-latest --repo jeffpecky/ccs --yes --cleanup-tag || true
+          gh release edit "$STAGE" --repo jeffpecky/ccs --tag ccs-bar-latest --title "CCS Bar v$VERSION" --notes "Complete macOS and Windows release built from ${{ github.sha }}"

@@ -1,5 +1,5 @@
 param(
-    [string]$Version = (Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\VERSION') -Raw).Trim(),
+    [string]$Version = (Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\..\macos-bar\VERSION') -Raw).Trim(),
     [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
@@ -24,14 +24,15 @@ New-Item -ItemType Directory -Path $Package -Force | Out-Null
 & dotnet @arguments
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
 Copy-Item -LiteralPath (Join-Path $Publish 'CCS Bar.exe') -Destination $Package
-@{
+$manifest = @{
     name = 'CCS Bar'
     version = $Version
     runtime = 'win-x64'
     selfContained = $true
     executable = 'CCS Bar.exe'
     ccsRuntime = 'CCS CLI must be installed and resolvable as ccs.exe, ccs.cmd, or ccs on PATH. Bun and source checkout are not required by CCS Bar.'
-} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Package 'manifest.json') -Encoding utf8NoBOM
+} | ConvertTo-Json
+[IO.File]::WriteAllText((Join-Path $Package 'manifest.json'), $manifest, [Text.UTF8Encoding]::new($false))
 Compress-Archive -LiteralPath $Package -DestinationPath $Zip -Force
 $hash = (Get-FileHash -LiteralPath $Zip -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  CCS-Bar-windows-x64.zip" | Set-Content -LiteralPath $Checksum -Encoding ascii

@@ -20,9 +20,13 @@ import {
 import {
   BAR_AUTH_NONCE_HEADER,
   BAR_AUTH_TOKEN_HEADER,
+  BarAuthNonceCache,
+  createBarAuthProof,
   getOrCreateBarAuthToken,
   isMatchingBarAuthProof,
 } from '../../utils/bar-auth-token';
+
+const barMutationNonces = new BarAuthNonceCache();
 
 // Extend Express Request with session
 declare module 'express-session' {
@@ -169,11 +173,17 @@ export function barAuthMiddleware(req: Request, res: Response, next: NextFunctio
     res.status(401).json({ error: 'CCS Bar authentication required' });
     return;
   }
-  if (!nonce || !proof || !isMatchingBarAuthProof(getOrCreateBarAuthToken(), nonce, proof)) {
+  const requestPath = req.originalUrl;
+  if (!nonce || !proof || !isMatchingBarAuthProof(getOrCreateBarAuthToken(), 'request', req.method, requestPath, nonce, proof)) {
     res.status(403).json({ error: 'Invalid CCS Bar authentication proof' });
     return;
   }
+  if (isBarMutation && !barMutationNonces.consume(nonce)) {
+    res.status(409).json({ error: 'Replayed CCS Bar authentication nonce' });
+    return;
+  }
 
+  res.setHeader(BAR_AUTH_TOKEN_HEADER, createBarAuthProof(getOrCreateBarAuthToken(), 'response', req.method, requestPath, nonce));
   barAuthenticatedRequests.add(req);
   next();
 }

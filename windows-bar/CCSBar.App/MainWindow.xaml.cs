@@ -20,7 +20,9 @@ public partial class MainWindow : Window
 {
     readonly BarViewModel vm; readonly JsonBarSettings settings; bool quitArmed; SettingsWindow? settingsWindow;
     internal MainWindow(BarViewModel vm, JsonBarSettings settings)
-    { InitializeComponent(); this.vm = vm; this.settings = settings; VersionText.Text = $"v{CCSBar.App.VersionText.Value}"; vm.PropertyChanged += (_, _) => Dispatcher.Invoke(Render); Loaded += (_, _) => Render(); }
+    { InitializeComponent(); this.vm = vm; this.settings = settings; VersionText.Text = $"v{CCSBar.App.VersionText.Value}"; vm.PropertyChanged += ViewModelChanged; Loaded += (_, _) => Render(); }
+    void ViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Dispatcher.BeginInvoke(Render);
+    public void Detach() => vm.PropertyChanged -= ViewModelChanged;
     public void ShowAnchored(System.Drawing.Point cursor)
     {
         quitArmed = false; QuitButton.Content = "Power"; Render(); UpdateLayout();
@@ -30,13 +32,19 @@ public partial class MainWindow : Window
     }
     public void Render()
     {
+        var focusName = Keyboard.FocusedElement is DependencyObject focused ? AutomationProperties.GetName(focused) : null;
         if (!IsInitialized) return; OfflinePanel.Visibility = vm.Offline || vm.IsStarting ? Visibility.Visible : Visibility.Collapsed; ContentScroll.Visibility = OfflinePanel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
         OfflineTitle.Text = vm.IsStarting ? "Starting CCS..." : "CCS is not running"; OfflineBody.Text = vm.LastError ?? (vm.IsStarting ? "Waiting for CCS Bar server." : "Start CCS, then panel connects automatically."); StartButton.IsEnabled = RetryButton.IsEnabled = !vm.IsStarting; AutomationProperties.SetLiveSetting(StatusText, AutomationLiveSetting.Polite); StatusText.Text = vm.StatusTitle;
         UpdateButton.Visibility = vm.UpdateAvailable ? Visibility.Visible : Visibility.Collapsed; UpdateButton.Content = vm.IsInstallingUpdate ? "Updating..." : $"Update {vm.LatestVersion}";
         ContentPanel.Children.Clear(); if (vm.Offline || vm.IsStarting) return;
         if (vm.UpdateAvailable) ContentPanel.Children.Add(Banner("Update available", $"CCS Bar {vm.LatestVersion}", "AccentBrush")); if (vm.SummaryStale) ContentPanel.Children.Add(Banner("Accounts stale", "Showing last successful account refresh.", "AmberBrush"));
-        AddAlerts(); var (subscriptions, pool) = BarRows.Partition(vm.Rows); AddSubscriptions(subscriptions); AddSpend(); AddPool(pool); AddBreakdown();
+        AddAlerts(); var (subscriptions, pool) = BarRows.Partition(vm.Rows); AddSubscriptions(subscriptions); AddSpend(); AddPool(subscriptions, pool); AddBreakdown();
+        if (!string.IsNullOrEmpty(focusName)) FindNamedControl(ContentPanel, focusName)?.Focus();
         if (vm.LastError is not null) ContentPanel.Children.Add(Banner("Last refresh failed", vm.LastError, "RedBrush"));
+    }
+    static System.Windows.Controls.Control? FindNamedControl(DependencyObject parent, string name)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++) { var child = VisualTreeHelper.GetChild(parent, i); if (child is System.Windows.Controls.Control control && AutomationProperties.GetName(control) == name) return control; if (FindNamedControl(child, name) is { } nested) return nested; } return null;
     }
     void AddAlerts()
     {
@@ -50,7 +58,7 @@ public partial class MainWindow : Window
         foreach (var provider in subscriptions.GroupBy(x => x.Provider))
         {
             var carousel = new ProfileCarousel(provider); var host = new StackPanel();
-            void Paint() { host.Children.Clear(); if (carousel.Count > 1) { var nav = new DockPanel(); var prev = SmallButton("‹"); var next = SmallButton("›"); prev.Click += (_, _) => { carousel.Move(-1); Paint(); }; next.Click += (_, _) => { carousel.Move(1); Paint(); }; DockPanel.SetDock(prev, Dock.Left); DockPanel.SetDock(next, Dock.Right); nav.Children.Add(prev); nav.Children.Add(next); nav.Children.Add(new TextBlock { Text = $"{BarRows.ProviderLabel(provider.Key)} profiles", HorizontalAlignment = HorizontalAlignment.Center, Foreground = (Brush)FindResource("MutedBrush") }); host.Children.Add(nav); } host.Children.Add(SubscriptionCard(carousel.Selected)); }
+            void Paint() { host.Children.Clear(); if (carousel.Count > 1) { var nav = new DockPanel(); var prev = SmallButton("‹"); var next = SmallButton("›"); AutomationProperties.SetName(prev, $"Previous {BarRows.ProviderLabel(provider.Key)} profile"); AutomationProperties.SetName(next, $"Next {BarRows.ProviderLabel(provider.Key)} profile"); prev.Click += (_, _) => { carousel.Move(-1); Paint(); }; next.Click += (_, _) => { carousel.Move(1); Paint(); }; DockPanel.SetDock(prev, Dock.Left); DockPanel.SetDock(next, Dock.Right); nav.Children.Add(prev); nav.Children.Add(next); nav.Children.Add(new TextBlock { Text = $"{BarRows.ProviderLabel(provider.Key)} profiles", HorizontalAlignment = HorizontalAlignment.Center, Foreground = (Brush)FindResource("MutedBrush") }); host.Children.Add(nav); } host.Children.Add(SubscriptionCard(carousel.Selected)); }
             host.Focusable = true; host.KeyDown += (_, e) => { if (e.Key is Key.Left or Key.Right) { carousel.Move(e.Key == Key.Right ? 1 : -1); Paint(); e.Handled = true; } }; host.MouseWheel += (_, e) => { if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) { carousel.Move(e.Delta < 0 ? 1 : -1); Paint(); e.Handled = true; } }; Paint(); ContentPanel.Children.Add(host);
         }
     }
@@ -68,10 +76,10 @@ public partial class MainWindow : Window
         var periods = new StackPanel { Orientation = Orientation.Horizontal }; foreach (var item in Enum.GetValues<SpendPeriod>()) { var button = SmallButton(item switch { SpendPeriod.Today => "Today", SpendPeriod.Last7d => "7d", _ => "30d" }); button.IsEnabled = item != period; button.Click += (_, _) => { settings.Ui = settings.Ui with { SpendPeriod = item }; settings.Save(); Render(); }; periods.Children.Add(button); } stack.Children.Add(periods);
         var values = period == SpendPeriod.Today ? a.ByHour.Select(x => x.Cost) : a.ByDay.TakeLast(period == SpendPeriod.Last7d ? 7 : 30).Select(x => x.Cost); stack.Children.Add(new SpendChart { Values = values.ToArray(), ChartStyle = settings.Ui.ChartStyle, Height = 42, Margin = new(0, 4, 0, 2) }); stack.Children.Add(Muted($"{BarFormatting.Money(current.Cost)} · {BarFormatting.Count(current.Requests)} requests")); ContentPanel.Children.Add(Card(stack));
     }
-    void AddPool(IReadOnlyList<BarSummaryRow> pool)
+    void AddPool(IReadOnlyList<BarSummaryRow> subscriptions, IReadOnlyList<BarSummaryRow> pool)
     {
-        ContentPanel.Children.Add(Section("POOL")); if (pool.Count == 0) { ContentPanel.Children.Add(Muted("No accounts configured")); return; }
-        foreach (var row in pool) { var stack = new StackPanel { Opacity = row.Paused ? .5 : 1 }; stack.Children.Add(TitleRow(row, false)); var line = new DockPanel(); line.Children.Add(Gauge(row.QuotaPercentage, row.QuotaStatus)); var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right }; var pause = SmallButton(row.Paused ? "Resume" : "Pause"); pause.Click += async (_, _) => { if (row.Paused) await vm.ResumeAsync(row); else await vm.PauseAsync(row); }; actions.Children.Add(pause); var menu = SmallButton("..."); menu.ContextMenu = ActionsMenu(row); menu.Click += (_, _) => { menu.ContextMenu.PlacementTarget = menu; menu.ContextMenu.IsOpen = true; }; actions.Children.Add(menu); DockPanel.SetDock(actions, Dock.Right); line.Children.Add(actions); stack.Children.Add(line); var detail = new[] { BarFormatting.QuotaLabel(row.QuotaPercentage, row.QuotaStatus), BarQuota.ResetCountdown(row.NextReset, DateTimeOffset.Now), row.Provider, row.Tier, BarFormatting.LastActiveLabel(row.LastActivityAt, null, DateTimeOffset.Now), row.TodayCost is null ? "no data" : $"today {BarFormatting.Money(row.TodayCost.Value)}" }.Where(x => !string.IsNullOrWhiteSpace(x)); stack.Children.Add(Muted(string.Join(" · ", detail))); ContentPanel.Children.Add(Card(stack)); }
+        if (subscriptions.Count == 0 || pool.Count == 0) return; ContentPanel.Children.Add(Section("POOL ACCOUNTS"));
+        foreach (var row in pool) { var stack = new StackPanel { Opacity = row.Paused ? .5 : 1 }; stack.Children.Add(TitleRow(row, false)); var line = new DockPanel(); line.Children.Add(Gauge(row.QuotaPercentage, row.QuotaStatus)); var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right }; var pause = SmallButton(row.Paused ? "Resume" : "Pause"); AutomationProperties.SetName(pause, $"{(row.Paused ? "Resume" : "Pause")} {BarRows.AccountTitle(row)}"); pause.Click += async (_, _) => { if (row.Paused) await vm.ResumeAsync(row); else await vm.PauseAsync(row); }; actions.Children.Add(pause); var menu = SmallButton("..."); AutomationProperties.SetName(menu, $"Actions for {BarRows.AccountTitle(row)}"); menu.ContextMenu = ActionsMenu(row); menu.Click += (_, _) => { menu.ContextMenu.PlacementTarget = menu; menu.ContextMenu.IsOpen = true; }; actions.Children.Add(menu); DockPanel.SetDock(actions, Dock.Right); line.Children.Add(actions); stack.Children.Add(line); var detail = new[] { BarFormatting.QuotaLabel(row.QuotaPercentage, row.QuotaStatus), BarQuota.ResetCountdown(row.NextReset, DateTimeOffset.Now), row.Provider, row.Tier, BarFormatting.LastActiveLabel(row.LastActivityAt, null, DateTimeOffset.Now), row.TodayCost is null ? "no data" : $"today {BarFormatting.Money(row.TodayCost.Value)}" }.Where(x => !string.IsNullOrWhiteSpace(x)); stack.Children.Add(Muted(string.Join(" · ", detail))); ContentPanel.Children.Add(Card(stack)); }
     }
     ContextMenu ActionsMenu(BarSummaryRow row)
     {

@@ -105,3 +105,6 @@ The source lives in `macos-bar/`. Contributors can build and run the logic check
 swift build                 # build all targets, including the app
 swift run ccs-bar-check     # run the logic tests
 ```
+# Release Contract
+
+`macos-bar/VERSION` is sole CCS Bar version source. macOS and Windows assets build from same commit, stage together with checksums and `release-metadata.json`, then floating `ccs-bar-latest` moves only after both platform builds pass.

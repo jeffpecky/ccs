@@ -32,7 +32,7 @@ public sealed class WindowsBarUpdater(Func<ProcessCommand, Process?> start)
 
 public interface IWindowsPathSecurity
 {
-    bool FileExists(string path); bool DirectoryExists(string path); bool IsReparsePoint(string path); string Canonicalize(string path);
+    bool FileExists(string path); bool DirectoryExists(string path); bool IsReparsePoint(string path); bool IsSafeExecutable(string path); string Canonicalize(string path);
 }
 
 public sealed class WindowsPathSecurity : IWindowsPathSecurity
@@ -40,6 +40,20 @@ public sealed class WindowsPathSecurity : IWindowsPathSecurity
     public bool FileExists(string path) => File.Exists(path);
     public bool DirectoryExists(string path) => Directory.Exists(path);
     public bool IsReparsePoint(string path) => (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+    public bool IsSafeExecutable(string path)
+    {
+        if (!FileExists(path) || IsReparsePoint(path) || !path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return false;
+        try { return System.Security.Cryptography.X509Certificates.X509Certificate.CreateFromSignedFile(path) is not null; }
+        catch (System.Security.Cryptography.CryptographicException) { return IsUserPrivate(path); }
+    }
+    static bool IsUserPrivate(string path)
+    {
+        var acl = new FileInfo(path).GetAccessControl(); var owner = acl.GetOwner(typeof(System.Security.Principal.SecurityIdentifier));
+        var current = System.Security.Principal.WindowsIdentity.GetCurrent().User;
+        if (current is null || owner is null || !owner.Equals(current)) return false;
+        var broad = new[] { "S-1-1-0", "S-1-5-11", "S-1-5-32-545" };
+        return !acl.GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier)).Cast<System.Security.AccessControl.FileSystemAccessRule>().Any(rule => rule.AccessControlType == System.Security.AccessControl.AccessControlType.Allow && broad.Contains(((System.Security.Principal.SecurityIdentifier)rule.IdentityReference).Value) && (rule.FileSystemRights & (System.Security.AccessControl.FileSystemRights.Write | System.Security.AccessControl.FileSystemRights.Modify | System.Security.AccessControl.FileSystemRights.FullControl)) != 0);
+    }
     public string Canonicalize(string path) => Path.GetFullPath(path);
 }
 
@@ -52,10 +66,7 @@ public sealed class WindowsLaunchTrust(IWindowsPathSecurity paths, string privat
         var canonical = paths.Canonicalize(path);
         if (canonical.Equals(shim, StringComparison.OrdinalIgnoreCase)) return true;
         var name = Path.GetFileName(canonical);
-        if (name is not ("node.exe" or "bun.exe")) return false;
-        var user = Directory.GetParent(Directory.GetParent(Directory.GetParent(Path.GetDirectoryName(shim)!)!.FullName)!.FullName)!.FullName;
-        var allowed = new[] { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Bun", "bun.exe"), Path.Combine(user, ".bun", "bin", "bun.exe") }.Select(paths.Canonicalize);
-        return allowed.Contains(canonical, StringComparer.OrdinalIgnoreCase);
+        return name is "node.exe" or "bun.exe" && paths.IsSafeExecutable(canonical);
     }
     public bool IsTrustedDirectory(string path) => paths.DirectoryExists(path) && !HasReparseInPath(path);
     bool HasReparseInPath(string path)
@@ -97,9 +108,8 @@ sealed class WindowsBarConnector : IBarConnector, IActiveBarConnection
         var shim = Path.Combine(home, "AppData", "Local", "CCS Bar", "launcher", "ccs.js"); var descriptor = BarLaunchDescriptor.Load(home, new WindowsLaunchTrust(new WindowsPathSecurity(), shim));
         try
         {
-            var command = descriptor is not null
-                ? new ProcessCommand(descriptor.Runtime, descriptor.Args, CreateNoWindow: true, WorkingDirectory: descriptor.Home, Environment: descriptor.CcsHome is null ? null : new Dictionary<string, string> { ["CCS_HOME"] = descriptor.CcsHome })
-                : new ProcessCommand("ccs", ["bar", "serve"], CreateNoWindow: true);
+            if (descriptor is null) throw new InvalidOperationException("Trusted CCS Bar launch descriptor unavailable. Run `ccs bar launch` to regenerate it.");
+            var command = new ProcessCommand(descriptor.Runtime, descriptor.Args, CreateNoWindow: true, WorkingDirectory: descriptor.Home, Environment: descriptor.CcsHome is null ? null : new Dictionary<string, string> { ["CCS_HOME"] = descriptor.CcsHome });
             start(command); diagnostics = $"Started: {command.FileName} {string.Join(' ', command.Arguments)}";
         }
         catch (Exception e) { diagnostics = $"Failed to start CCS: {e.Message}. Check {Path.Combine(BarServerProbe.CcsHome(home), "bar", "serve.log")}"; throw new InvalidOperationException(diagnostics, e); }

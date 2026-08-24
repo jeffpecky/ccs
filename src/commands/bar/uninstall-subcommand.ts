@@ -33,6 +33,7 @@ export async function handleBarUninstall(
     await uninstallWindowsBar(_args);
     return;
   }
+  if (process.platform !== 'darwin' && Object.keys(deps).length === 0) throw new Error('CCS Bar supports macOS or Windows only.');
   const ccsDir = (deps.getCcsDir ?? (() => getCcsDir()))();
   const appsDir = (deps.getAppsDir ?? (() => path.join(os.homedir(), 'Applications')))();
   const appName = deps.appName ?? 'CCS Bar.app';

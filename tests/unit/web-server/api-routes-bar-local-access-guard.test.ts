@@ -174,7 +174,7 @@ describe('api-routes /api/bar/* local-access guard', () => {
       const nonce = '0123456789abcdef0123456789abcdef';
       const proofHeaders = {
         [BAR_AUTH_NONCE_HEADER]: nonce,
-        [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(getOrCreateBarAuthToken(), nonce),
+        [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(getOrCreateBarAuthToken(), 'request', 'GET', '/api/bar/summary', nonce),
       };
       const proofResponse = await fetch(`${authBaseUrl}/api/bar/summary`, {
         headers: proofHeaders,
@@ -182,9 +182,13 @@ describe('api-routes /api/bar/* local-access guard', () => {
       expect(proofResponse.status).toBe(200);
       expect(Array.isArray(await proofResponse.json())).toBe(true);
 
+      const mutationNonce = 'fedcba9876543210fedcba9876543210';
       const mutationResponse = await fetch(`${authBaseUrl}/api/accounts/tier-lock`, {
         method: 'POST',
-        headers: proofHeaders,
+        headers: {
+          [BAR_AUTH_NONCE_HEADER]: mutationNonce,
+          [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(getOrCreateBarAuthToken(), 'request', 'POST', '/api/accounts/tier-lock', mutationNonce),
+        },
       });
       expect(mutationResponse.status).toBe(204);
 

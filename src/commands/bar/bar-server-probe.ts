@@ -12,6 +12,7 @@ import {
   BAR_AUTH_NONCE_HEADER,
   BAR_AUTH_TOKEN_HEADER,
   createBarAuthNonce,
+  createBarAuthProof,
   isMatchingBarAuthProof,
   getOrCreateBarAuthToken,
 } from '../../utils/bar-auth-token';
@@ -94,6 +95,7 @@ export async function defaultFindRunningServer(ccsDir: string): Promise<Dashboar
     const port = Number(parsed.port);
     const host = parsed.hostname.replace(/^\[|\]$/g, '');
     const nonce = createBarAuthNonce();
+    const requestProof = createBarAuthProof(token, 'request', 'GET', parsed.pathname + parsed.search, nonce);
 
     return new Promise((resolve) => {
       let rawResponse = '';
@@ -113,7 +115,7 @@ export async function defaultFindRunningServer(ccsDir: string): Promise<Dashboar
           new RegExp(`${BAR_AUTH_TOKEN_HEADER}:\\s*([^\\r\\n]+)`, 'i')
         );
         const proof = proofMatch ? proofMatch[1].trim() : '';
-        const tokenMatched = isMatchingBarAuthProof(token, nonce, proof);
+        const tokenMatched = isMatchingBarAuthProof(token, 'response', 'GET', parsed.pathname + parsed.search, nonce, proof);
         const authRequired = (statusCode === 401 || statusCode === 403) && tokenMatched;
         if (authRequired) {
           resolve({ ok: true, authRequired: true });
@@ -129,7 +131,7 @@ export async function defaultFindRunningServer(ccsDir: string): Promise<Dashboar
         // Do NOT include the token in the request; only send a fresh nonce so
         // the server can prove it knows the token without disclosing it.
         socket.write(
-          `GET ${parsed.pathname}${parsed.search} HTTP/1.1\r\nHost: ${parsed.host}\r\n${BAR_AUTH_NONCE_HEADER}: ${nonce}\r\nConnection: close\r\n\r\n`
+          `GET ${parsed.pathname}${parsed.search} HTTP/1.1\r\nHost: ${parsed.host}\r\n${BAR_AUTH_NONCE_HEADER}: ${nonce}\r\n${BAR_AUTH_TOKEN_HEADER}: ${requestProof}\r\nConnection: close\r\n\r\n`
         );
       });
       socket.setTimeout(PROBE_TIMEOUT_MS, () => finish());

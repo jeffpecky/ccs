@@ -9,23 +9,24 @@ public static class BarAuth
 {
     public const string NonceHeader = "x-ccs-bar-nonce";
     public const string TokenHeader = "x-ccs-bar-token";
-    public static string Proof(string token, string nonce) => Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(token), Encoding.UTF8.GetBytes(nonce))).ToLowerInvariant();
-    public static bool Verify(string token, string nonce, string proof)
+    public static string NormalizePath(string value) { var uri = new Uri(new Uri("http://localhost"), value); var pairs = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries).Order(StringComparer.Ordinal).ToArray(); return uri.AbsolutePath + (pairs.Length > 0 ? "?" + string.Join('&', pairs) : ""); }
+    public static string Proof(string token, string direction, string method, string path, string nonce) => Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(token), Encoding.UTF8.GetBytes(string.Join('\n', "ccs-bar-auth-v2", direction, method.ToUpperInvariant(), NormalizePath(path), nonce)))).ToLowerInvariant();
+    public static bool Verify(string token, string direction, string method, string path, string nonce, string proof)
     {
-        try { return proof.Length == 64 && CryptographicOperations.FixedTimeEquals(Convert.FromHexString(Proof(token, nonce)), Convert.FromHexString(proof)); }
+        try { return proof.Length == 64 && CryptographicOperations.FixedTimeEquals(Convert.FromHexString(Proof(token, direction, method, path, nonce)), Convert.FromHexString(proof)); }
         catch (FormatException) { return false; }
     }
     public static void Authenticate(HttpRequestMessage request, string token)
     {
         var nonce = Guid.NewGuid().ToString("N");
         request.Headers.Add(NonceHeader, nonce);
-        request.Headers.Add(TokenHeader, Proof(token, nonce));
+        request.Headers.Add(TokenHeader, Proof(token, "request", request.Method.Method, request.RequestUri!.PathAndQuery, nonce));
     }
     public static bool VerifyResponse(HttpRequestMessage request, HttpResponseMessage response, string token)
     {
         if (!request.Headers.TryGetValues(NonceHeader, out var nonces) || !response.Headers.TryGetValues(TokenHeader, out var proofs)) return false;
         var nonce = nonces.Take(2).ToArray(); var proof = proofs.Take(2).ToArray();
-        return nonce.Length == 1 && proof.Length == 1 && Verify(token, nonce[0], proof[0]);
+        return nonce.Length == 1 && proof.Length == 1 && Verify(token, "response", request.Method.Method, request.RequestUri!.PathAndQuery, nonce[0], proof[0]);
     }
 }
 
