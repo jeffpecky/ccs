@@ -1,4 +1,4 @@
-# CCS Bar — Native macOS Menu Bar App
+# CCS Bar - Native macOS Menu Bar and Windows Tray App
 
 CCS Bar is a native macOS menu-bar app that shows live subscription quota and usage at a glance for your Claude Code, Codex, and CLIProxy accounts, without opening the dashboard.
 
@@ -6,7 +6,7 @@ CCS Bar is a native macOS menu-bar app that shows live subscription quota and us
 
 CCS Bar is a thin client of the CCS local web-server. It never talks to a provider directly: every call goes to `localhost`, and CCS performs any provider fetch server-side. Opening the menu fires a debounced force-refresh so the glance reflects live data without blocking the UI.
 
-It is macOS only.
+Native clients support macOS and Windows x64.
 
 ## What It Shows
 
@@ -19,7 +19,7 @@ It is macOS only.
 
 ## Requirements
 
-- macOS
+- macOS or Windows 10/11 x64
 - CCS CLI installed and configured (`ccs config` works)
 - The CCS web-server reachable on loopback. `ccs bar` (or `ccs bar launch`) starts it for you.
 
@@ -29,7 +29,9 @@ It is macOS only.
 ccs bar install
 ```
 
-This downloads `CCS-Bar.app.zip` from the floating `ccs-bar-latest` GitHub release and installs `CCS Bar.app` into `~/Applications`. Downloads are restricted to `github.com` and `objects.githubusercontent.com`, and extraction is guarded against zip-slip.
+macOS downloads `CCS-Bar.app.zip` and installs `CCS Bar.app` into `~/Applications`. Windows downloads `CCS-Bar-windows-x64.zip` and installs `CCS Bar.exe` under `%LOCALAPPDATA%\Programs\CCS Bar`, then creates Start Menu and per-user Startup shortcuts. Both assets come from floating `ccs-bar-latest` release and require matching SHA-256 release metadata before extraction.
+
+Windows package is self-contained for .NET 8 win-x64. CCS Bar itself needs neither Bun nor source checkout. Server contract remains installed CCS CLI: `ccs` must be resolvable on `PATH`, and that CLI installation must carry its normal Node.js or Bun runtime plus support `ccs bar serve`, `/api/bar/summary`, and `/api/bar/analytics`. No second runtime is bundled. Installer writes validated launch descriptor from active CCS CLI so app starts that exact runtime without shell interpolation.
 
 If `CCS Bar.app` is already installed, the command shows the current version and proceeds as a reinstall.
 
@@ -78,7 +80,14 @@ If you bind the dashboard beyond localhost (for example `--host` set to a non-lo
 ccs bar uninstall
 ```
 
-This removes `~/Applications/CCS Bar.app` and the installed version pin. It is a no-op if the app is not present.
+This safely stops native app, removes installed app, version pin, launch descriptor, Start Menu shortcut, and Startup shortcut. It never removes CCS profiles, credentials, analytics, CLIProxy accounts, or other data under `~/.ccs` / `%USERPROFILE%\.ccs`.
+
+## Migration From CLIProxyAPI-Tray
+
+1. Install CCS Bar with `ccs bar install --launch`.
+2. Confirm accounts and quotas load from CCS.
+3. Disable CLIProxyAPI-Tray startup entry to avoid duplicate tray apps.
+4. Uninstall old tray only after CCS Bar works. CCS Bar does not modify CLIProxyAPI-Tray repository or its data.
 
 ## Troubleshooting
 

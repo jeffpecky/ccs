@@ -250,6 +250,11 @@ function defaultWriteLaunchDescriptor(jsonPath: string, descriptor: LaunchJson):
 }
 
 async function defaultOpenApp(appPath: string): Promise<void> {
+  if (process.platform === 'win32') {
+    const { openWindowsBar } = await import('./platform-adapter');
+    await openWindowsBar(appPath);
+    return;
+  }
   const { execFile } = await import('child_process');
   const { promisify } = await import('util');
   const execFileAsync = promisify(execFile);
@@ -279,7 +284,9 @@ export async function handleBarLaunch(
   }
   const ccsDir = (deps.getCcsDir ?? defaultGetCcsDir)();
   const openApp = deps.openApp ?? defaultOpenApp;
-  const appInstallPath = deps.appInstallPath ?? DEFAULT_APP_INSTALL_PATH;
+  const appInstallPath = deps.appInstallPath ?? (process.platform === 'win32'
+    ? (await import('./platform-adapter')).getWindowsBarPaths().exe
+    : DEFAULT_APP_INSTALL_PATH);
   const getPortFn = deps.getPort ?? defaultGetPort;
   const spawnDetachedServer = deps.spawnDetachedServer ?? defaultSpawnDetachedServer;
   const waitForServerLive = deps.waitForServerLive ?? defaultWaitForServerLive;
@@ -523,6 +530,8 @@ async function _openAppWithFallback(
     if (!fs.existsSync(appInstallPath)) {
       console.log('[!] CCS Bar app is not installed.');
       console.log('[i] Run `ccs bar install` to install it.');
+    } else if (process.platform === 'win32') {
+      console.log('[!] Could not open CCS Bar.exe. Reinstall with `ccs bar install`.');
     } else {
       console.log('[!] Could not open CCS Bar. Try right-clicking and selecting Open.');
       console.log('[i] If Gatekeeper blocks the app, run:');

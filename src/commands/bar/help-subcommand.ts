@@ -3,7 +3,7 @@ import { color, dim, header, initUI, subheader } from '../../utils/ui';
 export async function showHelp(): Promise<void> {
   await initUI();
   console.log('');
-  console.log(header('CCS Bar (macOS Menu Bar App)'));
+  console.log(header(`CCS Bar (${process.platform === 'win32' ? 'Windows Tray App' : 'macOS Menu Bar App'})`));
   console.log('');
   console.log(subheader('Usage:'));
   console.log(`  ${color('ccs bar', 'command')} [command] [options]`);
@@ -17,7 +17,7 @@ export async function showHelp(): Promise<void> {
         ['serve', 'Run the CCS Bar server in the foreground (used internally by launch)'],
         ['stop', 'Stop the detached CCS Bar server'],
         ['status', 'Show whether the CCS Bar server is running'],
-        ['install', 'Download CCS Bar from the ccs-bar-latest GitHub release into ~/Applications'],
+        ['install', 'Download and register CCS Bar from the ccs-bar-latest GitHub release'],
         ['uninstall', 'Remove the app and version pin'],
         ['version', 'Show CLI and installed app versions'],
       ],
@@ -66,8 +66,8 @@ export async function showHelp(): Promise<void> {
     console.log('');
   }
 
-  console.log(dim('  macOS only. The app communicates with the CCS web-server on localhost only.'));
-  console.log(dim('  Gatekeeper quarantine is kept in place for macOS first-launch verification.'));
+  console.log(dim('  macOS and Windows. App communicates with CCS web-server on localhost only.'));
+  if (process.platform === 'darwin') console.log(dim('  Gatekeeper quarantine is kept in place for macOS first-launch verification.'));
   console.log(
     dim('  `ccs bar launch` spawns the server detached — the terminal is freed immediately.')
   );

@@ -498,6 +498,11 @@ export async function handleBarInstall(
   args: string[],
   deps: Partial<InstallDeps> = {}
 ): Promise<void> {
+  if (process.platform === 'win32' && Object.keys(deps).length === 0) {
+    const { installWindowsBar } = await import('./platform-adapter');
+    await installWindowsBar(args);
+    return;
+  }
   // Parse --launch / --no-launch / --await-quit flags before delegating to deps.
   const forceLaunch = hasAnyFlag(args, ['--launch']);
   const noLaunch = hasAnyFlag(args, ['--no-launch']);

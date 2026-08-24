@@ -27,7 +27,7 @@ public sealed class DashboardLauncher(Func<ProcessCommand, Process?> start)
 
 public sealed class WindowsBarUpdater(Func<ProcessCommand, Process?> start)
 {
-    public void Install() { using var process = start(new("ccs", ["bar", "install", "--launch", "--await-quit"], CreateNoWindow: true)); }
+    public void Install() { using var process = start(new("cmd.exe", ["/d", "/s", "/c", "ccs", "bar", "install", "--launch", "--await-quit"], CreateNoWindow: true)); }
 }
 
 public interface IWindowsPathSecurity

@@ -30,6 +30,7 @@ dist/
 # .NET build output
 windows-bar/**/bin/
 windows-bar/**/obj/
+windows-bar/dist/
 
 # Package lock files (use bun.lock only)
 yarn.lock

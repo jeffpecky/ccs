@@ -28,6 +28,11 @@ export async function handleBarUninstall(
   _args: string[],
   deps: Partial<UninstallDeps> = {}
 ): Promise<void> {
+  if (process.platform === 'win32' && Object.keys(deps).length === 0) {
+    const { uninstallWindowsBar } = await import('./platform-adapter');
+    await uninstallWindowsBar(_args);
+    return;
+  }
   const ccsDir = (deps.getCcsDir ?? (() => getCcsDir()))();
   const appsDir = (deps.getAppsDir ?? (() => path.join(os.homedir(), 'Applications')))();
   const appName = deps.appName ?? 'CCS Bar.app';

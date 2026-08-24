@@ -23,8 +23,8 @@ public sealed class AppServicesTests
         var commands = new List<ProcessCommand>();
         var updater = new WindowsBarUpdater(command => { commands.Add(command); return null; });
         updater.Install();
-        CollectionAssert.AreEqual(new[] { "bar", "install", "--launch", "--await-quit" }, commands.Single().Arguments.ToArray());
-        Assert.AreEqual("ccs", commands.Single().FileName);
+        CollectionAssert.AreEqual(new[] { "/d", "/s", "/c", "ccs", "bar", "install", "--launch", "--await-quit" }, commands.Single().Arguments.ToArray());
+        Assert.AreEqual("cmd.exe", commands.Single().FileName);
         Assert.IsFalse(commands.Single().UseShellExecute);
     }
 
