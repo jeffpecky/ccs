@@ -98,8 +98,7 @@ describe('verified Bar process stopping', () => {
     let sleeps = 0;
 
     const outcome = await waitForProcessExit(4321, 'birth-a', 1_000, {
-      platform: 'win32',
-      isWindowsProcessRunning: () => states.shift() ?? false,
+      getProcessBirthIdentity: () => (states.shift() ?? false ? 'birth-a' : null),
       sleep: async () => {
         sleeps += 1;
       },
@@ -112,8 +111,7 @@ describe('verified Bar process stopping', () => {
   it('returns timeout when Windows target remains alive for the bounded wait', async () => {
     let now = 0;
     const outcome = await waitForProcessExit(4321, 'birth-a', 250, {
-      platform: 'win32',
-      isWindowsProcessRunning: () => true,
+      getProcessBirthIdentity: () => 'birth-a',
       now: () => now,
       sleep: async () => {
         now += 100;
@@ -121,6 +119,22 @@ describe('verified Bar process stopping', () => {
     });
 
     expect(outcome).toBe('timeout');
+  });
+
+  it('observes Windows exit reached during the final bounded sleep', async () => {
+    let now = 0;
+    const states = [true, false];
+
+    const outcome = await waitForProcessExit(4321, 'birth-a', 50, {
+      getProcessBirthIdentity: () => (states.shift() ?? false ? 'birth-a' : null),
+      now: () => now,
+      sleep: async (ms) => {
+        now += ms;
+      },
+    });
+
+    expect(outcome).toBe('exited');
+    expect(now).toBe(50);
   });
 
   it('preserves server.pid and bar.json on mismatch, EPERM, and timeout', async () => {
@@ -221,11 +235,12 @@ describe('verified Bar process stopping', () => {
     fs.writeFileSync(pidPath, serializeBarServerProcessRecord({ pid: child.pid!, birthIdentity }));
 
     const outcome = await stopBarServerProcessFile(pidPath);
+    await waitForChildExit(child);
 
     expect(outcome.result).toBe('stopped');
     expect(fs.existsSync(pidPath)).toBe(false);
     liveChildren.delete(child);
-  });
+  }, 30000);
 
   it('stops a real recorded process through the launch-move stop path', async () => {
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
@@ -238,10 +253,11 @@ describe('verified Bar process stopping', () => {
     fs.mkdirSync(path.dirname(pidPath), { recursive: true });
     fs.writeFileSync(pidPath, serializeBarServerProcessRecord({ pid: child.pid!, birthIdentity }));
     await stopDetachedBarServer(ccsDir);
+    await waitForChildExit(child);
 
     expect(fs.existsSync(pidPath)).toBe(false);
     liveChildren.delete(child);
-  });
+  }, 30000);
 });
 
 describe('Bar serve publication ownership', () => {
@@ -313,6 +329,11 @@ async function waitForBirthIdentity(pid: number): Promise<string> {
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
   }
   throw new Error(`Process ${pid} never became observable`);
+}
+
+async function waitForChildExit(child: ReturnType<typeof spawn>): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((resolve) => child.once('exit', () => resolve()));
 }
 
 describe('Bar server identity probe', () => {

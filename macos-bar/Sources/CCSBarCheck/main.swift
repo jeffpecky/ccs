@@ -257,8 +257,21 @@ let recorder = RequestRecorder()
 recorder.responseData = Data(summaryJSON.utf8)
 let client = CCSBarClient(
   baseURL: URL(string: "http://127.0.0.1:3210")!,
-  transport: RecordingTransport(recorder: recorder)
+  transport: RecordingTransport(recorder: recorder),
+  authToken: String(repeating: "a", count: 64)
 )
+
+func clientRequestIsSigned(_ request: URLRequest?) -> Bool {
+  guard
+    let nonce = request?.value(forHTTPHeaderField: "x-ccs-bar-nonce"),
+    let proof = request?.value(forHTTPHeaderField: "x-ccs-bar-token")
+  else { return false }
+  let expected = HMAC<SHA256>.authenticationCode(
+    for: Data(nonce.utf8),
+    using: SymmetricKey(data: Data(String(repeating: "a", count: 64).utf8)))
+    .map { String(format: "%02x", $0) }.joined()
+  return proof == expected
+}
 
 do {
   let rows = try await client.summary(refresh: true)
@@ -266,6 +279,7 @@ do {
   check(
     recorder.lastRequest?.url?.query?.contains("refresh=true") == true,
     "summary(refresh: true) adds ?refresh=true")
+  check(clientRequestIsSigned(recorder.lastRequest), "client auth: summary signed")
 } catch {
   check(false, "client.summary threw: \(error)")
 }
@@ -273,11 +287,20 @@ do {
 recorder.responseData = Data("{}".utf8)
 recorder.lastRequest = nil
 do {
+  _ = try await client.analytics()
+  check(clientRequestIsSigned(recorder.lastRequest), "client auth: analytics signed")
+} catch {
+  check(false, "client.analytics threw: \(error)")
+}
+
+recorder.lastRequest = nil
+do {
   try await client.pause(provider: "agy", accountId: "alice@example.com")
   check(recorder.lastRequest?.httpMethod == "POST", "pause is POST")
   check(
     recorder.lastRequest?.url?.path.hasSuffix("bulk-pause") == true,
     "pause hits bulk-pause endpoint")
+  check(clientRequestIsSigned(recorder.lastRequest), "client auth: mutation signed")
 } catch {
   check(false, "pause threw: \(error)")
 }
@@ -1713,11 +1736,13 @@ do {
   final class AuthTransport: HTTPTransport, @unchecked Sendable {
     let proof: (String) -> String?
     var nonce: String?
+    var requestProof: String?
 
     init(proof: @escaping (String) -> String?) { self.proof = proof }
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
       nonce = request.value(forHTTPHeaderField: "x-ccs-bar-nonce")
+      requestProof = request.value(forHTTPHeaderField: "x-ccs-bar-token")
       let headers = nonce.flatMap(proof).map { ["x-ccs-bar-token": $0] }
       let http = HTTPURLResponse(
         url: request.url!, statusCode: 200, httpVersion: nil, headerFields: headers)!
@@ -1729,6 +1754,7 @@ do {
   let accepted = await BarServerProbe(transport: valid, authToken: probeAuthToken)
     .findLiveServer(discovery: BarDiscovery(baseUrl: "http://127.0.0.1:3000", port: 3000, authMode: "loopback"))
   check(valid.nonce?.count == 32, "probe auth: nonce header sent")
+  check(valid.requestProof == valid.nonce.map(probeProof), "probe auth: request proof sent")
   check(accepted != nil, "probe auth: valid proof accepted")
 
   let missing = AuthTransport(proof: { _ in nil })

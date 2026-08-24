@@ -115,7 +115,7 @@ public struct BarServerProbe: Sendable {
     return nil
   }
 
-  private static func loadAuthToken(home: String = NSHomeDirectory()) -> String? {
+  static func loadAuthToken(home: String = NSHomeDirectory()) -> String? {
     let ccsDir = ProcessInfo.processInfo.environment["CCS_HOME"] ??
       URL(fileURLWithPath: home).appendingPathComponent(".ccs").path
     let tokenPath = URL(fileURLWithPath: ccsDir).appendingPathComponent("bar/.auth-token")
@@ -150,6 +150,11 @@ public struct BarServerProbe: Sendable {
     var req = URLRequest(url: url)
     req.timeoutInterval = 2.0
     req.setValue(nonce, forHTTPHeaderField: "x-ccs-bar-nonce")
+    let requestProof = HMAC<SHA256>.authenticationCode(
+      for: Data(nonce.utf8),
+      using: SymmetricKey(data: Data(authToken.utf8)))
+      .map { String(format: "%02x", $0) }.joined()
+    req.setValue(requestProof, forHTTPHeaderField: "x-ccs-bar-token")
     do {
       let (_, http) = try await transport.send(req)
       guard http.statusCode == 200,

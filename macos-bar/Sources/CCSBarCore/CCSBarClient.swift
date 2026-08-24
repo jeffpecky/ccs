@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Injectable HTTP transport so the client is testable without a live server
 /// (the assert harness supplies a recording/mock transport).
@@ -31,10 +32,16 @@ public enum CCSBarClientError: Error, Equatable {
 public struct CCSBarClient {
   let baseURL: URL
   let transport: HTTPTransport
+  let authToken: String?
 
-  public init(baseURL: URL, transport: HTTPTransport = URLSessionTransport()) {
+  public init(
+    baseURL: URL,
+    transport: HTTPTransport = URLSessionTransport(),
+    authToken: String? = BarServerProbe.loadAuthToken()
+  ) {
     self.baseURL = baseURL
     self.transport = transport
+    self.authToken = authToken
   }
 
   /// GET /api/bar/summary[?refresh=true]. Cached by default; `refresh: true`
@@ -49,7 +56,7 @@ public struct CCSBarClient {
     if refresh { comps.queryItems = [URLQueryItem(name: "refresh", value: "true")] }
     guard let url = comps.url else { throw CCSBarClientError.badURL }
 
-    let (data, http) = try await transport.send(URLRequest(url: url))
+    let (data, http) = try await transport.send(authenticatedRequest(url: url))
     guard http.statusCode == 200 else { throw CCSBarClientError.httpStatus(http.statusCode) }
     do {
       return try JSONDecoder().decode([BarSummaryRow].self, from: data)
@@ -62,7 +69,7 @@ public struct CCSBarClient {
   /// (today / 7d / 30d / all-time spend, sparkline, top models).
   public func analytics() async throws -> BarAnalytics {
     let url = baseURL.appendingPathComponent("api/bar/analytics")
-    let (data, http) = try await transport.send(URLRequest(url: url))
+    let (data, http) = try await transport.send(authenticatedRequest(url: url))
     guard http.statusCode == 200 else { throw CCSBarClientError.httpStatus(http.statusCode) }
     do {
       return try JSONDecoder().decode(BarAnalytics.self, from: data)
@@ -96,7 +103,7 @@ public struct CCSBarClient {
 
   @discardableResult
   func post(_ path: String, body: [String: Any]) async throws -> Data {
-    var request = URLRequest(url: baseURL.appendingPathComponent(path))
+    var request = authenticatedRequest(url: baseURL.appendingPathComponent(path))
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -105,5 +112,18 @@ public struct CCSBarClient {
       throw CCSBarClientError.httpStatus(http.statusCode)
     }
     return data
+  }
+
+  func authenticatedRequest(url: URL) -> URLRequest {
+    var request = URLRequest(url: url)
+    guard let authToken else { return request }
+    let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+    let proof = HMAC<SHA256>.authenticationCode(
+      for: Data(nonce.utf8),
+      using: SymmetricKey(data: Data(authToken.utf8)))
+      .map { String(format: "%02x", $0) }.joined()
+    request.setValue(nonce, forHTTPHeaderField: "x-ccs-bar-nonce")
+    request.setValue(proof, forHTTPHeaderField: "x-ccs-bar-token")
+    return request
   }
 }

@@ -18,8 +18,15 @@ import * as path from 'path';
 import { apiRoutes } from '../../../src/web-server/routes';
 import {
   authMiddleware,
+  barAuthMiddleware,
   createSessionMiddleware,
 } from '../../../src/web-server/middleware/auth-middleware';
+import {
+  BAR_AUTH_NONCE_HEADER,
+  BAR_AUTH_TOKEN_HEADER,
+  createBarAuthProof,
+  getOrCreateBarAuthToken,
+} from '../../../src/utils/bar-auth-token';
 
 const BAR_LOCAL_ACCESS_ERROR =
   'CCS Bar endpoints require localhost access when dashboard auth is disabled.';
@@ -146,7 +153,9 @@ describe('api-routes /api/bar/* local-access guard', () => {
       next();
     });
     authApp.use(createSessionMiddleware());
+    authApp.use(barAuthMiddleware);
     authApp.use(authMiddleware);
+    authApp.post('/api/accounts/tier-lock', (_req, res) => res.sendStatus(204));
     authApp.use('/api', apiRoutes);
 
     const authServer = await new Promise<Server>((resolve, reject) => {
@@ -161,6 +170,39 @@ describe('api-routes /api/bar/* local-access guard', () => {
         throw new Error('Unable to resolve auth-enabled test server port');
       }
       const authBaseUrl = `http://127.0.0.1:${address.port}`;
+
+      const nonce = '0123456789abcdef0123456789abcdef';
+      const proofHeaders = {
+        [BAR_AUTH_NONCE_HEADER]: nonce,
+        [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(getOrCreateBarAuthToken(), nonce),
+      };
+      const proofResponse = await fetch(`${authBaseUrl}/api/bar/summary`, {
+        headers: proofHeaders,
+      });
+      expect(proofResponse.status).toBe(200);
+      expect(Array.isArray(await proofResponse.json())).toBe(true);
+
+      const mutationResponse = await fetch(`${authBaseUrl}/api/accounts/tier-lock`, {
+        method: 'POST',
+        headers: proofHeaders,
+      });
+      expect(mutationResponse.status).toBe(204);
+
+      const missingProofResponse = await fetch(`${authBaseUrl}/api/bar/summary`);
+      expect(missingProofResponse.status).toBe(401);
+
+      const invalidProofResponse = await fetch(`${authBaseUrl}/api/bar/analytics`, {
+        headers: {
+          [BAR_AUTH_NONCE_HEADER]: nonce,
+          [BAR_AUTH_TOKEN_HEADER]: '0'.repeat(64),
+        },
+      });
+      expect(invalidProofResponse.status).toBe(403);
+
+      const unrelatedResponse = await fetch(`${authBaseUrl}/api/settings`, {
+        headers: proofHeaders,
+      });
+      expect(unrelatedResponse.status).toBe(401);
 
       const loginResponse = await fetch(`${authBaseUrl}/api/auth/login`, {
         method: 'POST',
@@ -183,5 +225,5 @@ describe('api-routes /api/bar/* local-access guard', () => {
       delete process.env.CCS_DASHBOARD_USERNAME;
       delete process.env.CCS_DASHBOARD_PASSWORD_HASH;
     }
-  }, 15000);
+  }, 30000);
 });

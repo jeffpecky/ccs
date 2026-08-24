@@ -17,6 +17,12 @@ import {
   getDashboardAuthConfig,
   isDashboardAuthEnabled,
 } from '../../config/config-loader-facade';
+import {
+  BAR_AUTH_NONCE_HEADER,
+  BAR_AUTH_TOKEN_HEADER,
+  getOrCreateBarAuthToken,
+  isMatchingBarAuthProof,
+} from '../../utils/bar-auth-token';
 
 // Extend Express Request with session
 declare module 'express-session' {
@@ -28,6 +34,14 @@ declare module 'express-session' {
 
 /** Public paths that bypass auth (lowercase for case-insensitive matching) */
 const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/check', '/api/auth/setup', '/api/health'];
+const BAR_MUTATION_PATHS = new Set([
+  '/api/accounts/bulk-pause',
+  '/api/accounts/bulk-resume',
+  '/api/accounts/default',
+  '/api/accounts/solo',
+  '/api/accounts/tier-lock',
+]);
+const barAuthenticatedRequests = new WeakSet<Request>();
 
 /** Path to persistent session secret file */
 function getSessionSecretPath() {
@@ -133,12 +147,35 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
 
   // Check session
-  if (req.session?.authenticated) {
+  if (req.session?.authenticated || barAuthenticatedRequests.has(req)) {
     return next();
   }
 
   // Unauthorized
   res.status(401).json({ error: 'Authentication required' });
+}
+
+export function barAuthMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const pathLower = req.path.toLowerCase();
+  const isBarRoute = pathLower === '/api/bar' || pathLower.startsWith('/api/bar/');
+  const isBarMutation =
+    isDashboardAuthEnabled() && req.method === 'POST' && BAR_MUTATION_PATHS.has(pathLower);
+  if (!isBarRoute && !isBarMutation) return next();
+  if (req.session?.authenticated) return next();
+
+  const nonce = req.header(BAR_AUTH_NONCE_HEADER)?.trim();
+  const proof = req.header(BAR_AUTH_TOKEN_HEADER)?.trim();
+  if (!nonce && !proof) {
+    res.status(401).json({ error: 'CCS Bar authentication required' });
+    return;
+  }
+  if (!nonce || !proof || !isMatchingBarAuthProof(getOrCreateBarAuthToken(), nonce, proof)) {
+    res.status(403).json({ error: 'Invalid CCS Bar authentication proof' });
+    return;
+  }
+
+  barAuthenticatedRequests.add(req);
+  next();
 }
 
 export function isLoopbackRemoteAddress(value: string | undefined): boolean {

@@ -29,8 +29,7 @@ export interface BarServerStopDeps {
 }
 
 export interface ProcessExitWaitDeps {
-  platform: NodeJS.Platform;
-  isWindowsProcessRunning: (pid: number) => boolean;
+  getProcessBirthIdentity: (pid: number) => string | null;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
 }
@@ -95,37 +94,30 @@ export async function waitForProcessExit(
   timeoutMs: number,
   deps: Partial<ProcessExitWaitDeps> = {}
 ): Promise<'exited' | 'identity-mismatch' | 'timeout'> {
-  const platform = deps.platform ?? process.platform;
   const now = deps.now ?? Date.now;
   const sleep = deps.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  const isWindowsProcessRunning =
-    deps.isWindowsProcessRunning ??
-    ((targetPid: number) => {
-      try {
-        const output = execFileSync(
-          'tasklist.exe',
-          ['/FI', `PID eq ${targetPid}`, '/FO', 'CSV', '/NH'],
-          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 1_000 }
-        );
-        return output.split(/\r?\n/).some((line) => line.includes(`","${targetPid}","`));
-      } catch {
-        return true;
-      }
-    });
+  const getIdentity =
+    deps.getProcessBirthIdentity ??
+    (process.platform === 'win32'
+      ? (targetPid: number) => {
+          try {
+            process.kill(targetPid, 0);
+            return birthIdentity;
+          } catch (err) {
+            return (err as NodeJS.ErrnoException).code === 'ESRCH' ? null : birthIdentity;
+          }
+        }
+      : getProcessBirthIdentity);
 
   const deadline = now() + timeoutMs;
-  while (now() < deadline) {
-    if (platform === 'win32') {
-      if (!isWindowsProcessRunning(pid)) return 'exited';
-      await sleep(100);
-      continue;
-    }
-    const currentIdentity = getProcessBirthIdentity(pid);
+  while (true) {
+    const currentIdentity = getIdentity(pid);
     if (currentIdentity === null) return 'exited';
     if (currentIdentity !== birthIdentity) return 'identity-mismatch';
-    await sleep(100);
+    const remaining = deadline - now();
+    if (remaining <= 0) return 'timeout';
+    await sleep(Math.min(100, remaining));
   }
-  return 'timeout';
 }
 
 export async function stopRecordedBarServer(
@@ -141,7 +133,15 @@ export async function stopRecordedBarServer(
   }
 
   const getIdentity = deps.getProcessBirthIdentity ?? getProcessBirthIdentity;
-  const killProcess = deps.killProcess ?? ((pid, signal) => process.kill(pid, signal));
+  const killProcess =
+    deps.killProcess ??
+    (process.platform === 'win32'
+      ? (pid: number) => {
+          execFileSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+            stdio: ['ignore', 'ignore', 'pipe'],
+          });
+        }
+      : (pid: number, signal: 'SIGTERM') => process.kill(pid, signal));
   const waitForExit = deps.waitForProcessExit ?? waitForProcessExit;
 
   // Revalidate immediately before SIGTERM. A PID alone is unsafe because the OS

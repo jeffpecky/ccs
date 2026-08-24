@@ -14,6 +14,7 @@ import { WebSocketServer } from 'ws';
 import { setupWebSocket } from './websocket';
 import {
   authMiddleware,
+  barAuthMiddleware,
   createSessionMiddleware,
   getDashboardWebSocketRejectionStatus,
   isDashboardWebSocketUpgradeAllowed,
@@ -76,6 +77,9 @@ export async function startServer(options: ServerOptions): Promise<ServerInstanc
   // Session middleware (for dashboard auth)
   const sessionMiddleware = createSessionMiddleware();
   app.use(sessionMiddleware);
+
+  // CCS Bar uses nonce-bound local credentials instead of dashboard cookies.
+  app.use(barAuthMiddleware);
 
   // Auth middleware (protects API routes when enabled)
   app.use(authMiddleware);
