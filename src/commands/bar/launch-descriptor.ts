@@ -27,12 +27,18 @@ export interface LaunchDescriptorOptions {
   runtime?: string;
   home?: string;
   ccsHome?: string;
+  platform?: NodeJS.Platform;
   /** Server port; recorded in args so the Swift app self-starts on the same port. */
   port?: number;
 }
 
-export function getLaunchShimPath(home: string = os.homedir()): string {
-  return path.join(home, 'Library', 'Application Support', 'CCS Bar', 'launcher', 'ccs.js');
+export function getLaunchShimPath(
+  home: string = os.homedir(),
+  platform: NodeJS.Platform = process.platform
+): string {
+  return platform === 'win32'
+    ? path.join(home, 'AppData', 'Local', 'CCS Bar', 'launcher', 'ccs.js')
+    : path.join(home, 'Library', 'Application Support', 'CCS Bar', 'launcher', 'ccs.js');
 }
 
 function resolveEntrypoint(entrypointPath?: string): string {
@@ -43,10 +49,14 @@ function resolveEntrypoint(entrypointPath?: string): string {
   return fs.realpathSync(candidate);
 }
 
-export function writeLaunchShim(home: string, entrypointPath?: string): string {
+export function writeLaunchShim(
+  home: string,
+  entrypointPath?: string,
+  platform: NodeJS.Platform = process.platform
+): string {
   const resolvedEntrypoint = resolveEntrypoint(entrypointPath);
   const expectedEntrypointHash = sha256File(resolvedEntrypoint);
-  const shimPath = getLaunchShimPath(home);
+  const shimPath = getLaunchShimPath(home, platform);
   const shimDir = path.dirname(shimPath);
   const contents = [
     '#!/usr/bin/env node',
@@ -81,7 +91,7 @@ export function writeLaunchShim(home: string, entrypointPath?: string): string {
 
 export function createBarLaunchDescriptor(options: LaunchDescriptorOptions = {}): LaunchJson {
   const home = options.home ?? os.homedir();
-  const entrypoint = writeLaunchShim(home, options.entrypointPath);
+  const entrypoint = writeLaunchShim(home, options.entrypointPath, options.platform);
   const ccsHome = options.ccsHome ?? process.env.CCS_HOME;
   return {
     schema: LAUNCH_JSON_SCHEMA,

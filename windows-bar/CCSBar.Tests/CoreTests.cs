@@ -17,7 +17,7 @@ public sealed class CoreTests
     [TestMethod]
     public async Task Client_UsesBackendContractsAndAuthenticatesEveryRequest()
     {
-        var handler = new RecordingHandler(request => new(HttpStatusCode.OK) { Content = new StringContent(request.RequestUri!.AbsolutePath.EndsWith("analytics") ? AnalyticsJson : SummaryJson) });
+        var handler = new RecordingHandler(request => AuthenticatedResponse(request, request.RequestUri!.AbsolutePath.EndsWith("analytics") ? AnalyticsJson : SummaryJson));
         var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(handler), Token);
         await client.SummaryAsync(); await client.AnalyticsAsync(); await client.PauseAsync("agy", "a"); await client.ResumeAsync("agy", "a"); await client.SetDefaultAsync("agy:a"); await client.SoloAsync("agy", "a"); await client.TierLockAsync("agy", null);
 
@@ -26,6 +26,38 @@ public sealed class CoreTests
         StringAssert.Contains(handler.Bodies[3]!, "\"accountIds\":[\"a\"]");
         StringAssert.Contains(handler.Bodies[4]!, "\"name\":\"agy:a\"");
         Assert.IsTrue(handler.Requests.All(x => x.Headers.Contains(BarAuth.NonceHeader) && x.Headers.Contains(BarAuth.TokenHeader)));
+    }
+
+    [TestMethod]
+    public async Task Client_RejectsMissingInvalidAndDuplicateResponseProofsOnEveryApiResponse()
+    {
+        foreach (var proof in new[] { "missing", "invalid", "duplicate" })
+        {
+            var handler = new RecordingHandler(request =>
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(request.Method == HttpMethod.Get ? SummaryJson : "") };
+                if (proof != "missing") response.Headers.TryAddWithoutValidation(BarAuth.TokenHeader, proof == "invalid" ? new[] { new string('0', 64) } : new[] { ResponseProof(request), ResponseProof(request) });
+                return response;
+            });
+            var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(handler), Token);
+            await Assert.ThrowsExceptionAsync<HttpRequestException>(() => client.SummaryAsync());
+            await Assert.ThrowsExceptionAsync<HttpRequestException>(() => client.PauseAsync("agy", "a"));
+        }
+    }
+
+    [TestMethod]
+    public async Task Client_MalformedOrNullModelJsonFailsClosedWithoutThrowing()
+    {
+        foreach (var json in new[] { "bad", "null", "[{\"account_id\":null}]" })
+        {
+            var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(request => AuthenticatedResponse(request, json))), Token);
+            Assert.AreEqual(0, (await client.SummaryAsync()).Count);
+        }
+        foreach (var json in new[] { "bad", "null", "{\"today\":null}" })
+        {
+            var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(request => AuthenticatedResponse(request, json))), Token);
+            Assert.IsNull(await client.AnalyticsAsync());
+        }
     }
 
     [TestMethod]
@@ -42,6 +74,24 @@ public sealed class CoreTests
         Assert.AreEqual(BarDiscoveryState.Unsafe, BarDiscovery.Load(temp.Path).State);
         File.WriteAllText(BarDiscovery.DefaultPath(temp.Path), "{\"baseUrl\":\"http://[::1]:4321\",\"port\":4321,\"authMode\":\"loopback\"}");
         Assert.AreEqual(BarDiscoveryState.Ready, BarDiscovery.Load(temp.Path).State);
+    }
+
+    [TestMethod]
+    public void DiscoveryAndLaunchDescriptor_HonorCcsHomeAndRejectNullJson()
+    {
+        using var home = new TempDirectory(); using var ccsHome = new TempDirectory();
+        var environment = new Dictionary<string, string?> { ["CCS_HOME"] = ccsHome.Path };
+        File.WriteAllText(System.IO.Path.Combine(ccsHome.Path, "bar.json"), "null");
+        Assert.AreEqual(BarDiscoveryState.Malformed, BarDiscovery.Load(home.Path, environment).State);
+
+        Directory.CreateDirectory(System.IO.Path.Combine(ccsHome.Path, "bar"));
+        var launchPath = System.IO.Path.Combine(ccsHome.Path, "bar", "launch.json");
+        File.WriteAllText(launchPath, "null");
+        var trust = new RecordingTrustValidator(true);
+        Assert.IsNull(BarLaunchDescriptor.Load(home.Path, trust, environment));
+        Assert.AreEqual(launchPath, trust.Paths[0]);
+        File.WriteAllText(launchPath, "{\"schema\":1,\"runtime\":null,\"args\":null,\"home\":null}");
+        Assert.IsNull(BarLaunchDescriptor.Load(home.Path, trust, environment));
     }
 
     [TestMethod]
@@ -66,6 +116,18 @@ public sealed class CoreTests
         using var cts = new CancellationTokenSource(10);
         try { await probe.FindLiveServerAsync(null, cts.Token); Assert.Fail("Expected cancellation"); }
         catch (OperationCanceledException) { }
+    }
+
+    [TestMethod]
+    public async Task Probe_DuplicateProofHeadersFailClosedWithoutThrowing()
+    {
+        var probe = new BarServerProbe(new HttpClient(new RecordingHandler(request =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK);
+            response.Headers.TryAddWithoutValidation(BarAuth.TokenHeader, new[] { ResponseProof(request), ResponseProof(request) });
+            return response;
+        })), Token, TimeSpan.FromMilliseconds(20));
+        Assert.IsNull(await probe.FindLiveServerAsync(new("http://127.0.0.1:4321", 4321, "loopback")));
     }
 
     [TestMethod]
@@ -135,6 +197,22 @@ public sealed class CoreTests
     }
 
     [TestMethod]
+    public void Alerts_RoundPositiveHalvesAwayFromZeroAndUseInjectedLocalCalendar()
+    {
+        var zone = TimeZoneInfo.CreateCustomTimeZone("UTC-8", TimeSpan.FromHours(-8), "UTC-8", "UTC-8");
+        var beforeLocalMidnight = new DateTimeOffset(2026, 9, 1, 7, 30, 0, TimeSpan.Zero);
+        var afterLocalMidnight = beforeLocalMidnight.AddHours(1);
+        var analytics = JsonSerializer.Deserialize<BarAnalytics>(AnalyticsJson.Replace("\"cost\":1", "\"cost\":600", StringComparison.Ordinal), BarJson.Options)! with { MonthToDate = new(11000, 1) };
+        var first = BarAlertEngine.Evaluate(new[] { Row("a", quota: 10.5) }, analytics, new(), [], beforeLocalMidnight, zone);
+        StringAssert.Contains(first.ToDeliver.Single(x => x.Kind == BarAlertKind.QuotaRemainingBelow).Body, "11% remaining");
+        Assert.IsTrue(first.FiredKeys.Contains("dailySpendAbove|global|2026-08-31"));
+        Assert.IsTrue(first.FiredKeys.Contains("monthSpendAbove|global|2026-08"));
+        var second = BarAlertEngine.Evaluate([], analytics, new(), first.FiredKeys, afterLocalMidnight, zone);
+        Assert.IsTrue(second.ToDeliver.Any(x => x.Kind == BarAlertKind.DailySpendAbove));
+        Assert.IsTrue(second.ToDeliver.Any(x => x.Kind == BarAlertKind.MonthSpendAbove));
+    }
+
+    [TestMethod]
     public async Task UpdateFetch_UsesStableContractTimeoutNoCacheAndSafeNulls()
     {
         var handler = new RecordingHandler(_ => new(HttpStatusCode.OK) { Content = new StringContent(" 1.2.3-rc.1\n") });
@@ -146,6 +224,13 @@ public sealed class CoreTests
 
     static QuotaWindowDetail Window(string key, double remaining, int minutes) => new(key, key, 100 - remaining, remaining, null, minutes);
     static BarSummaryRow Row(string id, double? quota = null, IReadOnlyList<QuotaWindowDetail>? windows = null, string? display = null, string? reset = null, bool paused = false, bool reauth = false) => new(id, "agy", display, null, paused, quota, quota is null ? "unsupported" : "ok", reset, false, null, null, "ok", false, null, reauth, null, null, false, windows, null);
+    static string ResponseProof(HttpRequestMessage request) => BarAuth.Proof(Token, request.Headers.GetValues(BarAuth.NonceHeader).Single());
+    static HttpResponseMessage AuthenticatedResponse(HttpRequestMessage request, string content)
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) };
+        response.Headers.Add(BarAuth.TokenHeader, ResponseProof(request));
+        return response;
+    }
 }
 
 sealed class RecordingHandler : HttpMessageHandler

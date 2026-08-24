@@ -830,6 +830,33 @@ describe('launch: detached-spawn model', () => {
 // ---------------------------------------------------------------------------
 
 describe('launch descriptor shim', () => {
+  it('uses platform-private shim paths while preserving the macOS path', async () => {
+    const { getLaunchShimPath } = await loadLaunchDescriptor();
+
+    expect(getLaunchShimPath(tempHome, 'darwin')).toBe(
+      path.join(tempHome, 'Library', 'Application Support', 'CCS Bar', 'launcher', 'ccs.js')
+    );
+    expect(getLaunchShimPath(tempHome, 'win32')).toBe(
+      path.join(tempHome, 'AppData', 'Local', 'CCS Bar', 'launcher', 'ccs.js')
+    );
+  });
+
+  it('writes the Windows descriptor shim where the Windows app trusts it', async () => {
+    const entrypoint = path.join(tempHome, 'ccs.js');
+    fs.writeFileSync(entrypoint, 'console.log("ccs");\n');
+    const { createBarLaunchDescriptor, getLaunchShimPath } = await loadLaunchDescriptor();
+
+    const descriptor = createBarLaunchDescriptor({
+      entrypointPath: entrypoint,
+      runtime: process.execPath,
+      home: tempHome,
+      platform: 'win32',
+    });
+
+    expect(descriptor.args[0]).toBe(getLaunchShimPath(tempHome, 'win32'));
+    expect(fs.existsSync(descriptor.args[0])).toBe(true);
+  });
+
   it('creates and validates a private shim from a direct entrypoint file', async () => {
     const entrypoint = path.join(tempHome, 'ccs.js');
     fs.writeFileSync(entrypoint, 'console.log("ccs");\n', { mode: 0o777 });

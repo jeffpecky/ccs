@@ -8,10 +8,10 @@ public sealed class CCSBarClient
     readonly Uri baseUri; readonly HttpClient http; readonly string authToken;
     public CCSBarClient(Uri baseUri, HttpClient http, string? authToken = null, string? home = null, IReadOnlyDictionary<string, string?>? environment = null)
     { this.baseUri = baseUri; this.http = http; this.authToken = authToken ?? BarServerProbe.LoadAuthToken(home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), environment) ?? throw new InvalidOperationException("CCS Bar auth token unavailable"); }
-    public Task<IReadOnlyList<BarSummaryRow>> SummaryAsync(bool refresh = false, CancellationToken cancellationToken = default) =>
-        GetAsync<IReadOnlyList<BarSummaryRow>>(refresh ? "api/bar/summary?refresh=true" : "api/bar/summary", cancellationToken);
+    public async Task<IReadOnlyList<BarSummaryRow>> SummaryAsync(bool refresh = false, CancellationToken cancellationToken = default) =>
+        await GetAsync<IReadOnlyList<BarSummaryRow>?>(refresh ? "api/bar/summary?refresh=true" : "api/bar/summary", cancellationToken) ?? [];
 
-    public Task<BarAnalytics> AnalyticsAsync(CancellationToken cancellationToken = default) => GetAsync<BarAnalytics>("api/bar/analytics", cancellationToken);
+    public Task<BarAnalytics?> AnalyticsAsync(CancellationToken cancellationToken = default) => GetAsync<BarAnalytics?>("api/bar/analytics", cancellationToken);
     public Task PauseAsync(string provider, string accountId, CancellationToken ct = default) => PostAsync("api/accounts/bulk-pause", new { provider, accountIds = new[] { accountId } }, ct);
     public Task ResumeAsync(string provider, string accountId, CancellationToken ct = default) => PostAsync("api/accounts/bulk-resume", new { provider, accountIds = new[] { accountId } }, ct);
     public Task SetDefaultAsync(string name, CancellationToken ct = default) => PostAsync("api/accounts/default", new { name }, ct);
@@ -22,8 +22,10 @@ public sealed class CCSBarClient
     {
         using var request = Request(HttpMethod.Get, path);
         using var response = await http.SendAsync(request, cancellationToken);
+        VerifyResponse(request, response);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<T>(BarJson.Options, cancellationToken) ?? throw new JsonException();
+        try { return await response.Content.ReadFromJsonAsync<T>(BarJson.Options, cancellationToken) ?? default!; }
+        catch (JsonException) { return default!; }
     }
 
     private async Task PostAsync(string path, object body, CancellationToken cancellationToken)
@@ -31,6 +33,7 @@ public sealed class CCSBarClient
         using var request = Request(HttpMethod.Post, path);
         request.Content = JsonContent.Create(body, options: BarJson.Options);
         using var response = await http.SendAsync(request, cancellationToken);
+        VerifyResponse(request, response);
         response.EnsureSuccessStatusCode();
     }
 
@@ -39,5 +42,9 @@ public sealed class CCSBarClient
         var request = new HttpRequestMessage(method, new Uri(baseUri, path));
         BarAuth.Authenticate(request, authToken);
         return request;
+    }
+    void VerifyResponse(HttpRequestMessage request, HttpResponseMessage response)
+    {
+        if (!BarAuth.VerifyResponse(request, response, authToken)) throw new HttpRequestException("Invalid CCS Bar response proof");
     }
 }

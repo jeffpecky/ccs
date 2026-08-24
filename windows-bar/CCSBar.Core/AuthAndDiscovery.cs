@@ -21,6 +21,12 @@ public static class BarAuth
         request.Headers.Add(NonceHeader, nonce);
         request.Headers.Add(TokenHeader, Proof(token, nonce));
     }
+    public static bool VerifyResponse(HttpRequestMessage request, HttpResponseMessage response, string token)
+    {
+        if (!request.Headers.TryGetValues(NonceHeader, out var nonces) || !response.Headers.TryGetValues(TokenHeader, out var proofs)) return false;
+        var nonce = nonces.Take(2).ToArray(); var proof = proofs.Take(2).ToArray();
+        return nonce.Length == 1 && proof.Length == 1 && Verify(token, nonce[0], proof[0]);
+    }
 }
 
 public enum BarDiscoveryState { Ready, Missing, Unreadable, Malformed, Unsafe }
@@ -28,10 +34,10 @@ public sealed record BarDiscoveryLoadResult(BarDiscoveryState State, BarDiscover
 public sealed record BarDiscovery(string BaseUrl, int Port, string AuthMode)
 {
     public Uri? ResolvedUri => IsSafe(out var uri) ? uri : null;
-    public static string DefaultPath(string home) => Path.Combine(home, ".ccs", "bar.json");
-    public static BarDiscoveryLoadResult Load(string home)
+    public static string DefaultPath(string home, IReadOnlyDictionary<string, string?>? environment = null) => Path.Combine(BarServerProbe.CcsHome(home, environment), "bar.json");
+    public static BarDiscoveryLoadResult Load(string home, IReadOnlyDictionary<string, string?>? environment = null)
     {
-        var path = DefaultPath(home);
+        var path = DefaultPath(home, environment);
         if (!File.Exists(path)) return new(BarDiscoveryState.Missing, Path: path);
         string json;
         try { json = File.ReadAllText(path); }
@@ -59,17 +65,17 @@ public interface ILaunchTrustValidator
 
 public sealed record BarLaunchDescriptor(int Schema, string Runtime, IReadOnlyList<string> Args, string Home, string? CcsHome)
 {
-    public static string DefaultPath(string home) => Path.Combine(home, ".ccs", "bar", "launch.json");
-    public static BarLaunchDescriptor? Load(string home, ILaunchTrustValidator trust)
+    public static string DefaultPath(string home, IReadOnlyDictionary<string, string?>? environment = null) => Path.Combine(BarServerProbe.CcsHome(home, environment), "bar", "launch.json");
+    public static BarLaunchDescriptor? Load(string home, ILaunchTrustValidator trust, IReadOnlyDictionary<string, string?>? environment = null)
     {
-        var path = DefaultPath(home);
+        var path = DefaultPath(home, environment);
         if (!trust.IsTrustedFile(path)) return null;
         try { var value = JsonSerializer.Deserialize<BarLaunchDescriptor>(File.ReadAllText(path), BarJson.Options); return value?.IsSafe(home, trust) == true ? value : null; }
         catch (JsonException) { return null; } catch (IOException) { return null; } catch (UnauthorizedAccessException) { return null; }
     }
     public bool IsSafe(string expectedHome, ILaunchTrustValidator trust)
     {
-        if (Schema != 1 || Args.Count is not (3 or 5) || Args[1] != "bar" || Args[2] != "serve" || Args.Count == 5 && (Args[3] != "--port" || !int.TryParse(Args[4], out var port) || port is < 1 or > 65535)) return false;
+        if (Schema != 1 || Args is null || Args.Count is not (3 or 5) || Args[1] != "bar" || Args[2] != "serve" || Args.Count == 5 && (Args[3] != "--port" || !int.TryParse(Args[4], out var port) || port is < 1 or > 65535)) return false;
         if (!Path.IsPathFullyQualified(Runtime) || !Path.IsPathFullyQualified(Args[0]) || !Path.IsPathFullyQualified(Home) || !Path.GetFullPath(Home).Equals(Path.GetFullPath(expectedHome), StringComparison.OrdinalIgnoreCase) || CcsHome is not null && (!Path.IsPathFullyQualified(CcsHome) || CcsHome.Length == 0)) return false;
         var expectedShim = Path.Combine(expectedHome, "AppData", "Local", "CCS Bar", "launcher", "ccs.js");
         if (Path.GetFileName(Runtime).ToLowerInvariant() is not ("node.exe" or "bun.exe") || !Path.GetFullPath(Args[0]).Equals(Path.GetFullPath(expectedShim), StringComparison.OrdinalIgnoreCase)) return false;
@@ -83,7 +89,11 @@ public sealed class BarServerProbe
     readonly HttpClient http; readonly string? authToken; readonly TimeSpan probeTimeout;
     public BarServerProbe(HttpClient http, string? authToken = null, TimeSpan? probeTimeout = null, string? home = null, IReadOnlyDictionary<string, string?>? environment = null)
     { this.http = http; this.authToken = authToken ?? LoadAuthToken(home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), environment); this.probeTimeout = probeTimeout ?? TimeSpan.FromSeconds(1.5); }
-    public static string CcsHome(string home, IReadOnlyDictionary<string, string?>? environment = null) => environment is not null && environment.TryGetValue("CCS_HOME", out var value) && !string.IsNullOrWhiteSpace(value) ? value : Path.Combine(home, ".ccs");
+    public static string CcsHome(string home, IReadOnlyDictionary<string, string?>? environment = null)
+    {
+        var value = environment is null ? Environment.GetEnvironmentVariable("CCS_HOME") : environment.TryGetValue("CCS_HOME", out var configured) ? configured : null;
+        return !string.IsNullOrWhiteSpace(value) ? value : Path.Combine(home, ".ccs");
+    }
     public static string AuthTokenPath(string home, IReadOnlyDictionary<string, string?>? environment = null) => Path.Combine(CcsHome(home, environment), "bar", ".auth-token");
     public static string? LoadAuthToken(string home, IReadOnlyDictionary<string, string?>? environment = null)
     {
@@ -109,8 +119,7 @@ public sealed class BarServerProbe
         try
         {
             using var response = await http.SendAsync(request, timeout.Token);
-            if (response.StatusCode != HttpStatusCode.OK || !response.Headers.TryGetValues(BarAuth.TokenHeader, out var values)) return false;
-            return BarAuth.Verify(authToken, request.Headers.GetValues(BarAuth.NonceHeader).Single(), values.Single());
+            return response.StatusCode == HttpStatusCode.OK && BarAuth.VerifyResponse(request, response, authToken);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return false; }
         catch (HttpRequestException) { return false; }
