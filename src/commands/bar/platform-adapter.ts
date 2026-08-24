@@ -173,10 +173,10 @@ export async function installWindowsBar(args: string[], supplied: Partial<Window
     deps.writeLaunchDescriptor(paths.launchJson);
     deps.registerShortcut(paths.startMenuShortcut, paths.exe);
     deps.registerShortcut(paths.startupShortcut, paths.exe);
-    fs.rmSync(backup, { recursive: true, force: true });
     console.log(`[OK] CCS Bar installed to ${paths.installDir}`);
     if (args.includes('--launch')) await deps.launch();
     else if (!args.includes('--no-launch')) console.log('[i] Run `ccs bar` to launch.');
+    fs.rmSync(backup, { recursive: true, force: true });
   } catch (error) {
     if (swapped) {
       fs.rmSync(paths.installDir, { recursive: true, force: true });

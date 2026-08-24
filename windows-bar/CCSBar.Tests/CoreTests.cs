@@ -99,9 +99,23 @@ public sealed class CoreTests
         File.WriteAllText(launchPath, "null");
         var trust = new RecordingTrustValidator(true);
         Assert.IsNull(BarLaunchDescriptor.Load(home.Path, trust, environment));
-        Assert.AreEqual(launchPath, trust.Paths[0]);
+        Assert.IsFalse(trust.Paths.Contains(launchPath, StringComparer.OrdinalIgnoreCase));
         File.WriteAllText(launchPath, "{\"schema\":1,\"runtime\":null,\"args\":null,\"home\":null}");
         Assert.IsNull(BarLaunchDescriptor.Load(home.Path, trust, environment));
+    }
+
+    [TestMethod]
+    public void LaunchDescriptor_ReadabilityIsSeparateFromRuntimeTrust()
+    {
+        using var home = new TempDirectory();
+        var launchPath = BarLaunchDescriptor.DefaultPath(home.Path);
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(launchPath)!);
+        var shim = System.IO.Path.Combine(home.Path, "AppData", "Local", "CCS Bar", "launcher", "ccs.js");
+        File.WriteAllText(launchPath, JsonSerializer.Serialize(new BarLaunchDescriptor(1, @"C:\Program Files\nodejs\node.exe", [shim, "bar", "serve"], home.Path, null), BarJson.Options));
+        var trust = new DescriptorReadableTrustValidator(launchPath);
+
+        Assert.IsNotNull(BarLaunchDescriptor.Load(home.Path, trust));
+        Assert.IsFalse(trust.Paths.Contains(launchPath, StringComparer.OrdinalIgnoreCase));
     }
 
     [TestMethod]
@@ -409,6 +423,13 @@ sealed class RecordingTrustValidator(bool trusted) : ILaunchTrustValidator
     public List<string> Paths { get; } = [];
     public bool IsTrustedFile(string path) { Paths.Add(path); return trusted; }
     public bool IsTrustedDirectory(string path) { Paths.Add(path); return trusted; }
+}
+
+sealed class DescriptorReadableTrustValidator(string descriptorPath) : ILaunchTrustValidator
+{
+    public List<string> Paths { get; } = [];
+    public bool IsTrustedFile(string path) { Paths.Add(path); return !path.Equals(descriptorPath, StringComparison.OrdinalIgnoreCase); }
+    public bool IsTrustedDirectory(string path) { Paths.Add(path); return true; }
 }
 
 sealed class TempDirectory : IDisposable

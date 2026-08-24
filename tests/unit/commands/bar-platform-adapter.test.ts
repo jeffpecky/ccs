@@ -110,6 +110,31 @@ describe('bar platform adapter', () => {
     expect(fs.readFileSync(path.join(installDir, 'CCS Bar.exe'), 'utf8')).toBe('old');
   });
 
+  test('post-install --launch failure restores previous app and registrations', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-win-bar-launch-rollback-'));
+    const paths = { installDir: path.join(root, 'CCS Bar'), exe: path.join(root, 'CCS Bar', 'CCS Bar.exe'), startMenuShortcut: path.join(root, 'start.lnk'), startupShortcut: path.join(root, 'startup.lnk'), versionFile: path.join(root, '.version'), launchJson: path.join(root, 'launch.json') };
+    fs.mkdirSync(paths.installDir, { recursive: true });
+    fs.writeFileSync(paths.exe, 'old-app');
+    for (const [file, value] of [[paths.versionFile, 'old-version'], [paths.launchJson, 'old-descriptor'], [paths.startMenuShortcut, 'old-start'], [paths.startupShortcut, 'old-startup']] as const) fs.writeFileSync(file, value);
+
+    await installWindowsBar(['--launch'], {
+      paths,
+      fetchAsset: async () => ({ downloadUrl: 'https://github.com/example.zip', sha256: 'a'.repeat(64) }),
+      stageAsset: async (_url, staging) => { const app = path.join(staging, 'CCS Bar'); fs.mkdirSync(app, { recursive: true }); fs.writeFileSync(path.join(app, 'CCS Bar.exe'), 'new-app'); },
+      appRunning: async () => false,
+      registerShortcut: (shortcut) => fs.writeFileSync(shortcut, 'new-link'),
+      writeLaunchDescriptor: (file) => fs.writeFileSync(file, 'new-descriptor'),
+      launch: async () => { throw new Error('launch failed'); },
+      version: 'new-version',
+    });
+
+    expect(fs.readFileSync(paths.exe, 'utf8')).toBe('old-app');
+    expect(fs.readFileSync(paths.versionFile, 'utf8')).toBe('old-version');
+    expect(fs.readFileSync(paths.launchJson, 'utf8')).toBe('old-descriptor');
+    expect(fs.readFileSync(paths.startMenuShortcut, 'utf8')).toBe('old-start');
+    expect(fs.readFileSync(paths.startupShortcut, 'utf8')).toBe('old-startup');
+  });
+
   test('first install registration failure removes every created artifact', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-win-bar-first-fail-'));
     const paths = { installDir: path.join(root, 'CCS Bar'), exe: path.join(root, 'CCS Bar', 'CCS Bar.exe'), startMenuShortcut: path.join(root, 'start.lnk'), startupShortcut: path.join(root, 'startup.lnk'), versionFile: path.join(root, '.version'), launchJson: path.join(root, 'launch.json') };

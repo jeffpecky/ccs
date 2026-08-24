@@ -70,7 +70,6 @@ public sealed record BarLaunchDescriptor(int Schema, string Runtime, IReadOnlyLi
     public static BarLaunchDescriptor? Load(string home, ILaunchTrustValidator trust, IReadOnlyDictionary<string, string?>? environment = null)
     {
         var path = DefaultPath(home, environment);
-        if (!trust.IsTrustedFile(path)) return null;
         try { var value = JsonSerializer.Deserialize<BarLaunchDescriptor>(File.ReadAllText(path), BarJson.Options); return value?.IsSafe(home, trust) == true ? value : null; }
         catch (JsonException) { return null; } catch (IOException) { return null; } catch (UnauthorizedAccessException) { return null; }
     }

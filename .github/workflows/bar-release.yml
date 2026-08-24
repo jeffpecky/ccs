@@ -40,7 +40,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Read bar version
@@ -73,6 +73,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -93,11 +95,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
-      - name: Stage metadata and publish atomically
+      - name: Stage metadata and update floating release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -107,5 +111,19 @@ jobs:
           STAGE="ccs-bar-${{ github.sha }}"
           gh release create "$STAGE" --repo jeffpecky/ccs --target "${{ github.sha }}" --title "CCS Bar v$VERSION" --notes "Staged complete platform release for ${{ github.sha }}"
           gh release upload "$STAGE" artifacts/* --repo jeffpecky/ccs
-          gh release delete ccs-bar-latest --repo jeffpecky/ccs --yes --cleanup-tag || true
-          gh release edit "$STAGE" --repo jeffpecky/ccs --tag ccs-bar-latest --title "CCS Bar v$VERSION" --notes "Complete macOS and Windows release built from ${{ github.sha }}"
+          BACKUP="ccs-bar-rollback-${{ github.sha }}"
+          mkdir "$BACKUP"
+          rollback() {
+            if [ -n "$(find "$BACKUP" -type f -print -quit)" ]; then
+              gh release upload ccs-bar-latest "$BACKUP"/* --repo jeffpecky/ccs --clobber
+            fi
+          }
+          if gh release view ccs-bar-latest --repo jeffpecky/ccs >/dev/null 2>&1; then
+            gh release download ccs-bar-latest --repo jeffpecky/ccs --dir "$BACKUP"
+            trap rollback ERR
+            gh release upload ccs-bar-latest artifacts/* --repo jeffpecky/ccs --clobber
+            gh release edit ccs-bar-latest --repo jeffpecky/ccs --target "${{ github.sha }}" --title "CCS Bar v$VERSION" --notes "Complete macOS and Windows release built from ${{ github.sha }}"
+            trap - ERR
+          else
+            gh release create ccs-bar-latest --repo jeffpecky/ccs --target "${{ github.sha }}" --title "CCS Bar v$VERSION" --notes "Complete macOS and Windows release built from ${{ github.sha }}" artifacts/*
+          fi
