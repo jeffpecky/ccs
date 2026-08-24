@@ -3,11 +3,18 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\CCSBar.Core\CCSBar.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="..\..\macos-bar\Resources\Assets\HeaderLogo.png" Link="Assets\HeaderLogo.png" />
+    <Resource Include="..\..\macos-bar\Resources\Assets\MenuBarColor.png" Link="Assets\MenuBarColor.png" />
+    <Resource Include="..\..\macos-bar\Resources\Assets\MenuBarTemplate.png" Link="Assets\MenuBarTemplate.png" />
+    <Resource Include="..\..\macos-bar\Resources\AppIcon-source.png" Link="Assets\AppIcon-source.png" />
   </ItemGroup>
 </Project>

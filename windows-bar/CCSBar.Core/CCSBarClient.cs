@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace CCSBar.Core;
 
-public sealed class CCSBarClient
+public sealed class CCSBarClient : IBarDataClient
 {
     readonly Uri baseUri; readonly HttpClient http; readonly string authToken;
     public CCSBarClient(Uri baseUri, HttpClient http, string? authToken = null, string? home = null, IReadOnlyDictionary<string, string?>? environment = null)
@@ -17,6 +17,12 @@ public sealed class CCSBarClient
     public Task SetDefaultAsync(string name, CancellationToken ct = default) => PostAsync("api/accounts/default", new { name }, ct);
     public Task SoloAsync(string provider, string accountId, CancellationToken ct = default) => PostAsync("api/accounts/solo", new { provider, accountId }, ct);
     public Task TierLockAsync(string provider, string? tier, CancellationToken ct = default) => PostAsync("api/accounts/tier-lock", new { provider, tier }, ct);
+    Task<IReadOnlyList<BarSummaryRow>> IBarDataClient.SummaryAsync(bool force, CancellationToken ct) => SummaryAsync(force, ct);
+    Task IBarDataClient.PauseAsync(BarSummaryRow row, CancellationToken ct) => PauseAsync(row.Provider, row.AccountId, ct);
+    Task IBarDataClient.ResumeAsync(BarSummaryRow row, CancellationToken ct) => ResumeAsync(row.Provider, row.AccountId, ct);
+    Task IBarDataClient.SoloAsync(BarSummaryRow row, CancellationToken ct) => SoloAsync(row.Provider, row.AccountId, ct);
+    Task IBarDataClient.SetDefaultAsync(BarSummaryRow row, CancellationToken ct) => SetDefaultAsync(row.Id, ct);
+    Task IBarDataClient.TierLockAsync(BarSummaryRow row, string? tier, CancellationToken ct) => TierLockAsync(row.Provider, tier, ct);
 
     private async Task<T> GetAsync<T>(string path, CancellationToken cancellationToken)
     {

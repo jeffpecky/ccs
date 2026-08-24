@@ -233,6 +233,110 @@ public sealed class CoreTests
     }
 }
 
+[TestClass]
+public sealed class ViewModelTests
+{
+    static readonly BarSummaryRow Row = new("acct", "agy", "Work", null, false, 42, "ok", null, true, null, 1, "ok", false, null, false, "claude", "default", false, null, null);
+    static readonly BarAnalytics Analytics = new() { Today = new(1, 1), Last7d = new(2, 2), Last30d = new(3, 3), AllTime = new(4, 4), ByDay = [], TopModels = [], TopModelsWindow = "30d", HasRecentData = true, GeneratedAt = "now" };
+
+    [TestMethod]
+    public async Task ViewModel_LoadsSummaryAndAnalyticsIndependentlyAndPreservesStaleData()
+    {
+        var client = new FakeBarDataClient { Rows = [Row], Analytics = Analytics };
+        var vm = new BarViewModel(new FakeConnector(client), new MemoryBarSettings(), new FakeClock());
+        await vm.ReconnectAndLoadAsync(false);
+        client.SummaryError = new InvalidOperationException("summary down");
+        client.Analytics = Analytics with { Today = new(9, 9) };
+
+        await vm.LoadAsync(false);
+
+        Assert.AreEqual(Row, vm.Rows.Single());
+        Assert.AreEqual(9, vm.Analytics!.Today.Cost);
+        Assert.IsTrue(vm.SummaryStale);
+        Assert.IsFalse(vm.AnalyticsStale);
+        Assert.IsFalse(vm.Offline);
+    }
+
+    [TestMethod]
+    public async Task ViewModel_DebouncesOpenRefreshButForceRefreshNeverDebounces()
+    {
+        var clock = new FakeClock(); var client = new FakeBarDataClient { Rows = [Row], Analytics = Analytics };
+        var vm = new BarViewModel(new FakeConnector(client), new MemoryBarSettings(), clock);
+        await vm.OnPanelOpenedAsync(); await vm.OnPanelOpenedAsync();
+        Assert.AreEqual(1, client.ForcedLoads);
+        await vm.ForceRefreshAsync();
+        Assert.AreEqual(2, client.ForcedLoads);
+        clock.Now += TimeSpan.FromSeconds(15);
+        await vm.OnPanelOpenedAsync();
+        Assert.AreEqual(3, client.ForcedLoads);
+    }
+
+    [TestMethod]
+    public async Task ViewModel_ExposesStartingOfflineRetryAlertsAndUpdateState()
+    {
+        var connector = new FakeConnector(null); var settings = new MemoryBarSettings();
+        var vm = new BarViewModel(connector, settings, new FakeClock(), updateChecker: _ => Task.FromResult<string?>("9.0.0"), currentVersion: "1.0.0");
+        await vm.ReconnectAndLoadAsync(false);
+        Assert.IsTrue(vm.Offline);
+        connector.Client = new FakeBarDataClient { Rows = [Row with { NeedsReauth = true }], Analytics = Analytics };
+        await vm.RetryAsync(); await vm.CheckForUpdatesAsync();
+        Assert.IsFalse(vm.Offline);
+        Assert.AreEqual(1, vm.ActiveAlerts.Count);
+        Assert.IsTrue(vm.UpdateAvailable);
+        Assert.AreEqual("9.0.0", vm.LatestVersion);
+    }
+
+    [TestMethod]
+    public void Carousel_DefaultProfileComesFirstAndKeyboardWraps()
+    {
+        var rows = new[] { Row with { AccountId = "b", Profile = "work", IsDefault = false }, Row with { AccountId = "a", Profile = "default", IsDefault = true } };
+        var carousel = new ProfileCarousel(rows);
+        Assert.AreEqual("a", carousel.Selected.AccountId);
+        carousel.Move(-1);
+        Assert.AreEqual("b", carousel.Selected.AccountId);
+        carousel.Move(1);
+        Assert.AreEqual("a", carousel.Selected.AccountId);
+    }
+
+    [TestMethod]
+    public void PanelPlacement_AnchorsInsideWorkAreaForEveryTaskbarEdge()
+    {
+        var work = new BarRect(0, 40, 1920, 1040); var tray = new BarRect(1800, 1040, 32, 32);
+        var panel = PanelPlacement.Anchor(work, tray, 360, 700);
+        Assert.AreEqual(1472, panel.X);
+        Assert.AreEqual(332, panel.Y);
+        Assert.IsTrue(panel.Right <= work.Right && panel.Bottom <= work.Bottom);
+
+        panel = PanelPlacement.Anchor(new(60, 0, 1920, 1080), new(0, 900, 40, 40), 360, 700);
+        Assert.AreEqual(60, panel.X);
+        Assert.IsTrue(panel.Bottom <= 1080);
+    }
+
+    [TestMethod]
+    public void ThemePalette_MatchesSwiftAuthority()
+    {
+        Assert.AreEqual("#E2732A", BarThemePalette.Dark.Accent);
+        Assert.AreEqual("#5B63D9", BarThemePalette.Dark.Subscription);
+        Assert.AreEqual("#F5F5F7", BarThemePalette.Light.WindowSurface);
+    }
+}
+
+sealed class FakeClock : IBarClock { public DateTimeOffset Now { get; set; } = DateTimeOffset.Parse("2026-08-24T00:00:00Z"); }
+sealed class FakeConnector(IBarDataClient? client) : IBarConnector { public IBarDataClient? Client { get; set; } = client; public Task<IBarDataClient?> ConnectAsync(CancellationToken cancellationToken) => Task.FromResult(Client); }
+sealed class FakeBarDataClient : IBarDataClient
+{
+    public IReadOnlyList<BarSummaryRow> Rows { get; set; } = []; public BarAnalytics? Analytics { get; set; } public Exception? SummaryError { get; set; } public int ForcedLoads { get; private set; }
+    public Task<IReadOnlyList<BarSummaryRow>> SummaryAsync(bool force, CancellationToken ct) { if (force) ForcedLoads++; return SummaryError is null ? Task.FromResult(Rows) : Task.FromException<IReadOnlyList<BarSummaryRow>>(SummaryError); }
+    public Task<BarAnalytics?> AnalyticsAsync(CancellationToken ct) => Task.FromResult(Analytics);
+    public Task PauseAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task ResumeAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task SoloAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task SetDefaultAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask; public Task TierLockAsync(BarSummaryRow row, string? tier, CancellationToken ct) => Task.CompletedTask;
+}
+
+sealed class MemoryBarSettings : IBarSettings
+{
+    public BarUiSettings Ui { get; set; } = new(); public BarPreferences Alerts { get; set; } = new(); public IReadOnlySet<string> FiredKeys { get; set; } = new HashSet<string>();
+    public void Save() { }
+}
+
 sealed class RecordingHandler : HttpMessageHandler
 {
     readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond;
