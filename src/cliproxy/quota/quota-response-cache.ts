@@ -6,7 +6,7 @@
  */
 
 /** Default TTL for quota cache entries (0 = disabled, quota is real-time) */
-const DEFAULT_CACHE_TTL_MS = 0;
+const DEFAULT_CACHE_TTL_MS = 2 * 60 * 1000;
 
 /** Cache entry with timestamp */
 interface CacheEntry<T> {

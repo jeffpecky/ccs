@@ -14,6 +14,9 @@ import {
   buildClaudeQuotaWindows,
   buildClaudeCoreUsageSummary,
 } from './quota-fetcher-claude-normalizer';
+import { createLogger } from '../../services/logging';
+
+const logger = createLogger('cliproxy:quota:claude');
 
 export { buildClaudeQuotaWindows, buildClaudeCoreUsageSummary };
 
@@ -250,7 +253,11 @@ async function runClaudeUsageFetch(
       });
 
       if (verbose) {
-        console.error(`[i] Claude OAuth usage status: ${response.status} (attempt ${attempt})`);
+        logger.info('quota.fetch.status', `Claude OAuth usage status: ${response.status}`, {
+          provider: 'claude',
+          status: response.status,
+          attempt,
+        });
       }
 
       if (response.status === 401) {
@@ -288,10 +295,21 @@ async function runClaudeUsageFetch(
           continue;
         }
         clearTimeout(timeoutId);
+        if (response.status === 429) {
+          return {
+            ...buildEmptyResult('Claude usage status temporarily unavailable', accountId),
+            httpStatus: response.status,
+            errorCode: 'usage_probe_unavailable',
+            actionHint:
+              'Inference may still be available. Retry the Claude quota status check later.',
+            retryable: true,
+            ...(retryAfter ? { errorDetail: `retry-after:${retryAfter}` } : {}),
+          };
+        }
         return {
           ...buildEmptyResult(lastError, accountId),
           httpStatus: response.status,
-          retryable: response.status === 429 || response.status >= 500,
+          retryable: response.status >= 500,
           ...(retryAfter ? { errorDetail: `retry-after:${retryAfter}` } : {}),
         };
       }
@@ -331,10 +349,17 @@ async function runClaudeUsageFetch(
             : 'Unknown error';
 
       if (verbose) {
-        const errorDetails =
-          error instanceof Error ? (error.stack ?? error.message) : JSON.stringify(error);
-        console.error(
-          `[!] Claude OAuth usage failed (attempt ${attempt}): ${lastError}${errorDetails ? `\n${errorDetails}` : ''}`
+        logger.warn(
+          'quota.fetch.failed',
+          `Claude OAuth usage failed (attempt ${attempt}): ${lastError}`,
+          {
+            provider: 'claude',
+            attempt,
+            err:
+              error instanceof Error
+                ? { name: error.name, message: error.message }
+                : { message: String(error) },
+          }
         );
       }
 
@@ -381,7 +406,7 @@ export async function fetchClaudeQuota(
 
   if (authData.isExpired) {
     return buildEmptyResult(
-      'Token expired - re-authenticate with Authenticate claude from the dashboard',
+      'Token expired - re-authenticate with ccs cliproxy auth claude',
       accountId,
       true
     );

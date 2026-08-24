@@ -7,6 +7,13 @@
 
 import { Router } from 'express';
 import { requireLocalAccessWhenAuthDisabled } from '../middleware/auth-middleware';
+import {
+  BAR_AUTH_NONCE_HEADER,
+  BAR_AUTH_TOKEN_HEADER,
+  createBarAuthProof,
+  getOrCreateBarAuthToken,
+  isValidBarAuthNonce,
+} from '../../utils/bar-auth-token';
 
 // Import domain routers
 import profileRoutes from './profile-routes';
@@ -66,6 +73,10 @@ apiRoutes.use((req, res, next) => {
   // Exact segment match so a future sibling like '/barbaz' isn't accidentally gated.
   if (req.path === '/bar' || req.path.startsWith('/bar/')) {
     if (requireLocalAccessWhenAuthDisabled(req, res, BAR_LOCAL_ACCESS_ERROR)) {
+      const nonce = req.header(BAR_AUTH_NONCE_HEADER)?.trim() ?? '';
+      if (isValidBarAuthNonce(nonce)) {
+        res.setHeader(BAR_AUTH_TOKEN_HEADER, createBarAuthProof(getOrCreateBarAuthToken(), nonce));
+      }
       next();
     }
     return;
