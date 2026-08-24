@@ -9,36 +9,21 @@ import { Router, Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { MODEL_CATALOG } from '../../cliproxy/model-catalog';
 
 const router = Router();
 
 /**
- * Look up a model across all provider catalogs to find its capabilities.
+ * OpenCode needs explicit image input metadata before it will attach images.
+ * Routed model IDs can be custom aliases, so static catalog lookup is incomplete.
  */
-function findModelCapabilities(modelId: string): { nativeImageInput?: boolean } | null {
-  for (const catalog of Object.values(MODEL_CATALOG)) {
-    const model = catalog.models.find((m) => m.id === modelId);
-    if (model) {
-      return { nativeImageInput: model.nativeImageInput };
-    }
-  }
-  return null;
-}
-
-/**
- * Build OpenCode model definition with correct modalities.
- */
-function buildOpenCodeModel(modelId: string): Record<string, unknown> {
-  const caps = findModelCapabilities(modelId);
-  const base: Record<string, unknown> = { name: modelId };
-  if (caps?.nativeImageInput) {
-    base.modalities = {
+export function buildOpenCodeModel(modelId: string): Record<string, unknown> {
+  return {
+    name: modelId,
+    modalities: {
       input: ['text', 'image'],
       output: ['text'],
-    };
-  }
-  return base;
+    },
+  };
 }
 
 // ==================== Helpers ====================
