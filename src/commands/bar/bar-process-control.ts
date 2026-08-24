@@ -87,18 +87,15 @@ export async function waitForProcessExit(
   birthIdentity: string,
   timeoutMs: number
 ): Promise<'exited' | 'identity-mismatch' | 'timeout'> {
+  if (process.platform === 'win32') {
+    // Node maps SIGTERM to synchronous TerminateProcess on Windows. PID probes
+    // can remain stale until the ChildProcess handle is reaped, so do not poll it.
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    return 'exited';
+  }
+
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (process.platform === 'win32') {
-      try {
-        process.kill(pid, 0);
-      } catch (err) {
-        if (isErrno(err, 'ESRCH')) return 'exited';
-        throw err;
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, 100));
-      continue;
-    }
     const currentIdentity = getProcessBirthIdentity(pid);
     if (currentIdentity === null) return 'exited';
     if (currentIdentity !== birthIdentity) return 'identity-mismatch';
