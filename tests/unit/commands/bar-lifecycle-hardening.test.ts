@@ -36,7 +36,8 @@ beforeEach(() => {
   process.exitCode = 0;
 });
 
-afterEach(() => {
+afterEach(async () => {
+  const exits = [...liveChildren].map((child) => waitForChildExit(child, 5_000));
   for (const child of liveChildren) {
     try {
       child.kill('SIGKILL');
@@ -44,6 +45,7 @@ afterEach(() => {
       // Already exited.
     }
   }
+  await Promise.allSettled(exits);
   liveChildren.clear();
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
@@ -234,8 +236,9 @@ describe('verified Bar process stopping', () => {
     fs.mkdirSync(path.dirname(pidPath), { recursive: true });
     fs.writeFileSync(pidPath, serializeBarServerProcessRecord({ pid: child.pid!, birthIdentity }));
 
+    const childExit = waitForChildExit(child, 5_000);
     const outcome = await stopBarServerProcessFile(pidPath);
-    await waitForChildExit(child);
+    await childExit;
 
     expect(outcome.result).toBe('stopped');
     expect(fs.existsSync(pidPath)).toBe(false);
@@ -252,8 +255,9 @@ describe('verified Bar process stopping', () => {
     const pidPath = path.join(ccsDir, 'bar', 'server.pid');
     fs.mkdirSync(path.dirname(pidPath), { recursive: true });
     fs.writeFileSync(pidPath, serializeBarServerProcessRecord({ pid: child.pid!, birthIdentity }));
+    const childExit = waitForChildExit(child, 5_000);
     await stopDetachedBarServer(ccsDir);
-    await waitForChildExit(child);
+    await childExit;
 
     expect(fs.existsSync(pidPath)).toBe(false);
     liveChildren.delete(child);
@@ -331,9 +335,22 @@ async function waitForBirthIdentity(pid: number): Promise<string> {
   throw new Error(`Process ${pid} never became observable`);
 }
 
-async function waitForChildExit(child: ReturnType<typeof spawn>): Promise<void> {
+async function waitForChildExit(
+  child: ReturnType<typeof spawn>,
+  timeoutMs: number
+): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
-  await new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      child.removeListener('exit', onExit);
+      reject(new Error(`Process ${child.pid} did not emit exit within ${timeoutMs}ms`));
+    }, timeoutMs);
+    const onExit = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+    child.once('exit', onExit);
+  });
 }
 
 describe('Bar server identity probe', () => {
