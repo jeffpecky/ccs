@@ -27,6 +27,10 @@ yarn-error.log*
 dist/
 *.tsbuildinfo
 
+# .NET build output
+windows-bar/**/bin/
+windows-bar/**/obj/
+
 # Package lock files (use bun.lock only)
 yarn.lock
 pnpm-lock.yaml
