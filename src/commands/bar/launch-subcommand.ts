@@ -58,7 +58,7 @@ import type { LaunchJson, LatestLaunchPointer, LatestLaunchStatus } from './bar-
 import { LATEST_LAUNCH_SCHEMA } from './bar-paths';
 import { createBarLaunchDescriptor } from './launch-descriptor';
 import { parsePortFlag, validatePortArgs } from './port-arg';
-import { writeFileAtomic } from './bar-process-control';
+import { getProcessBirthIdentity, writeFileAtomic } from './bar-process-control';
 import {
   BAR_PORT_CANDIDATES,
   defaultFindRunningServer as _defaultFindRunningServer,
@@ -322,35 +322,90 @@ function defaultCreateLaunchId(): string {
   return randomUUID();
 }
 
-/** Replace pointer only when this launch still owns it or is newer. */
-function defaultWriteLatestLaunchPointer(pointerPath: string, pointer: LatestLaunchPointer): boolean {
+interface LatestLaunchLock {
+  pid: number;
+  birthIdentity: string | null;
+  createdAt: string;
+  launchId: string;
+}
+
+const LATEST_LAUNCH_LOCK_STALE_MS = 30_000;
+const SELF_BIRTH_IDENTITY = getProcessBirthIdentity(process.pid);
+
+function processIsLive(pid: number, birthIdentity: string | null): boolean {
+  const current = pid === process.pid ? SELF_BIRTH_IDENTITY : getProcessBirthIdentity(pid);
+  if (current !== null) return birthIdentity === null || current === birthIdentity;
+  try { process.kill(pid, 0); return birthIdentity === null; }
+  catch { return false; }
+}
+
+function withLatestLaunchLock<T>(pointerPath: string, launchId: string, action: () => T): T {
   fs.mkdirSync(path.dirname(pointerPath), { recursive: true });
   const lockPath = `${pointerPath}.lock`;
   let lockFd: number | undefined;
   for (let attempt = 0; attempt < 100; attempt++) {
     try {
       lockFd = fs.openSync(lockPath, 'wx');
+      const lock: LatestLaunchLock = {
+        pid: process.pid,
+        birthIdentity: SELF_BIRTH_IDENTITY,
+        createdAt: new Date().toISOString(),
+        launchId,
+      };
+      fs.writeFileSync(lockFd, JSON.stringify(lock));
       break;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      try {
+        const raw = fs.readFileSync(lockPath, 'utf8');
+        const lock = JSON.parse(raw) as Partial<LatestLaunchLock>;
+        const age = Date.now() - Date.parse(String(lock.createdAt));
+        const validPid = Number.isSafeInteger(lock.pid) && (lock.pid ?? 0) > 0;
+        if (validPid && processIsLive(lock.pid!, typeof lock.birthIdentity === 'string' ? lock.birthIdentity : null)) {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+          continue;
+        }
+        if (!validPid && !(age > LATEST_LAUNCH_LOCK_STALE_MS)) {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+          continue;
+        }
+        const claimPath = `${lockPath}.reclaim-${process.pid}-${Date.now()}`;
+        fs.renameSync(lockPath, claimPath);
+        fs.rmSync(claimPath, { force: true });
+        continue;
+      } catch (reclaimErr) {
+        if ((reclaimErr as NodeJS.ErrnoException).code !== 'ENOENT') {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+        }
+        continue;
+      }
     }
   }
   if (lockFd === undefined) throw new Error(`Timed out acquiring ${lockPath}`);
-  try {
+  try { return action(); }
+  finally {
+    fs.closeSync(lockFd);
+    fs.rmSync(lockPath, { force: true });
+  }
+}
+
+function readCurrentPointer(pointerPath: string): LatestLaunchPointer | null {
+  try { return JSON.parse(fs.readFileSync(pointerPath, 'utf8')) as LatestLaunchPointer; }
+  catch { return null; }
+}
+
+/** Replace pointer only when this launch still owns it or is newer. */
+export function defaultWriteLatestLaunchPointer(pointerPath: string, pointer: LatestLaunchPointer): boolean {
+  return withLatestLaunchLock(pointerPath, pointer.launchId, () => {
     let current: LatestLaunchPointer | null = null;
-    try { current = JSON.parse(fs.readFileSync(pointerPath, 'utf8')) as LatestLaunchPointer; }
-    catch { /* absent or invalid pointer can be replaced */ }
-    if (current?.launchId !== pointer.launchId && current?.startedAt && current.startedAt >= pointer.startedAt) return false;
+    current = readCurrentPointer(pointerPath);
+    if (current?.launchId !== pointer.launchId && current?.startedAt && (current.startedAt > pointer.startedAt || current.startedAt === pointer.startedAt && current.launchId > pointer.launchId)) return false;
     if (current?.launchId !== pointer.launchId && pointer.status !== 'starting') return false;
     const tmpPath = `${pointerPath}.tmp-${process.pid}-${Date.now()}`;
     fs.writeFileSync(tmpPath, JSON.stringify(pointer, null, 2));
     fs.renameSync(tmpPath, pointerPath);
     return true;
-  } finally {
-    fs.closeSync(lockFd);
-    fs.rmSync(lockPath, { force: true });
-  }
+  });
 }
 
 async function defaultOpenApp(appPath: string): Promise<void> {
@@ -570,7 +625,11 @@ export async function handleBarLaunch(
   // The pointer starts as `starting` and is only advanced to `ready` after
   // authenticated health succeeds; every failure path marks it `failed`, so
   // readers can treat a failed attempt distinctly from a healthy one.
-  publishPointer('starting');
+  if (!publishPointer('starting')) return;
+
+  const withOwnership = (action: () => void): boolean =>
+    withLatestLaunchLock(latestPointerPath, launchId, () =>
+      readCurrentPointer(latestPointerPath)?.launchId === launchId ? (action(), true) : false);
 
   const rollbackAttemptDir = getLaunchDir(ccsDir, `rollback-${launchId}`);
   const rollbackLogPath = getLaunchServeLogPath(ccsDir, `rollback-${launchId}`);
@@ -578,8 +637,10 @@ export async function handleBarLaunch(
   const rollbackPriorServer = async (): Promise<void> => {
     if (movingFrom === null) return;
     try {
-      fs.mkdirSync(rollbackAttemptDir, { recursive: true });
-      spawnDetachedServer(movingFrom.port, rollbackLogPath);
+      if (!withOwnership(() => {
+        fs.mkdirSync(rollbackAttemptDir, { recursive: true });
+        spawnDetachedServer(movingFrom!.port, rollbackLogPath);
+      })) return;
       await waitForServerLive(movingFrom.baseUrl);
       console.log(`[OK] Restored CCS Bar server at ${movingFrom.baseUrl}.`);
     } catch (rollbackErr) {
@@ -590,9 +651,18 @@ export async function handleBarLaunch(
   };
 
   const priorLaunchJson = fs.existsSync(launchJsonPath) ? fs.readFileSync(launchJsonPath, 'utf8') : null;
+  const priorBarJson = fs.existsSync(barJsonPath) ? fs.readFileSync(barJsonPath, 'utf8') : null;
   const restoreLaunchJson = (): void => {
-    if (priorLaunchJson === null) fs.rmSync(launchJsonPath, { force: true });
-    else writeFileAtomic(launchJsonPath, priorLaunchJson);
+    withOwnership(() => {
+      if (priorLaunchJson === null) fs.rmSync(launchJsonPath, { force: true });
+      else writeFileAtomic(launchJsonPath, priorLaunchJson);
+    });
+  };
+  const restoreBarJson = (): void => {
+    withOwnership(() => {
+      if (priorBarJson === null) fs.rmSync(barJsonPath, { force: true });
+      else writeFileAtomic(barJsonPath, priorBarJson);
+    });
   };
 
   const baseUrl = `http://127.0.0.1:${selectedPort}`;
@@ -658,8 +728,15 @@ export async function handleBarLaunch(
   // 2d. Health proven — publish. Recovery descriptor first, discovery last:
   //     bar.json appearing means every other piece of this launch is in place.
   try {
+    if (readCurrentPointer(latestPointerPath)?.launchId !== launchId) {
+      await killSpawnedChildAndAwaitExit();
+      return;
+    }
     const launchDescriptor = createLaunchDescriptor({ port: selectedPort });
-    writeLaunchDescriptor(launchJsonPath, launchDescriptor);
+    if (!withOwnership(() => writeLaunchDescriptor(launchJsonPath, launchDescriptor))) {
+      await killSpawnedChildAndAwaitExit();
+      return;
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Could not write launch.json: ${msg}`);
@@ -680,11 +757,15 @@ export async function handleBarLaunch(
   };
   try {
     fs.mkdirSync(ccsDir, { recursive: true });
-    writeFileAtomic(barJsonPath, JSON.stringify(barJson, null, 2));
+    if (!withOwnership(() => writeFileAtomic(barJsonPath, JSON.stringify(barJson, null, 2)))) {
+      await killSpawnedChildAndAwaitExit();
+      return;
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Failed to write bar.json: ${msg}`);
     restoreLaunchJson();
+    restoreBarJson();
     publishPointer('failed');
     await killSpawnedChildAndAwaitExit();
     await rollbackPriorServer();
@@ -692,7 +773,10 @@ export async function handleBarLaunch(
     return;
   }
 
-  publishPointer('ready');
+  if (!publishPointer('ready')) {
+    await killSpawnedChildAndAwaitExit();
+    return;
+  }
 
   console.log(`[OK] CCS web-server running at ${baseUrl}`);
   console.log(`[i]  Discovery file written: ${barJsonPath}`);

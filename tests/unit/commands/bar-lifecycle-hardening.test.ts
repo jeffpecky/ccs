@@ -541,6 +541,114 @@ describe('transactional detached launch', () => {
     expect(raw.match(/launchId/g)?.length).toBe(1);
     expect(fs.readdirSync(barDir)).toEqual(['latest-launch.json']);
   });
+
+  it('reclaims a pointer lock owned by a verified-dead process', async () => {
+    const harness = makeLaunchHarness('dead-pointer-lock');
+    fs.mkdirSync(path.dirname(harness.pointerPath), { recursive: true });
+    fs.writeFileSync(`${harness.pointerPath}.lock`, JSON.stringify({ pid: 99999999, birthIdentity: 'dead', createdAt: new Date().toISOString(), launchId: 'dead-launch' }));
+    const { defaultWriteLatestLaunchPointer } = await loadTransactionalLaunch();
+    expect(defaultWriteLatestLaunchPointer(harness.pointerPath, {
+      schema: LATEST_LAUNCH_SCHEMA,
+      launchId: 'aaaaaaaa-0000-4000-8000-000000000001',
+      port: 4600,
+      startedAt: new Date().toISOString(),
+      logPath: 'serve.log',
+      status: 'starting',
+    })).toBe(true);
+    expect(fs.existsSync(`${harness.pointerPath}.lock`)).toBe(false);
+  });
+
+  it('never steals a pointer lock owned by this live process', async () => {
+    const harness = makeLaunchHarness('live-pointer-lock');
+    fs.mkdirSync(path.dirname(harness.pointerPath), { recursive: true });
+    const { getProcessBirthIdentity } = await import('../../../src/commands/bar/bar-process-control');
+    fs.writeFileSync(`${harness.pointerPath}.lock`, JSON.stringify({ pid: process.pid, birthIdentity: getProcessBirthIdentity(process.pid), createdAt: new Date(0).toISOString(), launchId: 'live-launch' }));
+    const { defaultWriteLatestLaunchPointer } = await loadTransactionalLaunch();
+    expect(() => defaultWriteLatestLaunchPointer(harness.pointerPath, {
+      schema: LATEST_LAUNCH_SCHEMA,
+      launchId: 'aaaaaaaa-0000-4000-8000-000000000002',
+      port: 4600,
+      startedAt: new Date().toISOString(),
+      logPath: 'serve.log',
+      status: 'starting',
+    })).toThrow('Timed out acquiring');
+    expect(JSON.parse(fs.readFileSync(`${harness.pointerPath}.lock`, 'utf8')).launchId).toBe('live-launch');
+  });
+
+  it('lets only latest concurrent launch publish shared state', async () => {
+    const harness = makeLaunchHarness('concurrent-latest-owner');
+    const firstReady = Promise.withResolvers<void>();
+    const secondClaimed = Promise.withResolvers<void>();
+    const ids = ['11111111-0000-4000-8000-000000000001', '22222222-0000-4000-8000-000000000002'];
+    const launches = await Promise.all(ids.map(async (launchId, index) => {
+      const { handleBarLaunch } = await loadTransactionalLaunch();
+      return handleBarLaunch(['--port', String(4601 + index)], {
+        getCcsDir: () => harness.ccsDir,
+        createLaunchId: () => launchId,
+        findRunningServer: async () => null,
+        getPort: async () => 4601 + index,
+        spawnDetachedServer: () => ({ pid: 46010 + index, kill: () => true }),
+        waitForServerLive: async () => {
+          if (index === 0) { firstReady.resolve(); await secondClaimed.promise; }
+          else { await firstReady.promise; secondClaimed.resolve(); }
+        },
+        openApp: async () => {},
+        appInstallPath: path.join(tempHome, 'CCS Bar.exe'),
+      });
+    }));
+    await Promise.all(launches);
+
+    expect(JSON.parse(fs.readFileSync(harness.pointerPath, 'utf8')).launchId).toBe(ids[1]);
+    expect(JSON.parse(fs.readFileSync(path.join(harness.ccsDir, 'bar.json'), 'utf8'))).toMatchObject({ port: 4602, launchId: ids[1] });
+    expect(JSON.parse(fs.readFileSync(path.join(harness.ccsDir, 'bar', 'launch.json'), 'utf8')).args).toContain('4602');
+  });
+
+  it('does not spawn when starting ownership is rejected', async () => {
+    const harness = makeLaunchHarness('starting-rejected');
+    let spawned = false;
+    const { handleBarLaunch } = await loadTransactionalLaunch();
+    await handleBarLaunch(['--port', '4603'], {
+      getCcsDir: () => harness.ccsDir,
+      findRunningServer: async () => null,
+      getPort: async () => 4603,
+      writeLatestLaunchPointer: () => false,
+      spawnDetachedServer: () => { spawned = true; },
+      waitForServerLive: async () => {},
+      openApp: async () => {},
+      appInstallPath: path.join(tempHome, 'CCS Bar.exe'),
+    });
+    expect(spawned).toBe(false);
+  });
+
+  it('superseded rollback never restores or removes newer shared state', async () => {
+    const harness = makeLaunchHarness('rollback-superseded');
+    const newerId = '44444444-0000-4000-8000-000000000004';
+    const { handleBarLaunch, BarServerTimeoutError } = await loadTransactionalLaunch();
+    let spawns = 0;
+    await handleBarLaunch(['--port', '4604'], {
+      getCcsDir: () => harness.ccsDir,
+      createLaunchId: () => '33333333-0000-4000-8000-000000000003',
+      findRunningServer: async () => ({ port: 3000, baseUrl: 'http://127.0.0.1:3000' }),
+      getPort: async () => 4604,
+      stopDetachedServer: async () => {},
+      spawnDetachedServer: () => { spawns++; return { pid: 46040, kill: () => true }; },
+      waitForDetachedChildExit: async () => true,
+      waitForServerLive: async (baseUrl: string) => {
+        fs.writeFileSync(harness.pointerPath, JSON.stringify({ schema: LATEST_LAUNCH_SCHEMA, launchId: newerId, port: 4605, startedAt: '9999-01-01T00:00:00.000Z', logPath: 'newer.log', status: 'ready' }));
+        fs.mkdirSync(path.join(harness.ccsDir, 'bar'), { recursive: true });
+        fs.writeFileSync(path.join(harness.ccsDir, 'bar.json'), JSON.stringify({ port: 4605, launchId: newerId }));
+        fs.writeFileSync(path.join(harness.ccsDir, 'bar', 'launch.json'), '{"newer":true}');
+        throw new BarServerTimeoutError(baseUrl, 1);
+      },
+      openApp: async () => {},
+      appInstallPath: path.join(tempHome, 'CCS Bar.exe'),
+    } as never);
+    expect(spawns).toBe(1);
+    expect(JSON.parse(fs.readFileSync(harness.pointerPath, 'utf8')).launchId).toBe(newerId);
+    expect(JSON.parse(fs.readFileSync(path.join(harness.ccsDir, 'bar.json'), 'utf8')).launchId).toBe(newerId);
+    expect(fs.readFileSync(path.join(harness.ccsDir, 'bar', 'launch.json'), 'utf8')).toBe('{"newer":true}');
+    process.exitCode = 0;
+  });
 });
 
 describe('atomic process record publication', () => {

@@ -30,7 +30,7 @@
 
     <!-- Convenience: Chip with dynamic tint color -->
     <!-- Usage: <Border Style="{StaticResource CcsChipTemplate}" Background="{DynamicResource GreenBrush}"> -->
-    
+
     <!-- Specific chip variants for common tints -->
     <Style x:Key="CcsChip.Accent" TargetType="Border" BasedOn="{StaticResource CcsChipTemplate}">
         <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>

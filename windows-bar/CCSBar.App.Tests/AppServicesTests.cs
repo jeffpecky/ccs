@@ -88,6 +88,15 @@ public sealed class AppServicesTests
     }
 
     [TestMethod]
+    public void App_PublishesActivationEventBeforeSingletonMutex()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "CCSBar.App", "App.xaml.cs"));
+        var activationEvent = source.IndexOf("new(false, EventResetMode.AutoReset, InstanceName + \".Activate\")", StringComparison.Ordinal);
+        var mutex = source.IndexOf("new(true, InstanceName, out var owner)", StringComparison.Ordinal);
+        Assert.IsTrue(activationEvent >= 0 && activationEvent < mutex, "Activation event must exist before mutex ownership becomes visible");
+    }
+
+    [TestMethod]
     public void AppProject_RestoresWinX64PublishGraph()
     {
         var project = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "CCSBar.App", "CCSBar.App.csproj"));

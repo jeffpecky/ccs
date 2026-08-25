@@ -1576,6 +1576,5 @@ public sealed class VisualContractTests
             Assert.IsNull(field.GetValue(window), "Close clears the handle so the next open rebuilds centered");
         }
         finally { window.Detach(); window.Close(); }
-    }
 }
-
+}

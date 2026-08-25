@@ -26,6 +26,7 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        activateEvent = new(false, EventResetMode.AutoReset, InstanceName + ".Activate");
         mutex = new(true, InstanceName, out var owner);
         if (!owner)
         {
@@ -34,7 +35,6 @@ public partial class App : System.Windows.Application
             Shutdown();
             return;
         }
-        activateEvent = new(false, EventResetMode.AutoReset, InstanceName + ".Activate");
         settings = new();
         var connector = new WindowsBarConnector();
         ApplyTheme(settings.Ui.Appearance);
