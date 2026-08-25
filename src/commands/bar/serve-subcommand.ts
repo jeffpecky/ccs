@@ -18,8 +18,6 @@
  * so it can never unlink a replacement launch's state.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { getCcsDir } from '../../config/config-loader-facade';
 import { getBarJsonPath, getServerPidPath } from './bar-paths';
 import { BAR_PORT_CANDIDATES, defaultFindRunningServer, resolveBarPort } from './bar-server-probe';
@@ -31,6 +29,7 @@ import {
   getProcessBirthIdentity,
   removeBarServerProcessRecordIfOwned,
   serializeBarServerProcessRecord,
+  writeFileAtomic,
 } from './bar-process-control';
 import type { BarServerProcessRecord } from './bar-process-control';
 
@@ -86,11 +85,6 @@ async function defaultGetPort(opts: { port: number[]; host: string }): Promise<n
   return getPort(opts);
 }
 
-function defaultWriteFile(filePath: string, content: string): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content);
-}
-
 function defaultOnSignal(signal: 'SIGINT' | 'SIGTERM', handler: () => void): void {
   process.on(signal, handler);
 }
@@ -127,7 +121,9 @@ export async function handleBarServe(args: string[], deps: Partial<ServeDeps> = 
   const findRunningServer = deps.findRunningServer ?? (() => defaultFindRunningServer(ccsDir));
   const startServerFn = deps.startServer ?? defaultStartServer;
   const getPortFn = deps.getPort ?? defaultGetPort;
-  const writeFile = deps.writeFile ?? defaultWriteFile;
+  // Publication is atomic (tmp + rename) so a torn server.pid can never wedge
+  // serve or stop behind an unparsable record.
+  const writeFile = deps.writeFile ?? writeFileAtomic;
   const removeProcessRecordIfOwned =
     deps.removeProcessRecordIfOwned ?? removeBarServerProcessRecordIfOwned;
   const onSignal = deps.onSignal ?? defaultOnSignal;

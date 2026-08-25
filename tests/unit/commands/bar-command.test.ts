@@ -328,6 +328,7 @@ describe('bar.json contract (launch subcommand)', () => {
       ...makeDetachedDeps(ccsDir, 4242),
       spawnDetachedServer: () =>
         ({
+          pid: 42421,
           kill: () => {
             killed = true;
             return true;

@@ -7,7 +7,13 @@
 
 import * as fs from 'fs';
 import { getCcsDir } from '../../config/config-loader-facade';
-import { getBarJsonPath, getServerPidPath } from './bar-paths';
+import {
+  getBarJsonPath,
+  getLatestLaunchPointerPath,
+  getServerPidPath,
+  readLatestLaunchPointer,
+} from './bar-paths';
+import type { LatestLaunchPointer } from './bar-paths';
 import {
   getProcessBirthIdentity,
   parseBarServerProcessRecord,
@@ -42,6 +48,11 @@ export interface StatusDeps {
    * Read bar.json and return the baseUrl field, or null when absent/malformed.
    */
   readBarJsonBaseUrl: (barJsonPath: string) => string | null;
+  /**
+   * Read latest-launch.json. Returns null when absent or malformed. Defaults
+   * to the shared validated reader.
+   */
+  readLatestLaunchPointer: (pointerPath: string) => LatestLaunchPointer | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +125,20 @@ export async function handleBarStatus(
 
   const pidPath = getServerPidPath(ccsDir);
   const barJsonPath = getBarJsonPath(ccsDir);
+
+  // 0. Report the latest detached launch attempt so a failed or never-ready
+  //    attempt is distinguishable from server liveness state.
+  const readPointer = deps.readLatestLaunchPointer ?? readLatestLaunchPointer;
+  const latestLaunch = readPointer(getLatestLaunchPointerPath(ccsDir));
+  if (latestLaunch?.status === 'failed') {
+    console.log(
+      `[!] Last detached launch failed (launch ${latestLaunch.launchId}, port ${latestLaunch.port}). Log: ${latestLaunch.logPath}`
+    );
+  } else if (latestLaunch?.status === 'starting') {
+    console.log(
+      `[i] Last detached launch never confirmed readiness (launch ${latestLaunch.launchId}).`
+    );
+  }
 
   // 1. Check PID file.
   const pidRaw = readPidFile(pidPath);

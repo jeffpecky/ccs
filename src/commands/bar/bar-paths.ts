@@ -6,6 +6,7 @@
  * works correctly in tests.
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
 
 /** launch.json — consumed by the Swift app to spawn the server without a shell PATH. */
@@ -16,11 +17,6 @@ export function getLaunchJsonPath(ccsDir: string): string {
 /** server.pid — PID of the live detached server process. */
 export function getServerPidPath(ccsDir: string): string {
   return path.join(ccsDir, 'bar', 'server.pid');
-}
-
-/** serve.log — stdout/stderr of the detached server process. */
-export function getServeLogPath(ccsDir: string): string {
-  return path.join(ccsDir, 'bar', 'serve.log');
 }
 
 /** bar.json — live discovery file consumed by the Swift app. */
@@ -59,8 +55,18 @@ export const LATEST_LAUNCH_SCHEMA = 1;
 /**
  * Shape of latest-launch.json. This is a single-slot pointer that is fully
  * replaced on every detached launch attempt — never appended to — so readers
- * can never mistake an older entry for the current launch.
+ * can never mistake an older entry for the current launch. The explicit status
+ * field lets readers treat failed and not-yet-ready attempts distinctly from a
+ * healthy launch.
  */
+export type LatestLaunchStatus = 'starting' | 'ready' | 'failed';
+
+export const LATEST_LAUNCH_STATUSES: readonly LatestLaunchStatus[] = [
+  'starting',
+  'ready',
+  'failed',
+];
+
 export interface LatestLaunchPointer {
   schema: typeof LATEST_LAUNCH_SCHEMA;
   /** Identity minted by the launcher that owns this attempt. */
@@ -71,6 +77,34 @@ export interface LatestLaunchPointer {
   startedAt: string;
   /** Absolute path of this attempt's serve.log. */
   logPath: string;
+  /**
+   * Lifecycle of the attempt: `starting` until authenticated health succeeds,
+   * then `ready`; any failure path marks the attempt `failed`.
+   */
+  status: LatestLaunchStatus;
+}
+
+/** Read and fully validate latest-launch.json; null when absent or malformed. */
+export function readLatestLaunchPointer(pointerPath: string): LatestLaunchPointer | null {
+  let parsed: Partial<LatestLaunchPointer>;
+  try {
+    parsed = JSON.parse(fs.readFileSync(pointerPath, 'utf8')) as Partial<LatestLaunchPointer>;
+  } catch {
+    return null;
+  }
+  if (parsed.schema !== LATEST_LAUNCH_SCHEMA) return null;
+  if (!isValidLaunchId(parsed.launchId)) return null;
+  if (
+    !Number.isSafeInteger(parsed.port) ||
+    (parsed.port ?? 0) <= 0 ||
+    (parsed.port ?? 0) > 65535
+  ) {
+    return null;
+  }
+  if (typeof parsed.startedAt !== 'string' || parsed.startedAt === '') return null;
+  if (typeof parsed.logPath !== 'string' || parsed.logPath === '') return null;
+  if (!LATEST_LAUNCH_STATUSES.includes(parsed.status as LatestLaunchStatus)) return null;
+  return parsed as LatestLaunchPointer;
 }
 
 /** Accepted launchId shape: URL/path safe, non-empty, bounded length. */

@@ -123,9 +123,17 @@ export async function handleBarStop(_args: string[], deps: Partial<StopDeps> = {
   }
   const pid = outcome.record?.pid;
 
-  if (outcome.result === 'stopped' || outcome.result === 'stale') {
+  if (
+    outcome.result === 'stopped' ||
+    outcome.result === 'stale' ||
+    outcome.result === 'stale-corrupt'
+  ) {
     if (outcome.result === 'stopped') {
       console.log(`[OK] CCS Bar server stopped (PID ${pid}).`);
+    } else if (outcome.result === 'stale-corrupt') {
+      console.log(
+        '[i] server.pid was torn or unparsable and named no verifiable process. Removed it.'
+      );
     } else {
       console.log(`[i] Server PID ${pid} is no longer running. Cleaning up stale files.`);
     }

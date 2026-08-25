@@ -536,6 +536,76 @@ describe('status: running state reporting', () => {
 });
 
 // ---------------------------------------------------------------------------
+// status-subcommand: latest-launch failure semantics
+// ---------------------------------------------------------------------------
+
+describe('status: latest-launch failure reporting', () => {
+  function pointerStub(status: 'starting' | 'ready' | 'failed') {
+    return () => ({
+      schema: 1 as const,
+      launchId: 'aaaaaaaa-0000-4000-8000-00000000000a',
+      port: 4599,
+      startedAt: '2026-08-25T00:00:00.000Z',
+      logPath: '/tmp/serve.log',
+      status,
+    });
+  }
+
+  it('reports a failed last detached launch distinctly from server state', async () => {
+    const ccsDir = path.join(tempHome, '.ccs');
+    const { handleBarStatus } = await loadStatusSubcommand();
+
+    await handleBarStatus([], {
+      getCcsDir: () => ccsDir,
+      readPidFile: () => processRecord(12345),
+      isProcessAlive: () => true,
+      getProcessBirthIdentity: () => 'test-birth',
+      probeServer: async () => true,
+      readBarJsonBaseUrl: () => 'http://127.0.0.1:3000',
+      readLatestLaunchPointer: pointerStub('failed'),
+    });
+
+    expect(allOutput()).toMatch(/\[OK\].*running/i);
+    expect(allOutput()).toMatch(/last detached launch failed/i);
+    expect(allOutput()).toContain('aaaaaaaa-0000-4000-8000-00000000000a');
+  });
+
+  it('notes a starting-only pointer that never confirmed readiness', async () => {
+    const ccsDir = path.join(tempHome, '.ccs');
+    const { handleBarStatus } = await loadStatusSubcommand();
+
+    await handleBarStatus([], {
+      getCcsDir: () => ccsDir,
+      readPidFile: () => processRecord(12345),
+      isProcessAlive: () => true,
+      getProcessBirthIdentity: () => 'test-birth',
+      probeServer: async () => true,
+      readBarJsonBaseUrl: () => 'http://127.0.0.1:3000',
+      readLatestLaunchPointer: pointerStub('starting'),
+    });
+
+    expect(allOutput()).toMatch(/never confirmed readiness/i);
+  });
+
+  it('stays silent about healthy or absent latest-launch pointers', async () => {
+    const ccsDir = path.join(tempHome, '.ccs');
+    const { handleBarStatus } = await loadStatusSubcommand();
+
+    await handleBarStatus([], {
+      getCcsDir: () => ccsDir,
+      readPidFile: () => processRecord(12345),
+      isProcessAlive: () => true,
+      getProcessBirthIdentity: () => 'test-birth',
+      probeServer: async () => true,
+      readBarJsonBaseUrl: () => 'http://127.0.0.1:3000',
+      readLatestLaunchPointer: () => null,
+    });
+    expect(allOutput()).toMatch(/\[OK\].*running/i);
+    expect(allOutput()).not.toMatch(/last detached launch/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // launch-subcommand: detached-spawn model
 // ---------------------------------------------------------------------------
 
@@ -698,6 +768,7 @@ describe('launch: detached-spawn model', () => {
       findRunningServer: async () => null,
       getPort: async () => 3000,
       spawnDetachedServer: () => ({
+        pid: 30001,
         kill: () => {
           killCalled = true;
           return true;

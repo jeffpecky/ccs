@@ -12,6 +12,7 @@ import {
   serializeBarServerProcessRecord,
   getProcessBirthIdentity,
   parseBarServerProcessRecord,
+  claimStaleBarServerProcessRecord,
   removeBarDiscoveryIfNoProcess,
   removeBarServerProcessRecordIfOwned,
   stopDetachedBarServer,
@@ -20,7 +21,11 @@ import {
   waitForProcessExit,
 } from '../../../src/commands/bar/bar-process-control';
 import { parseLaunchIdFlag, parsePortFlag, validatePortArgs } from '../../../src/commands/bar/port-arg';
-import { getLatestLaunchPointerPath, LATEST_LAUNCH_SCHEMA } from '../../../src/commands/bar/bar-paths';
+import {
+  getLatestLaunchPointerPath,
+  LATEST_LAUNCH_SCHEMA,
+  readLatestLaunchPointer,
+} from '../../../src/commands/bar/bar-paths';
 import { handleBarServe } from '../../../src/commands/bar/serve-subcommand';
 import { handleBarStop } from '../../../src/commands/bar/stop-subcommand';
 import type { LatestLaunchPointer } from '../../../src/commands/bar/bar-paths';
@@ -435,9 +440,10 @@ describe('transactional detached launch', () => {
     expect(pointer.port).toBe(port);
     expect(pointer.logPath).toBe(path.join(harness.launchesDir, pointer.launchId, 'serve.log'));
     expect(fs.existsSync(pointer.logPath)).toBe(true);
+    expect(pointer.status).toBe('failed');
 
     const launchDirs = fs.readdirSync(harness.launchesDir);
-    expect(launchDirs).toEqual([pointer.launchId]);
+    expect(launchDirs.sort()).toEqual([pointer.launchId].sort());
   }, 30000);
 
   it('publishes discovery and descriptor only after authenticated health succeeds', async () => {
@@ -468,6 +474,7 @@ describe('transactional detached launch', () => {
     expect(process.exitCode).toBe(0);
 
     const pointer = JSON.parse(fs.readFileSync(harness.pointerPath, 'utf8')) as LatestLaunchPointer;
+    expect(pointer.status).toBe('ready');
     const barJson = JSON.parse(
       fs.readFileSync(path.join(harness.ccsDir, 'bar.json'), 'utf8')
     ) as { port: number; launchId?: string };
@@ -498,6 +505,7 @@ describe('transactional detached launch', () => {
 
     const pointer = JSON.parse(fs.readFileSync(harness.pointerPath, 'utf8')) as LatestLaunchPointer;
     expect(pointer.launchId).toBe(ids[1]);
+    expect(pointer.status).toBe('ready');
     const barJson = JSON.parse(
       fs.readFileSync(path.join(harness.ccsDir, 'bar.json'), 'utf8')
     ) as { launchId?: string };
@@ -516,6 +524,7 @@ describe('transactional detached launch', () => {
       port: 4559,
       startedAt: '2026-08-24T10:00:00.000Z',
       logPath: path.join(barDir, 'launches', 'bbbbbbbb-0000-4000-8000-00000000000a', 'serve.log'),
+      status: 'ready',
     };
     const second: LatestLaunchPointer = { ...first, launchId: 'cccccccc-0000-4000-8000-00000000000b' };
 
@@ -531,6 +540,383 @@ describe('transactional detached launch', () => {
     expect(JSON.parse(raw).launchId).toBe(second.launchId);
     expect(raw.match(/launchId/g)?.length).toBe(1);
     expect(fs.readdirSync(barDir)).toEqual(['latest-launch.json']);
+  });
+});
+
+describe('atomic process record publication', () => {
+  it('publishes server.pid via atomic replace with no temporary siblings left behind', async () => {
+    const ccsDir = path.join(tempHome, 'serve-atomic-pid');
+    const pidPath = path.join(ccsDir, 'bar', 'server.pid');
+
+    await handleBarServe(['--port', '4561'], {
+      getCcsDir: () => ccsDir,
+      findRunningServer: async () => null,
+      getPort: async () => 4561,
+      startServer: async () => ({ port: 4561, baseUrl: 'http://127.0.0.1:4561' }),
+      getProcessBirthIdentity: () => 'atomic-birth',
+      onSignal: () => {},
+      exit: (code) => {
+        throw new Error(`unexpected exit ${code}`);
+      },
+    });
+
+    expect(fs.readdirSync(path.join(ccsDir, 'bar'))).toEqual(['server.pid']);
+    expect(parseBarServerProcessRecord(fs.readFileSync(pidPath, 'utf8'))).toEqual({
+      pid: process.pid,
+      birthIdentity: 'atomic-birth',
+    });
+  });
+});
+
+describe('corrupt process record escape hatch', () => {
+  // Simulates a torn write: valid JSON prefix, truncated tail.
+  const tornRecord = '{"pid": 1234, "birthIdent';
+
+  it('claims a torn unparsable record instead of wedging serve forever', () => {
+    const pidPath = path.join(tempHome, 'claim-torn', 'server.pid');
+    fs.mkdirSync(path.dirname(pidPath), { recursive: true });
+    fs.writeFileSync(pidPath, tornRecord);
+
+    expect(claimStaleBarServerProcessRecord(pidPath)).toBe('claimed-stale');
+    expect(fs.existsSync(pidPath)).toBe(false);
+    expect(fs.readdirSync(path.dirname(pidPath))).toEqual([]);
+  });
+
+  it('still preserves legacy integer records for manual verification', () => {
+    const pidPath = path.join(tempHome, 'claim-legacy-guard', 'server.pid');
+    fs.mkdirSync(path.dirname(pidPath), { recursive: true });
+    fs.writeFileSync(pidPath, '4321\n');
+
+    expect(claimStaleBarServerProcessRecord(pidPath)).toBe('preserved');
+    expect(fs.readFileSync(pidPath, 'utf8')).toBe('4321\n');
+  });
+
+  it('keeps preserving legacy records through the claimed stop path', async () => {
+    const pidPath = path.join(tempHome, 'legacy-stop-guard', 'server.pid');
+    fs.mkdirSync(path.dirname(pidPath), { recursive: true });
+    fs.writeFileSync(pidPath, '4321\n');
+
+    let signaled = false;
+    const outcome = await stopBarServerProcessFile(pidPath, {
+      getProcessBirthIdentity: () => null,
+      killProcess: () => {
+        signaled = true;
+      },
+    });
+
+    expect(outcome.result).toBe('legacy-record');
+    expect(signaled).toBe(false);
+    expect(fs.existsSync(pidPath)).toBe(true);
+  });
+
+  it('unwedges stop by removing a corrupt record that names no verifiable process', async () => {
+    const ccsDir = path.join(tempHome, 'stop-corrupt');
+    const pidPath = path.join(ccsDir, 'bar', 'server.pid');
+    const barJsonPath = path.join(ccsDir, 'bar.json');
+    fs.mkdirSync(path.dirname(pidPath), { recursive: true });
+    fs.writeFileSync(pidPath, tornRecord);
+    fs.writeFileSync(barJsonPath, '{}');
+
+    let killCalled = false;
+    await handleBarStop([], {
+      getCcsDir: () => ccsDir,
+      killProcess: () => {
+        killCalled = true;
+      },
+    });
+
+    expect(killCalled).toBe(false);
+    expect(process.exitCode).toBe(0);
+    expect(fs.existsSync(pidPath)).toBe(false);
+    expect(fs.existsSync(barJsonPath)).toBe(false);
+    process.exitCode = 0;
+  });
+
+  it('keeps refusing injected invalid records through the isolated read path', async () => {
+    const ccsDir = path.join(tempHome, 'stop-invalid-injected');
+    const pidPath = path.join(ccsDir, 'bar', 'server.pid');
+    fs.mkdirSync(path.dirname(pidPath), { recursive: true });
+    fs.writeFileSync(pidPath, 'not-a-number');
+
+    await handleBarStop([], {
+      getCcsDir: () => ccsDir,
+      readPidFile: () => 'not-a-number',
+      killProcess: () => {},
+    });
+
+    expect(process.exitCode).toBe(1);
+    expect(fs.readFileSync(pidPath, 'utf8')).toBe('not-a-number');
+    process.exitCode = 0;
+  });
+});
+
+describe('race-safe stale claim', () => {
+  function staleRecord(): string {
+    return serializeBarServerProcessRecord({ pid: 999333, birthIdentity: 'ghost-birth' });
+  }
+
+  it('restores a fresh replacement record swapped in before the stale unlink', () => {
+    const pidPath = path.join(tempHome, 'claim-race-replace', 'server.pid');
+    fs.mkdirSync(path.dirname(pidPath), { recursive: true });
+    const stale = staleRecord();
+    fs.writeFileSync(pidPath, stale);
+    const replacement = serializeBarServerProcessRecord({
+      pid: 9876,
+      birthIdentity: 'replacement-birth',
+    });
+
+    let identityCalls = 0;
+    const result = claimStaleBarServerProcessRecord(pidPath, {
+      getProcessBirthIdentity: () => {
+        identityCalls += 1;
+        if (identityCalls === 1) {
+          // A concurrent serve publishes its own record before our unlink.
+          fs.writeFileSync(pidPath, replacement);
+        }
+        return null;
+      },
+    });
+
+    expect(result).toBe('preserved');
+    expect(fs.readFileSync(pidPath, 'utf8')).toBe(replacement);
+  });
+
+  it('restores the record when its process turns out alive after claiming', () => {
+    const pidPath = path.join(tempHome, 'claim-race-alive', 'server.pid');
+    fs.mkdirSync(path.dirname(pidPath), { recursive: true });
+    const original = staleRecord();
+    fs.writeFileSync(pidPath, original);
+    const verdicts: (string | null)[] = [null, 'alive-now'];
+
+    const result = claimStaleBarServerProcessRecord(pidPath, {
+      getProcessBirthIdentity: () => verdicts.shift() ?? 'alive-now',
+    });
+
+    expect(result).toBe('preserved');
+    expect(fs.readFileSync(pidPath, 'utf8')).toBe(original);
+  });
+
+  it('claims a verified-stale modern record end to end', () => {
+    const pidPath = path.join(tempHome, 'claim-stale-ok', 'server.pid');
+    fs.mkdirSync(path.dirname(pidPath), { recursive: true });
+    fs.writeFileSync(pidPath, staleRecord());
+
+    const result = claimStaleBarServerProcessRecord(pidPath, {
+      getProcessBirthIdentity: () => null,
+    });
+
+    expect(result).toBe('claimed-stale');
+    expect(fs.existsSync(pidPath)).toBe(false);
+  });
+});
+
+describe('latest-launch pointer reader', () => {
+  function validPointerJson(status: string): string {
+    return JSON.stringify({
+      schema: LATEST_LAUNCH_SCHEMA,
+      launchId: 'aaaaaaaa-0000-4000-8000-00000000000a',
+      port: 4555,
+      startedAt: '2026-08-25T00:00:00.000Z',
+      logPath: '/tmp/serve.log',
+      status,
+    });
+  }
+
+  it('rejects pointers without explicit status semantics', () => {
+    const dir = path.join(tempHome, 'pointer-read');
+    fs.mkdirSync(dir, { recursive: true });
+    const pointerPath = path.join(dir, 'latest-launch.json');
+
+    fs.writeFileSync(
+      pointerPath,
+      JSON.stringify({
+        schema: LATEST_LAUNCH_SCHEMA,
+        launchId: 'aaaaaaaa-0000-4000-8000-00000000000a',
+        port: 4555,
+        startedAt: '2026-08-25T00:00:00.000Z',
+        logPath: '/tmp/serve.log',
+      })
+    );
+    expect(readLatestLaunchPointer(pointerPath)).toBeNull();
+
+    fs.writeFileSync(pointerPath, validPointerJson('mangled'));
+    expect(readLatestLaunchPointer(pointerPath)).toBeNull();
+
+    fs.writeFileSync(pointerPath, validPointerJson('ready'));
+    expect(readLatestLaunchPointer(pointerPath)?.status).toBe('ready');
+
+    fs.writeFileSync(pointerPath, validPointerJson('failed'));
+    expect(readLatestLaunchPointer(pointerPath)?.status).toBe('failed');
+  });
+});
+
+describe('launch failure containment', () => {
+  interface MoveHarness {
+    ccsDir: string;
+    events: string[];
+    logPaths: string[];
+  }
+
+  function makeMoveHarness(name: string): MoveHarness {
+    const ccsDir = path.join(tempHome, name);
+    fs.mkdirSync(ccsDir, { recursive: true });
+    return { ccsDir, events: [], logPaths: [] };
+  }
+
+  it('awaits confirmed killed-child exit before spawning the rollback restore and avoids legacy serve.log', async () => {
+    const h = makeMoveHarness('rollback-order');
+    const { handleBarLaunch, BarServerTimeoutError } = await loadTransactionalLaunch();
+    let healthCalls = 0;
+
+    await handleBarLaunch(['--port', '4580'], {
+      getCcsDir: () => h.ccsDir,
+      findRunningServer: async () => ({ port: 3000, baseUrl: 'http://127.0.0.1:3000' }),
+      getPort: async (opts: { port: number[] }) => opts.port[0]!,
+      stopDetachedServer: async () => {},
+      spawnDetachedServer: (_port: number, logPath: string) => {
+        h.logPaths.push(logPath);
+        h.events.push(h.logPaths.length === 1 ? 'spawn' : 'restore-spawn');
+        return {
+          pid: 458001,
+          kill: () => {
+            h.events.push('kill');
+            return true;
+          },
+        };
+      },
+      waitForDetachedChildExit: async () => {
+        h.events.push('child-exited');
+        return true;
+      },
+      waitForServerLive: async (baseUrl: string) => {
+        healthCalls += 1;
+        if (healthCalls === 1) throw new BarServerTimeoutError(baseUrl, 10);
+        h.events.push(`restore-health:${baseUrl}`);
+      },
+      writeLaunchDescriptor: () => {},
+      openApp: async () => {},
+      appInstallPath: path.join(tempHome, 'Applications', 'CCS Bar.app'),
+    } as never);
+
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
+
+    expect(h.events.indexOf('kill')).toBeGreaterThanOrEqual(0);
+    expect(h.events.indexOf('child-exited')).toBeGreaterThan(h.events.indexOf('kill'));
+    expect(h.events.indexOf('restore-spawn')).toBeGreaterThan(h.events.indexOf('child-exited'));
+
+    const restoreLog = h.logPaths[1]!;
+    expect(restoreLog).not.toBe(path.join(h.ccsDir, 'bar', 'serve.log'));
+    expect(restoreLog).toContain(path.join('bar', 'launches'));
+    expect(fs.existsSync(path.join(h.ccsDir, 'bar', 'serve.log'))).toBe(false);
+
+    const pointer = JSON.parse(
+      fs.readFileSync(getLatestLaunchPointerPath(h.ccsDir), 'utf8')
+    ) as LatestLaunchPointer;
+    expect(pointer.status).toBe('failed');
+    expect(fs.existsSync(path.dirname(pointer.logPath))).toBe(true);
+  }, 30000);
+
+  it('never fires the rollback restore when nothing was displaced', async () => {
+    const h = makeMoveHarness('no-displaced-no-restore');
+    const { handleBarLaunch, BarServerTimeoutError } = await loadTransactionalLaunch();
+    let spawns = 0;
+    let kills = 0;
+    let healthCalls = 0;
+
+    await handleBarLaunch(['--port', '4581'], {
+      getCcsDir: () => h.ccsDir,
+      findRunningServer: async () => null,
+      getPort: async () => 4581,
+      spawnDetachedServer: () => {
+        spawns += 1;
+        h.events.push('spawn');
+        return {
+          pid: 458101,
+          kill: () => {
+            kills += 1;
+            h.events.push('kill');
+            return true;
+          },
+        };
+      },
+      waitForDetachedChildExit: async () => {
+        h.events.push('child-exited');
+        return true;
+      },
+      waitForServerLive: async (baseUrl: string) => {
+        healthCalls += 1;
+        throw new BarServerTimeoutError(baseUrl, 10);
+      },
+      writeLaunchDescriptor: () => {},
+      openApp: async () => {},
+      appInstallPath: path.join(tempHome, 'Applications', 'CCS Bar.app'),
+    } as never);
+
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
+    expect(spawns).toBe(1);
+    expect(kills).toBe(1);
+    expect(healthCalls).toBe(1);
+    expect(h.events).toEqual(['spawn', 'kill', 'child-exited']);
+  }, 30000);
+
+  it('sends exactly one kill when dashboard auth blocks the spawned child', async () => {
+    const ccsDir = path.join(tempHome, 'auth-single-kill');
+    fs.mkdirSync(ccsDir, { recursive: true });
+    const { handleBarLaunch, BarServerAuthRequiredError } = await loadTransactionalLaunch();
+    let kills = 0;
+    let exitConfirms = 0;
+
+    await handleBarLaunch(['--port', '4582'], {
+      getCcsDir: () => ccsDir,
+      findRunningServer: async () => null,
+      getPort: async () => 4582,
+      spawnDetachedServer: () => ({
+        pid: 458201,
+        kill: () => {
+          kills += 1;
+          return true;
+        },
+      }),
+      waitForDetachedChildExit: async () => {
+        exitConfirms += 1;
+        return true;
+      },
+      waitForServerLive: async () => {
+        throw new BarServerAuthRequiredError('http://127.0.0.1:4582', 401);
+      },
+      writeLaunchDescriptor: () => {},
+      openApp: async () => {},
+      appInstallPath: path.join(tempHome, 'Applications', 'CCS Bar.app'),
+    } as never);
+
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
+    expect(kills).toBe(1);
+    expect(exitConfirms).toBe(1);
+  }, 30000);
+
+  it('rejects --launch-id in user-facing launch args', async () => {
+    const ccsDir = path.join(tempHome, 'launch-reject-id');
+    fs.mkdirSync(ccsDir, { recursive: true });
+    const { handleBarLaunch } = await loadTransactionalLaunch();
+    let spawnCalled = false;
+
+    await handleBarLaunch(['--launch-id', 'aaaaaaaa-0000-4000-8000-00000000000a'], {
+      getCcsDir: () => ccsDir,
+      findRunningServer: async () => null,
+      spawnDetachedServer: () => {
+        spawnCalled = true;
+      },
+      openApp: async () => {},
+      appInstallPath: path.join(tempHome, 'Applications', 'CCS Bar.app'),
+    } as never);
+
+    expect(process.exitCode).toBe(1);
+    expect(spawnCalled).toBe(false);
+    expect(fs.existsSync(getLatestLaunchPointerPath(ccsDir))).toBe(false);
+    process.exitCode = 0;
   });
 });
 
