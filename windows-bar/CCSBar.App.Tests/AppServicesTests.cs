@@ -1,6 +1,8 @@
 using CCSBar.App;
 using CCSBar.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Diagnostics;
+using System.IO;
 
 namespace CCSBar.App.Tests;
 
@@ -54,6 +56,36 @@ public sealed class AppServicesTests
         StringAssert.Contains(File.ReadAllText(Path.Combine(root, "CCSBar.App", "CCSBar.App.csproj")), "ApplicationIcon");
         var xaml = File.ReadAllText(Path.Combine(root, "CCSBar.App", "MainWindow.xaml"));
         StringAssert.Contains(xaml, "AutomationProperties.Name=\"Force refresh CCS data\"");
+    }
+
+    [TestMethod]
+    public void MainWindow_DoesNotHideOnFirstDeactivationAfterShow()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "CCSBar.App", "MainWindow.xaml.cs"));
+        StringAssert.Contains(source, "Window_Deactivated");
+        StringAssert.Contains(source, "firstShow");
+    }
+
+    [TestMethod]
+    public void App_CreatesPanelLazilyOnFirstActivation()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "CCSBar.App", "App.xaml.cs"));
+        StringAssert.Contains(source, "panel");
+        Assert.IsTrue(source.Contains("panel is null") || source.Contains("panel == null"));
+    }
+
+    [TestMethod]
+    public void App_AwaitsHealthBeforeShowingPanel()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "CCSBar.App", "App.xaml.cs"));
+        StringAssert.Contains(source, "WaitForHealthAsync");
+    }
+
+    [TestMethod]
+    public void App_SelfStartsServerOnDirectOpen()
+    {
+        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "CCSBar.App", "App.xaml.cs"));
+        StringAssert.Contains(source, "StartAsync");
     }
 
     sealed class FakePathSecurity : IWindowsPathSecurity

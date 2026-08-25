@@ -18,7 +18,7 @@ namespace CCSBar.App;
 
 public partial class MainWindow : Window
 {
-    readonly BarViewModel vm; readonly JsonBarSettings settings; bool quitArmed; SettingsWindow? settingsWindow;
+    readonly BarViewModel vm; readonly JsonBarSettings settings; bool quitArmed; SettingsWindow? settingsWindow; bool firstShow = true;
     internal MainWindow(BarViewModel vm, JsonBarSettings settings)
     { InitializeComponent(); this.vm = vm; this.settings = settings; VersionText.Text = $"v{CCSBar.App.VersionText.Value}"; vm.PropertyChanged += ViewModelChanged; Loaded += (_, _) => Render(); }
     void ViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Dispatcher.BeginInvoke(Render);
@@ -28,7 +28,7 @@ public partial class MainWindow : Window
         quitArmed = false; QuitButton.Content = "Power"; Render(); UpdateLayout();
         var screen = Forms.Screen.FromPoint(cursor); var source = PresentationSource.FromVisual(this); var fromDevice = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity; var topLeft = fromDevice.Transform(new System.Windows.Point(screen.WorkingArea.Left, screen.WorkingArea.Top)); var bottomRight = fromDevice.Transform(new System.Windows.Point(screen.WorkingArea.Right, screen.WorkingArea.Bottom)); var pointer = fromDevice.Transform(new System.Windows.Point(cursor.X, cursor.Y)); var work = new BarRect(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y); var tray = new BarRect(pointer.X, pointer.Y, 1, 1);
         var place = PanelPlacement.Anchor(work, tray, 360, Math.Min(ActualHeight > 0 ? ActualHeight : 700, work.Height));
-        Left = place.X; Top = place.Y; Show();
+        Left = place.X; Top = place.Y; firstShow = true; Show();
     }
     public void Render()
     {
@@ -104,7 +104,7 @@ public partial class MainWindow : Window
     void Settings_Click(object sender, RoutedEventArgs e) { settingsWindow ??= new SettingsWindow(vm, settings) { Owner = null }; settingsWindow.Closed += (_, _) => settingsWindow = null; settingsWindow.Show(); settingsWindow.Activate(); }
     void Update_Click(object sender, RoutedEventArgs e) { if (vm.IsInstallingUpdate) return; vm.IsInstallingUpdate = true; try { new WindowsBarUpdater(WindowsProcess.Start).Install(); ((App)Application.Current).Exit(); } catch (Exception ex) { vm.IsInstallingUpdate = false; System.Windows.MessageBox.Show(ex.Message, "CCS Bar update failed", MessageBoxButton.OK, MessageBoxImage.Error); } }
     void Quit_Click(object sender, RoutedEventArgs e) { if (!quitArmed) { quitArmed = true; QuitButton.Content = "Confirm quit"; QuitButton.Foreground = (Brush)FindResource("RedBrush"); return; } ((App)Application.Current).Exit(); }
-    void Window_Deactivated(object sender, EventArgs e) { if (settingsWindow?.IsActive != true) Hide(); } void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { if (e.Key == Key.Escape) Hide(); }
+    void Window_Deactivated(object sender, EventArgs e) { if (firstShow) { firstShow = false; return; } if (settingsWindow?.IsActive != true) Hide(); } void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { if (e.Key == Key.Escape) Hide(); }
 }
 
 sealed class SpendChart : FrameworkElement
