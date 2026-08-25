@@ -1221,5 +1221,298 @@ public sealed class VisualContractTests
         window.Render();
         return window;
     }
+
+    // ---- Task 9: settings window contracts ----
+
+    /// <summary>In-memory settings store recording every Save for write-through assertions.</summary>
+    sealed class SpySettings : IBarSettings
+    {
+        public int Saves { get; private set; }
+        public BarUiSettings Ui { get; set; } = new();
+        public BarPreferences Alerts { get; set; } = new() { QuotaLevelsValue = [20, 10, 0] };
+        public IReadOnlySet<string> FiredKeys { get; set; } = new HashSet<string>();
+        public void Save() => Saves++;
+    }
+
+    static bool SharedResourceContains(object? value)
+    {
+        bool Walk(ResourceDictionary dictionary)
+        {
+            if (dictionary.Values.Cast<object>().Any(v => ReferenceEquals(v, value))) return true;
+            return dictionary.MergedDictionaries.Any(Walk);
+        }
+        return value is not null && Walk(s_app!.Resources);
+    }
+
+    static SettingsWindow CreateSettingsWindow(out BarViewModel vm, IBarSettings store, BarUiSettings? ui = null, BarPreferences? alerts = null)
+    {
+        if (ui is not null) store.Ui = ui;
+        if (alerts is not null) store.Alerts = alerts;
+        vm = new BarViewModel(new TestConnector(), store);
+        return (SettingsWindow)Activator.CreateInstance(typeof(MainWindow).Assembly.GetType("CCSBar.App.SettingsWindow")!,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, [vm, store], null)!;
+    }
+
+    static void LayoutContent(Window window)
+    {
+        var content = (UIElement)window.Content;
+        content.Measure(new Size(window.Width, window.Height));
+        content.Arrange(new Rect(0, 0, window.Width, window.Height));
+        content.UpdateLayout();
+    }
+
+    [STATestMethod]
+    public void SettingsWindow_Runtime_Geometry_MatchesMacOSReference()
+    {
+        var window = CreateSettingsWindow(out _, new SpySettings());
+        try
+        {
+            Assert.AreEqual("CCS Bar Settings", window.Title);
+            Assert.AreEqual(460d, window.Width, "macOS setContentSize width 460");
+            Assert.AreEqual(600d, window.Height, "macOS setContentSize height 600");
+            Assert.AreEqual(420d, window.MinWidth, "macOS minSize width 420");
+            Assert.AreEqual(520d, window.MinHeight, "macOS minSize height 520");
+            Assert.AreEqual(ResizeMode.CanResize, window.ResizeMode, "macOS styleMask includes .resizable");
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void SettingsWindow_Runtime_Header_MatchesMacOSBellBadgeHeader()
+    {
+        var window = CreateSettingsWindow(out _, new SpySettings());
+        try
+        {
+            LayoutContent(window);
+            var root = (DependencyObject)window.Content;
+            var headline = Text(root, "Alerts & Glance")!;
+            Assert.IsNotNull(headline, "Header title 'Alerts & Glance' missing");
+            Assert.AreEqual((double)s_resources!["FontSize.Headline"], headline.FontSize, "Headline uses shared token");
+            Assert.AreEqual(FontWeights.SemiBold, headline.FontWeight);
+            var bell = All<TextBlock>(root).FirstOrDefault(t => t.Text == "\uE7ED");
+            Assert.IsNotNull(bell, "bell.badge icon missing");
+            Assert.AreEqual(((SolidColorBrush)s_resources["AccentBrush"]).Color, ((SolidColorBrush)bell.Foreground).Color, "Bell renders in accent");
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void SettingsWindow_Runtime_Sections_MatchMacOSHierarchy()
+    {
+        var store = new SpySettings();
+        var window = CreateSettingsWindow(out _, store);
+        try
+        {
+            LayoutContent(window);
+            var root = (DependencyObject)window.Content;
+
+            foreach (var section in new[] { "Appearance", "Menu-bar glance", "Updates", "Quota", "Opt-in · pay-per-use spend", "Account state" })
+                Assert.IsNotNull(Text(root, section), $"Section label '{section}' missing");
+
+            Assert.IsNotNull(Text(root, "Menu bar theme"), "Theme picker label missing");
+
+            var segments = All<RadioButton>(root).ToArray();
+            CollectionAssert.AreEqual(new[] { "System", "Light", "Dark" }, segments.Select(s => s.Content?.ToString()).ToArray(), "Segmented appearance picker");
+            Assert.IsTrue(segments.Select(s => s.GroupName).Distinct().Count() == 1, "Segments behave as one group");
+            Assert.IsTrue(segments.Single(s => Equals(s.Content, "Dark")).IsChecked == true, "Hydrated from stored appearance (default Dark)");
+
+            Assert.IsNotNull(Text(root, "Show in menu bar"), "Glance picker label missing");
+            var glance = DescendantsOf<ComboBox>(root).First();
+            CollectionAssert.AreEqual(
+                new[] { "Auto (smart)", "Today's spend", "This month's spend", "Lowest quota", "Active account count" },
+                glance.Items.OfType<ComboBoxItem>().Select(i => i.Content?.ToString()).ToArray(), "Glance modes match macOS labels");
+            Assert.AreEqual(0, glance.SelectedIndex, "Hydrated glance mode Auto");
+
+            Assert.IsNotNull(Text(root, "Check for CCS Bar updates automatically"), "Updates toggle missing");
+            Assert.IsNotNull(Text(root, "Alert on low quota"), "Quota toggle missing");
+            Assert.IsNotNull(Text(root, "Levels (%)"), "Quota levels row label missing");
+            var levels = All<TextBox>(root).First(t => t.Name == "QuotaLevels");
+            Assert.AreEqual("20,10,0", levels.Text, "Levels hydrate comma-encoded descending");
+            Assert.IsNotNull(Text(root, "Fires once per account at the most-severe level crossed, then again after the next quota reset."), "Quota caption missing");
+
+            Assert.IsNotNull(Text(root, "Daily spend cap (pool accounts)"), "Daily toggle missing");
+            Assert.IsNotNull(Text(root, "Daily cap"), "Daily cap row missing");
+            Assert.IsNotNull(Text(root, "Monthly spend cap (pool accounts)"), "Monthly toggle missing");
+            Assert.IsNotNull(Text(root, "Month cap"), "Month cap row missing");
+            Assert.AreEqual(2, All<TextBlock>(root).Count(t => t.Text == "$"), "Cap fields show $ prefix");
+            Assert.IsNotNull(Text(root, "Subscriptions are flat-rate and unaffected. These caps only watch metered pay-per-use pool spend, and are off until you enable them."), "Spend caption missing");
+
+            Assert.IsNotNull(Text(root, "Alert when an account needs re-auth"), "Reauth toggle missing");
+            Assert.IsNotNull(Text(root, "Alert when an account is paused / cooling down"), "Paused/cooldown toggle missing");
+            Assert.IsNotNull(Text(root, "Alerts show as system notifications when allowed (System Settings › Notifications) and always appear in the menu's Alerts list."), "Notification delivery note missing");
+
+            var done = Named<Button>(root, "Done");
+            Assert.IsNotNull(done, "Footer Done button missing");
+            Assert.IsTrue(done!.IsDefault, "Done is the default action (Return key)");
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void SettingsWindow_Runtime_ExcludesPanelScopedControls()
+    {
+        var window = CreateSettingsWindow(out _, new SpySettings());
+        try
+        {
+            LayoutContent(window);
+            var root = (DependencyObject)window.Content;
+            foreach (var banned in new[] { "Spend period", "Chart style", "Tray icon", "Keep alerts expanded" })
+                Assert.IsNull(Text(root, banned), $"'{banned}' belongs to the panel, not settings");
+            Assert.IsNull(Named<Button>(root, "Switch spend chart style"));
+            var comboTexts = DescendantsOf<ComboBox>(root).SelectMany(c => c.Items.OfType<ComboBoxItem>()).Select(i => i.Content?.ToString()).ToArray();
+            Assert.IsFalse(comboTexts.Any(t => t is "Today" or "Last 7 days" or "Last 30 days" or "Template" or "Color"), "No chart-period or tray-icon selectors");
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void SettingsWindow_Runtime_UsesCcsStylesWithoutStockChrome()
+    {
+        var window = CreateSettingsWindow(out _, new SpySettings());
+        try
+        {
+            LayoutContent(window);
+            var root = (DependencyObject)window.Content;
+            foreach (var button in All<Button>(root))
+            {
+                Assert.IsNotNull(button.Style, "Buttons must carry an explicit Ccs style");
+                Assert.IsTrue(SharedResourceContains(button.Style), "Button style must come from shared Ccs resources");
+                Assert.IsFalse(string.IsNullOrEmpty(AutomationProperties.GetName(button)), "Buttons need accessible names");
+            }
+
+            var quotaToggle = All<CheckBox>(root).First(c => c.Content?.ToString() == "Alert on low quota");
+            quotaToggle.ApplyTemplate();
+            Assert.IsNotNull(quotaToggle.Template.FindName("CheckBoxBorder", quotaToggle), "Toggles render through Ccs template, not stock chrome");
+
+            var done = Named<Button>(root, "Done")!;
+            Assert.AreEqual(s_resources["CcsButton.Primary"], done.Style, "Done uses the primary Ccs button style");
+        }
+        finally { window.Close(); }
+
+        var xaml = File.ReadAllText(SettingsWindowXamlPath);
+        Assert.IsFalse(xaml.Contains("<GroupBox"), "Stock GroupBox chrome forbidden");
+        StringAssert.Contains(xaml, "Background=\"{DynamicResource WindowBrush}\"", "Same theme pipeline as the panel");
+    }
+
+    [STATestMethod]
+    public void SettingsWindow_Runtime_WriteThrough_PersistsEachChangeToStore()
+    {
+        var store = new SpySettings();
+        store.Alerts = store.Alerts with { QuotaLevelsValue = [20, 10, 0] };
+        var window = CreateSettingsWindow(out var vm, store);
+        try
+        {
+            LayoutContent(window);
+            var root = (DependencyObject)window.Content;
+
+            var daily = All<CheckBox>(root).First(c => c.Content?.ToString() == "Daily spend cap (pool accounts)");
+            daily.IsChecked = false;
+            daily.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.IsFalse(vm.AlertPreferences.DailySpendEnabled, "Toggle writes through immediately");
+            var savesAfterToggle = store.Saves;
+            Assert.IsTrue(savesAfterToggle > 0, "Every change persists through the settings store");
+
+            var levels = All<TextBox>(root).First(t => t.Name == "QuotaLevels");
+            levels.Text = "30, abc, 5, 200";
+            levels.RaiseEvent(new RoutedEventArgs(UIElement.LostFocusEvent));
+            CollectionAssert.AreEqual(new[] { 100, 30, 5 }, vm.AlertPreferences.QuotaLevels.ToArray(), "Levels normalize clamp+dedupe+desc");
+            Assert.AreEqual("100,30,5", levels.Text, "Normalized form reflects back into the field");
+
+            var glance = DescendantsOf<ComboBox>(root).First();
+            glance.SelectedIndex = 2;
+            Assert.AreEqual(BarGlanceMode.MonthSpend, vm.Ui.GlanceMode, "Glance picker writes through");
+            Assert.AreEqual(BarGlanceMode.MonthSpend, vm.AlertPreferences.GlanceMode, "Alert prefs stay in sync with glance mode");
+
+            All<RadioButton>(root).First(s => Equals(s.Content, "Light")).IsChecked = true;
+            Assert.AreEqual(BarAppearance.Light, vm.Ui.Appearance, "Segment pick writes through");
+
+            var updates = All<CheckBox>(root).First(c => c.Content?.ToString() == "Check for CCS Bar updates automatically");
+            updates.IsChecked = false;
+            updates.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.IsFalse(vm.Ui.AutoCheckUpdates);
+
+            // Store state mirrors the UI after every write-through, persisting again per change.
+            Assert.AreEqual(BarAppearance.Light, store.Ui.Appearance);
+            Assert.AreEqual(BarGlanceMode.MonthSpend, store.Ui.GlanceMode);
+            Assert.IsFalse(store.Ui.AutoCheckUpdates);
+            Assert.IsFalse(store.Alerts.DailySpendEnabled);
+            CollectionAssert.AreEqual(new[] { 100, 30, 5 }, store.Alerts.QuotaLevels.ToArray());
+            Assert.IsTrue(store.Saves > savesAfterToggle, "Later changes persisted again");
+            var beforeDone = store.Saves;
+            Named<Button>(root, "Done")!.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.AreNotEqual(beforeDone, store.Saves, "Done commits pending field edits");
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void SettingsWindow_Runtime_CapRows_DisableWithTheirToggle()
+    {
+        var window = CreateSettingsWindow(out _, new SpySettings());
+        try
+        {
+            LayoutContent(window);
+            var root = (DependencyObject)window.Content;
+            var daily = All<CheckBox>(root).First(c => c.Content?.ToString() == "Daily spend cap (pool accounts)");
+            var month = All<CheckBox>(root).First(c => c.Content?.ToString() == "Monthly spend cap (pool accounts)");
+            var quota = All<CheckBox>(root).First(c => c.Content?.ToString() == "Alert on low quota");
+            var capBoxes = All<TextBox>(root).Where(t => t.Name is "DailyCap" or "MonthCap").ToArray();
+            var levels = All<TextBox>(root).First(t => t.Name == "QuotaLevels");
+
+            Assert.IsTrue(capBoxes.All(t => t.IsEnabled), "Caps start enabled");
+            Assert.IsTrue(levels.IsEnabled, "Levels start enabled");
+
+            daily.IsChecked = false; daily.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            month.IsChecked = false; month.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            quota.IsChecked = false; quota.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.IsFalse(capBoxes[0].IsEnabled, "Daily cap disables with its toggle");
+            Assert.IsFalse(capBoxes[1].IsEnabled, "Month cap disables with its toggle");
+            Assert.IsFalse(levels.IsEnabled, "Levels disable with quota toggle");
+
+            quota.IsChecked = true; quota.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.IsTrue(levels.IsEnabled, "Re-enabling restores the row");
+        }
+        finally { window.Close(); }
+    }
+
+    [TestMethod]
+    public void SettingsWindow_CenterWithin_CentersAndClampsToWorkArea()
+    {
+        var centered = SettingsWindow.CenterWithin(new BarRect(0, 0, 1920, 1040), 460, 600);
+        Assert.AreEqual(730d, centered.Left, 0.01, "Horizontal center");
+        Assert.AreEqual(220d, centered.Top, 0.01, "Vertical center");
+
+        var clamped = SettingsWindow.CenterWithin(new BarRect(100, 50, 300, 400), 460, 600);
+        Assert.AreEqual(100d, clamped.Left, "Left edge clamps into work area");
+        Assert.AreEqual(50d, clamped.Top, "Top edge clamps into work area");
+    }
+
+    [TestMethod]
+    public void SettingsWindow_CentersOnTheCursorMonitor()
+    {
+        var source = File.ReadAllText(Path.Combine(ProjectRoot, "CCSBar.App", "SettingsWindow.xaml.cs"));
+        StringAssert.Contains(source, "Forms.Screen.FromPoint(Forms.Cursor.Position)", "Placement resolves the cursor's monitor");
+        StringAssert.Contains(source, "TransformFromDevice", "Screen bounds convert device pixels to DIPs");
+        StringAssert.Contains(source, "CenterWithin", "Shared centering math drives placement");
+    }
+
+    [STATestMethod]
+    public void MainWindow_Settings_Click_ReusesSingleSettingsInstance()
+    {
+        var window = CreateMainWindow(new BarViewModel(new TestConnector(), new TestSettings()));
+        try
+        {
+            var click = typeof(MainWindow).GetMethod("Settings_Click", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var field = typeof(MainWindow).GetField("settingsWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            click.Invoke(window, [new Button(), new RoutedEventArgs()]);
+            var first = (Window?)field.GetValue(window);
+            Assert.IsNotNull(first, "First click opens the settings window");
+            click.Invoke(window, [new Button(), new RoutedEventArgs()]);
+            Assert.AreSame(first, field.GetValue(window), "Second click reuses the singleton instead of duplicating");
+            first!.Close();
+            Assert.IsNull(field.GetValue(window), "Close clears the handle so the next open rebuilds centered");
+        }
+        finally { window.Detach(); window.Close(); }
+    }
 }
 
