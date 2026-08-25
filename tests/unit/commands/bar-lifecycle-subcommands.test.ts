@@ -610,6 +610,65 @@ describe('status: latest-launch failure reporting', () => {
 // ---------------------------------------------------------------------------
 
 describe('launch: detached-spawn model', () => {
+  it('treats launch.json publication failure as a failed transaction', async () => {
+    const ccsDir = path.join(tempHome, '.ccs');
+    const priorDiscovery = '{"baseUrl":"http://127.0.0.1:3000","port":3000}';
+    fs.mkdirSync(ccsDir, { recursive: true });
+    fs.writeFileSync(path.join(ccsDir, 'bar.json'), priorDiscovery);
+    const statuses: string[] = [];
+    let killed = false;
+    let opened = false;
+    const { handleBarLaunch } = await loadLaunchSubcommand();
+
+    await handleBarLaunch([], {
+      getCcsDir: () => ccsDir,
+      findRunningServer: async () => null,
+      getPort: async () => 4242,
+      createLaunchId: () => 'launch-descriptor-failure',
+      writeLatestLaunchPointer: (_pointerPath: string, pointer: { status: string }) => statuses.push(pointer.status),
+      spawnDetachedServer: () => ({ kill: () => { killed = true; return true; } }),
+      waitForDetachedChildExit: async () => true,
+      waitForServerLive: async () => {},
+      writeLaunchDescriptor: () => { throw new Error('disk full'); },
+      openApp: async () => { opened = true; },
+      appInstallPath: path.join(tempHome, 'CCS Bar.exe'),
+    });
+
+    expect(killed).toBe(true);
+    expect(statuses).toEqual(['starting', 'failed']);
+    expect(fs.readFileSync(path.join(ccsDir, 'bar.json'), 'utf8')).toBe(priorDiscovery);
+    expect(opened).toBe(false);
+    expect(process.exitCode).toBe(1);
+    expect(allOutput()).not.toMatch(/web-server running|Discovery file written|CCS Bar launched/i);
+  });
+
+  it('does not let an older launch advance a newer latest-launch pointer', async () => {
+    const ccsDir = path.join(tempHome, '.ccs');
+    fs.mkdirSync(ccsDir, { recursive: true });
+    const { handleBarLaunch } = await loadLaunchSubcommand();
+
+    await handleBarLaunch([], {
+      getCcsDir: () => ccsDir,
+      findRunningServer: async () => null,
+      getPort: async () => 4242,
+      createLaunchId: () => 'older-launch',
+      spawnDetachedServer: () => undefined,
+      waitForServerLive: async () => {
+        fs.writeFileSync(path.join(ccsDir, 'bar', 'latest-launch.json'), JSON.stringify({
+          schema: 1, launchId: 'newer-launch', port: 4343,
+          startedAt: '2026-08-25T00:00:01.000Z', logPath: 'newer.log', status: 'starting',
+        }));
+      },
+      writeLaunchDescriptor: () => {},
+      openApp: async () => {},
+      appInstallPath: path.join(tempHome, 'CCS Bar.exe'),
+    });
+
+    const pointer = JSON.parse(fs.readFileSync(path.join(ccsDir, 'bar', 'latest-launch.json'), 'utf8'));
+    expect(pointer.launchId).toBe('newer-launch');
+    expect(pointer.status).toBe('starting');
+  });
+
   it('does NOT call startServer in-process — uses spawnDetachedServer instead', async () => {
     const ccsDir = path.join(tempHome, '.ccs');
     fs.mkdirSync(ccsDir, { recursive: true });

@@ -66,30 +66,16 @@ public partial class App : System.Windows.Application
         else ShowPanel();
     }
 
-    public async void ShowPanel()
+    public void ShowPanel()
     {
         if (tray is null || viewModel is null || settings is null) return;
         if (panel is null)
         {
             panel = new MainWindow(viewModel, settings);
         }
-        await WaitForHealthAsync();
         panel.ShowAnchored(System.Windows.Forms.Cursor.Position);
         panel.Activate();
         _ = viewModel.OnPanelOpenedAsync();
-    }
-
-    async Task WaitForHealthAsync()
-    {
-        if (viewModel is null) return;
-        var timeout = TimeSpan.FromSeconds(10);
-        var start = DateTime.UtcNow;
-        while (viewModel.IsStarting || viewModel.Offline)
-        {
-            if (DateTime.UtcNow - start > timeout) break;
-            await Task.Delay(200);
-            if (viewModel.IsRefreshing) await Task.Delay(100);
-        }
     }
 
     public void SettingsChanged()

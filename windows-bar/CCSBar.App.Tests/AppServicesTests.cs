@@ -59,11 +59,14 @@ public sealed class AppServicesTests
     }
 
     [TestMethod]
-    public void MainWindow_DoesNotHideOnFirstDeactivationAfterShow()
+    public void Panel_ActivationGrace_IgnoresOnlySettlingDeactivation()
     {
-        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "CCSBar.App", "MainWindow.xaml.cs"));
-        StringAssert.Contains(source, "Window_Deactivated");
-        StringAssert.Contains(source, "firstShow");
+        var start = DateTimeOffset.Parse("2026-08-25T00:00:00Z");
+        var guard = new PanelActivationGuard(TimeSpan.FromMilliseconds(250));
+        guard.Activated(start);
+        Assert.IsFalse(guard.ShouldHide(start.AddMilliseconds(100)), "settling deactivation ignored");
+        Assert.IsTrue(guard.ShouldHide(start.AddMilliseconds(300)), "first genuine click-away hides");
+        Assert.IsTrue(guard.ShouldHide(start.AddMilliseconds(301)), "grace is not a one-event swallow");
     }
 
     [TestMethod]
@@ -75,10 +78,20 @@ public sealed class AppServicesTests
     }
 
     [TestMethod]
-    public void App_AwaitsHealthBeforeShowingPanel()
+    public void App_ShowsPanelBeforeAsyncRefresh()
     {
         var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "CCSBar.App", "App.xaml.cs"));
-        StringAssert.Contains(source, "WaitForHealthAsync");
+        var show = source.IndexOf("panel.ShowAnchored", StringComparison.Ordinal);
+        var refresh = source.IndexOf("OnPanelOpenedAsync", StringComparison.Ordinal);
+        Assert.IsTrue(show >= 0 && refresh > show, "Starting/Offline panel must display before startup refresh continues");
+        Assert.IsFalse(source.Contains("WaitForHealthAsync"), "panel activation must not wait up to 10 seconds");
+    }
+
+    [TestMethod]
+    public void AppProject_RestoresWinX64PublishGraph()
+    {
+        var project = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "CCSBar.App", "CCSBar.App.csproj"));
+        StringAssert.Contains(project, "<RuntimeIdentifiers>win-x64</RuntimeIdentifiers>");
     }
 
     [TestMethod]

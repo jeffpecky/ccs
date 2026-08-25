@@ -23,7 +23,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Image x:Name="HeaderLogo" Source="/Assets/HeaderLogo.png" Width="24" Height="24" Stretch="Uniform" VerticalAlignment="Center"/>
+                <Image x:Name="HeaderLogo" Source="pack://application:,,,/CCS%20Bar;component/Assets/HeaderLogo.png" Width="24" Height="24" Stretch="Uniform" VerticalAlignment="Center"/>
                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
                     <TextBlock x:Name="HeaderTitle" Text="CCS" FontSize="13" FontWeight="SemiBold" LineHeight="14"/>
                     <TextBlock x:Name="HeaderSubtitle" Text="usage &amp; accounts" FontSize="10" Foreground="{DynamicResource MutedBrush}" LineHeight="11"/>
@@ -62,14 +62,14 @@
             <Grid x:Name="Footer" Grid.Row="4" Margin="14,11">
                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel x:Name="FooterPrimary" Orientation="Horizontal">
-                    <Button Style="{StaticResource CcsButton.FooterIcon}" Content="Dashboard" Margin="0,0,12,0" Click="Dashboard_Click" AutomationProperties.Name="Open CCS Dashboard"/>
-                    <Button Style="{StaticResource CcsButton.FooterIcon}" Content="Icon" Margin="0,0,12,0" Click="Icon_Click" ToolTip="Toggle tray icon style" AutomationProperties.Name="Toggle tray icon style"/>
-                    <Button Style="{StaticResource CcsButton.FooterIcon}" Content="Settings" Click="Settings_Click" AutomationProperties.Name="Open CCS Bar settings"/>
+                    <Button Style="{StaticResource CcsButton.FooterIcon}" Margin="0,0,12,0" Click="Dashboard_Click" AutomationProperties.Name="Open CCS Dashboard"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE9D2;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Margin="0,0,4,0"/><TextBlock Text="Dashboard"/></StackPanel></Button>
+                    <Button Style="{StaticResource CcsButton.FooterIcon}" Margin="0,0,12,0" Click="Icon_Click" ToolTip="Toggle tray icon style" AutomationProperties.Name="Toggle tray icon style"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE790;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Margin="0,0,4,0"/><TextBlock Text="Icon"/></StackPanel></Button>
+                    <Button Style="{StaticResource CcsButton.FooterIcon}" Click="Settings_Click" AutomationProperties.Name="Open CCS Bar settings"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Margin="0,0,4,0"/><TextBlock Text="Settings"/></StackPanel></Button>
                 </StackPanel>
                 <StackPanel x:Name="FooterActions" Grid.Column="1" Orientation="Horizontal">
                     <TextBlock x:Name="StatusText" Width="1" Height="1" Opacity="0" AutomationProperties.LiveSetting="Polite"/>
-                    <Button Style="{StaticResource CcsButton.FooterIcon}" Content="↻" Margin="0,0,12,0" ToolTip="Refresh" Click="Refresh_Click" AutomationProperties.Name="Force refresh CCS data"/>
-                    <Button x:Name="QuitButton" Style="{StaticResource CcsButton.FooterIcon}" Content="Power" ToolTip="Quit CCS Bar (click again to confirm)" Click="Quit_Click" AutomationProperties.Name="Quit CCS Bar"/>
+                    <Button Style="{StaticResource CcsButton.FooterIcon}" Margin="0,0,12,0" ToolTip="Refresh" Click="Refresh_Click" AutomationProperties.Name="Force refresh CCS data"><TextBlock Text="&#xE72C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"/></Button>
+                    <Button x:Name="QuitButton" Style="{StaticResource CcsButton.FooterIcon}" ToolTip="Quit CCS Bar (click again to confirm)" Click="Quit_Click" AutomationProperties.Name="Quit CCS Bar"><TextBlock x:Name="QuitGlyph" Text="&#xE7E8;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"/></Button>
                 </StackPanel>
             </Grid>
         </Grid>

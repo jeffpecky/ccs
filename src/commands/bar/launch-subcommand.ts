@@ -121,7 +121,7 @@ export interface LaunchDeps {
    * Replace the latest-launch.json pointer for this attempt. Implementations
    * must replace, never append, so readers always see exactly one attempt.
    */
-  writeLatestLaunchPointer?: (pointerPath: string, pointer: LatestLaunchPointer) => void;
+  writeLatestLaunchPointer?: (pointerPath: string, pointer: LatestLaunchPointer) => boolean | void;
   /**
    * Wait until a killed detached child has confirmed its exit (bounded).
    * Resolves true when the exit was observed, false on timeout.
@@ -322,12 +322,35 @@ function defaultCreateLaunchId(): string {
   return randomUUID();
 }
 
-/** Replace the pointer atomically so readers never observe a partial file. */
-function defaultWriteLatestLaunchPointer(pointerPath: string, pointer: LatestLaunchPointer): void {
+/** Replace pointer only when this launch still owns it or is newer. */
+function defaultWriteLatestLaunchPointer(pointerPath: string, pointer: LatestLaunchPointer): boolean {
   fs.mkdirSync(path.dirname(pointerPath), { recursive: true });
-  const tmpPath = `${pointerPath}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(tmpPath, JSON.stringify(pointer, null, 2));
-  fs.renameSync(tmpPath, pointerPath);
+  const lockPath = `${pointerPath}.lock`;
+  let lockFd: number | undefined;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      lockFd = fs.openSync(lockPath, 'wx');
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
+  if (lockFd === undefined) throw new Error(`Timed out acquiring ${lockPath}`);
+  try {
+    let current: LatestLaunchPointer | null = null;
+    try { current = JSON.parse(fs.readFileSync(pointerPath, 'utf8')) as LatestLaunchPointer; }
+    catch { /* absent or invalid pointer can be replaced */ }
+    if (current?.launchId !== pointer.launchId && current?.startedAt && current.startedAt >= pointer.startedAt) return false;
+    if (current?.launchId !== pointer.launchId && pointer.status !== 'starting') return false;
+    const tmpPath = `${pointerPath}.tmp-${process.pid}-${Date.now()}`;
+    fs.writeFileSync(tmpPath, JSON.stringify(pointer, null, 2));
+    fs.renameSync(tmpPath, pointerPath);
+    return true;
+  } finally {
+    fs.closeSync(lockFd);
+    fs.rmSync(lockPath, { force: true });
+  }
 }
 
 async function defaultOpenApp(appPath: string): Promise<void> {
@@ -527,19 +550,20 @@ export async function handleBarLaunch(
   const latestPointerPath = getLatestLaunchPointerPath(ccsDir);
   const attemptStartedAt = new Date().toISOString();
 
-  const publishPointer = (status: LatestLaunchStatus): void => {
+  const publishPointer = (status: LatestLaunchStatus): boolean => {
     try {
-      writeLatestLaunchPointer(latestPointerPath, {
+      return writeLatestLaunchPointer(latestPointerPath, {
         schema: LATEST_LAUNCH_SCHEMA,
         launchId,
         port: selectedPort,
         startedAt: attemptStartedAt,
         logPath: serveLogPath,
         status,
-      });
+      }) !== false;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[!] Could not update latest-launch pointer: ${msg}`);
+      return false;
     }
   };
 
@@ -565,6 +589,12 @@ export async function handleBarLaunch(
     }
   };
 
+  const priorLaunchJson = fs.existsSync(launchJsonPath) ? fs.readFileSync(launchJsonPath, 'utf8') : null;
+  const restoreLaunchJson = (): void => {
+    if (priorLaunchJson === null) fs.rmSync(launchJsonPath, { force: true });
+    else writeFileAtomic(launchJsonPath, priorLaunchJson);
+  };
+
   const baseUrl = `http://127.0.0.1:${selectedPort}`;
   let spawnedChild: ChildProcess | void;
 
@@ -572,13 +602,13 @@ export async function handleBarLaunch(
   // awaited so the dying process cannot misdirect the rollback restore.
   const killSpawnedChildAndAwaitExit = async (): Promise<void> => {
     const child = typeof spawnedChild === 'object' ? spawnedChild : null;
-    if (child === null || typeof child.pid !== 'number') return;
+    if (child === null || typeof child.kill !== 'function') return;
     try {
       child.kill();
     } catch {
       /* already gone */
     }
-    const confirmed = await waitForDetachedChildExit(child);
+    const confirmed = typeof child.pid !== 'number' || await waitForDetachedChildExit(child);
     if (!confirmed) {
       console.error('[!] Could not confirm the detached child exited before rollback.');
     }
@@ -632,7 +662,13 @@ export async function handleBarLaunch(
     writeLaunchDescriptor(launchJsonPath, launchDescriptor);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[!] Could not write launch.json: ${msg}`);
+    console.error(`[X] Could not write launch.json: ${msg}`);
+    restoreLaunchJson();
+    publishPointer('failed');
+    await killSpawnedChildAndAwaitExit();
+    await rollbackPriorServer();
+    process.exitCode = 1;
+    return;
   }
 
   // 2e. Write bar.json.
@@ -648,6 +684,7 @@ export async function handleBarLaunch(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Failed to write bar.json: ${msg}`);
+    restoreLaunchJson();
     publishPointer('failed');
     await killSpawnedChildAndAwaitExit();
     await rollbackPriorServer();

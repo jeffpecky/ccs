@@ -51,12 +51,32 @@ public sealed class VisualSnapshotTests
         }
     }
 
-    static byte[] Render(Window window)
+    [STATestMethod]
+    [DataRow(BarAppearance.Light, "settings-light.png")]
+    [DataRow(BarAppearance.Dark, "settings-dark.png")]
+    public void SettingsWindow_MatchesBaseline(BarAppearance appearance, string fileName)
     {
-        const int width = 360;
+        App.ApplyTheme(appearance);
+        var settings = new SnapshotSettings { Ui = new BarUiSettings { Appearance = appearance } };
+        var vm = new BarViewModel(new SnapshotConnector(), settings);
+        var window = (Window)Activator.CreateInstance(typeof(MainWindow).Assembly.GetType("CCSBar.App.SettingsWindow")!,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            null, [vm, settings], null)!;
+        try
+        {
+            var actual = Render(window, 460, 600);
+            var baseline = Path.Combine(FixtureDirectory, fileName);
+            if (Environment.GetEnvironmentVariable("CCS_BAR_UPDATE_SNAPSHOTS") == "1") File.WriteAllBytes(baseline, actual);
+            else { Assert.IsTrue(File.Exists(baseline), $"Missing visual baseline: {baseline}"); Compare(File.ReadAllBytes(baseline), actual, fileName); }
+        }
+        finally { window.Close(); }
+    }
+
+    static byte[] Render(Window window, int width = 360, int maxHeight = 900)
+    {
         var content = (FrameworkElement)window.Content;
-        content.Measure(new Size(width, 900));
-        var height = Math.Max(1, (int)Math.Ceiling(Math.Min(900, content.DesiredSize.Height)));
+        content.Measure(new Size(width, maxHeight));
+        var height = Math.Max(1, (int)Math.Ceiling(Math.Min(maxHeight, content.DesiredSize.Height)));
         content.Arrange(new Rect(0, 0, width, height));
         content.UpdateLayout();
 
@@ -67,6 +87,19 @@ public sealed class VisualSnapshotTests
         using var stream = new MemoryStream();
         encoder.Save(stream);
         return stream.ToArray();
+    }
+
+    sealed class SnapshotSettings : IBarSettings
+    {
+        public BarUiSettings Ui { get; set; } = new();
+        public BarPreferences Alerts { get; set; } = new();
+        public IReadOnlySet<string> FiredKeys { get; set; } = new HashSet<string>();
+        public void Save() { }
+    }
+
+    sealed class SnapshotConnector : IBarConnector
+    {
+        public Task<IBarDataClient?> ConnectAsync(bool launch, CancellationToken cancellationToken) => Task.FromResult<IBarDataClient?>(null);
     }
 
     static void Compare(byte[] expectedPng, byte[] actualPng, string name)

@@ -23,6 +23,8 @@ public sealed class VisualContractTests
     static readonly string MainWindowCodePath = Path.Combine(ProjectRoot, "CCSBar.App", "MainWindow.xaml.cs");
     static readonly string AppCodePath = Path.Combine(ProjectRoot, "CCSBar.App", "App.xaml.cs");
     static readonly string SwiftThemePath = Path.GetFullPath(Path.Combine(ProjectRoot, "..", "macos-bar", "Sources", "CCSBarCore", "BarTheme.swift"));
+    static readonly string SwiftMenuPath = Path.GetFullPath(Path.Combine(ProjectRoot, "..", "macos-bar", "Sources", "CCSBarApp", "BarMenuView.swift"));
+    static readonly string SwiftSettingsControllerPath = Path.GetFullPath(Path.Combine(ProjectRoot, "..", "macos-bar", "Sources", "CCSBarApp", "SettingsWindowController.swift"));
     static readonly string ControlsDir = Path.Combine(ProjectRoot, "CCSBar.App", "Controls");
 
     static App? s_app;
@@ -329,6 +331,7 @@ public sealed class VisualContractTests
             Assert.AreEqual(new Thickness(14, 10, 14, 10), ((Grid)window.FindName("Header")).Margin);
             Assert.AreEqual(24, ((Image)window.FindName("HeaderLogo")).Width);
             Assert.AreEqual(24, ((Image)window.FindName("HeaderLogo")).Height);
+            Assert.IsNotNull(((Image)window.FindName("HeaderLogo")).Source, "Header logo resource must resolve and render");
             Assert.AreEqual("CCS", ((TextBlock)window.FindName("HeaderTitle")).Text);
             Assert.AreEqual("usage & accounts", ((TextBlock)window.FindName("HeaderSubtitle")).Text);
             var version = File.ReadAllText(Path.Combine(ProjectRoot, "..", "macos-bar", "VERSION")).Trim();
@@ -367,12 +370,33 @@ public sealed class VisualContractTests
         var window = CreateMainWindow(new BarViewModel(new TestConnector(), new TestSettings()));
         try
         {
-            var left = ((StackPanel)window.FindName("FooterPrimary")).Children.Cast<Button>().Select(x => x.Content?.ToString()).ToArray();
+            var left = ((StackPanel)window.FindName("FooterPrimary")).Children.Cast<Button>().Select(ButtonLabel).ToArray();
             var right = ((StackPanel)window.FindName("FooterActions")).Children.OfType<Button>().Where(x => x.Visibility == Visibility.Visible).Select(x => x.ToolTip?.ToString()).ToArray();
             CollectionAssert.AreEqual(new[] { "Dashboard", "Icon", "Settings" }, left);
             CollectionAssert.AreEqual(new[] { "Refresh", "Quit CCS Bar (click again to confirm)" }, right);
+            Assert.IsTrue(((StackPanel)window.FindName("FooterPrimary")).Children.Cast<Button>().All(b => b.Content is StackPanel panel && panel.Children[0] is TextBlock && panel.Children[1] is TextBlock));
+            Assert.IsTrue(((StackPanel)window.FindName("FooterActions")).Children.OfType<Button>().All(b => b.Content is TextBlock glyph && glyph.FontFamily.Source.Contains("Segoe Fluent")));
         }
         finally { window.Detach(); window.Close(); }
+    }
+
+    static string? ButtonLabel(Button button) => button.Content is StackPanel panel
+        ? panel.Children.OfType<TextBlock>().LastOrDefault()?.Text
+        : button.Content?.ToString();
+
+    [TestMethod]
+    public void MainWindow_SourceComposition_MatchesSwiftHierarchyAndDimensions()
+    {
+        var swift = File.ReadAllText(SwiftMenuPath);
+        StringAssert.Contains(swift, ".frame(width: 360)");
+        StringAssert.Contains(swift, "Label(\"Dashboard\", systemImage: \"chart.bar.xaxis\")");
+        StringAssert.Contains(swift, "\"Icon\",");
+        StringAssert.Contains(swift, "Label(\"Settings\", systemImage: \"gearshape\")");
+        StringAssert.Contains(swift, "Image(systemName: \"arrow.clockwise\")");
+        StringAssert.Contains(swift, "Image(systemName: \"power\")");
+        var xaml = File.ReadAllText(MainWindowXamlPath);
+        Assert.IsTrue(xaml.IndexOf("x:Name=\"Header\"", StringComparison.Ordinal) < xaml.IndexOf("x:Name=\"ContentPanel\"", StringComparison.Ordinal));
+        Assert.IsTrue(xaml.IndexOf("x:Name=\"ContentPanel\"", StringComparison.Ordinal) < xaml.IndexOf("x:Name=\"Footer\"", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -1308,6 +1332,9 @@ public sealed class VisualContractTests
             Assert.AreEqual(420d, window.MinWidth, "macOS minSize width 420");
             Assert.AreEqual(520d, window.MinHeight, "macOS minSize height 520");
             Assert.AreEqual(ResizeMode.CanResize, window.ResizeMode, "macOS styleMask includes .resizable");
+            var swift = File.ReadAllText(SwiftSettingsControllerPath);
+            StringAssert.Contains(swift, "NSSize(width: 460, height: 600)");
+            StringAssert.Contains(swift, "NSSize(width: 420, height: 520)");
         }
         finally { window.Close(); }
     }
@@ -1419,8 +1446,9 @@ public sealed class VisualContractTests
             quotaToggle.ApplyTemplate();
             Assert.IsNotNull(quotaToggle.Template.FindName("CheckBoxBorder", quotaToggle), "Toggles render through Ccs template, not stock chrome");
 
-            var done = Named<Button>(root, "Done")!;
-            Assert.AreEqual(s_resources["CcsButton.Primary"], done.Style, "Done uses the primary Ccs button style");
+            var done = Named<Button>(root, "Done");
+            Assert.IsNotNull(done, "Footer Done button missing");
+            Assert.AreEqual(s_resources!["CcsButton.Primary"], done!.Style, "Done uses the primary Ccs button style");
         }
         finally { window.Close(); }
 

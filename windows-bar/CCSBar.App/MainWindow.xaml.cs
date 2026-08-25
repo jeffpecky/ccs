@@ -26,7 +26,7 @@ namespace CCSBar.App;
 public partial class MainWindow : Window
 {
     const int WMMouseHWheel = 0x020E;
-    readonly BarViewModel vm; readonly IBarSettings settings; readonly IBarClock clock; bool quitArmed; SettingsWindow? settingsWindow; bool firstShow = true; string? updateError;
+    readonly BarViewModel vm; readonly IBarSettings settings; readonly IBarClock clock; readonly PanelActivationGuard activationGuard = new(); bool quitArmed; SettingsWindow? settingsWindow; string? updateError;
     readonly Action installUpdate;
     readonly List<(StackPanel Host, ProfileCarousel Carousel, Action Paint)> carousels = [];
     internal MainWindow(BarViewModel vm, IBarSettings settings, IBarClock? clock = null, Action? installUpdate = null)
@@ -56,11 +56,11 @@ public partial class MainWindow : Window
     }
     public void ShowAnchored(System.Drawing.Point cursor)
     {
-        quitArmed = false; QuitButton.Content = "Power"; Render(); UpdateLayout();
+        quitArmed = false; QuitGlyph.Text = "\uE7E8"; QuitButton.ClearValue(ForegroundProperty); QuitButton.ToolTip = "Quit CCS Bar (click again to confirm)"; Render(); UpdateLayout();
         var screen = Forms.Screen.FromPoint(cursor); var source = PresentationSource.FromVisual(this); var fromDevice = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity; var topLeft = fromDevice.Transform(new System.Windows.Point(screen.WorkingArea.Left, screen.WorkingArea.Top)); var bottomRight = fromDevice.Transform(new System.Windows.Point(screen.WorkingArea.Right, screen.WorkingArea.Bottom)); var pointer = fromDevice.Transform(new System.Windows.Point(cursor.X, cursor.Y)); var work = new BarRect(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y); var tray = new BarRect(pointer.X, pointer.Y, 1, 1);
         ContentScroll.MaxHeight = Math.Max(240, work.Height - 120); UpdateLayout();
         var place = PanelPlacement.Anchor(work, tray, 360, Math.Min(ActualHeight > 0 ? ActualHeight : 700, work.Height));
-        Left = place.X; Top = place.Y; firstShow = true; Show();
+        Left = place.X; Top = place.Y; activationGuard.Activated(Now); Show();
     }
     public void Render()
     {
@@ -679,8 +679,24 @@ public partial class MainWindow : Window
     void Icon_Click(object sender, RoutedEventArgs e) { settings.Ui = settings.Ui with { IconStyle = settings.Ui.IconStyle == BarIconStyle.Color ? BarIconStyle.Template : BarIconStyle.Color }; settings.Save(); ((App)Application.Current).SettingsChanged(); }
     void Dashboard_Click(object sender, RoutedEventArgs e) { if (vm.ActiveBaseUrl is not null) try { new DashboardLauncher(WindowsProcess.Start).Open(vm.ActiveBaseUrl); } catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "CCS Bar", MessageBoxButton.OK, MessageBoxImage.Error); } Hide(); }
     void Settings_Click(object sender, RoutedEventArgs e) { settingsWindow ??= new SettingsWindow(vm, (JsonBarSettings)settings) { Owner = null }; settingsWindow.Closed += (_, _) => settingsWindow = null; settingsWindow.Show(); settingsWindow.Activate(); }
-    void Quit_Click(object sender, RoutedEventArgs e) { if (!quitArmed) { quitArmed = true; QuitButton.Content = "Confirm quit"; QuitButton.Foreground = (Brush)FindResource("RedBrush"); return; } ((App)Application.Current).Exit(); }
-    void Window_Deactivated(object sender, EventArgs e) { if (firstShow) { firstShow = false; return; } if (settingsWindow?.IsActive != true) Hide(); } void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { if (e.Key == Key.Escape) Hide(); }
+    void Quit_Click(object sender, RoutedEventArgs e) { if (!quitArmed) { quitArmed = true; QuitGlyph.Text = "\uEA14"; QuitButton.Foreground = (Brush)FindResource("RedBrush"); QuitButton.ToolTip = "Click to confirm quit"; return; } ((App)Application.Current).Exit(); }
+    void Window_Deactivated(object sender, EventArgs e) { if (settingsWindow?.IsActive != true && activationGuard.ShouldHide(Now)) Hide(); } void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { if (e.Key == Key.Escape) Hide(); }
+}
+
+public sealed class PanelActivationGuard(TimeSpan? grace = null)
+{
+    enum ActivationState { Settling, Armed }
+    readonly TimeSpan graceWindow = grace ?? TimeSpan.FromMilliseconds(250);
+    DateTimeOffset activatedAt;
+    ActivationState state = ActivationState.Armed;
+
+    public void Activated(DateTimeOffset now) { activatedAt = now; state = ActivationState.Settling; }
+    public bool ShouldHide(DateTimeOffset now)
+    {
+        if (state == ActivationState.Settling && now - activatedAt < graceWindow) return false;
+        state = ActivationState.Armed;
+        return true;
+    }
 }
 
 /// <summary>
