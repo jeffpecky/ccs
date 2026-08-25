@@ -19,6 +19,7 @@ import { apiRoutes } from '../../../src/web-server/routes';
 import {
   authMiddleware,
   barAuthMiddleware,
+  barHealthMiddleware,
   createSessionMiddleware,
 } from '../../../src/web-server/middleware/auth-middleware';
 import {
@@ -231,3 +232,96 @@ describe('api-routes /api/bar/* local-access guard', () => {
     }
   }, 30000);
 });
+
+describe('GET /api/bar/health', () => {
+  let server: Server;
+  let baseUrl = '';
+  let tempHome = '';
+  let originalCcsHome: string | undefined;
+  let summaryStarted: Promise<void>;
+  let markSummaryStarted: () => void;
+
+  beforeAll(async () => {
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-bar-health-'));
+    originalCcsHome = process.env.CCS_HOME;
+    process.env.CCS_HOME = tempHome;
+
+    summaryStarted = new Promise<void>((resolve) => {
+      markSummaryStarted = resolve;
+    });
+    const app = express();
+    app.use(barAuthMiddleware);
+    app.use(barHealthMiddleware);
+    app.get('/api/bar/summary', async () => {
+      markSummaryStarted();
+      await new Promise(() => {});
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server = app.listen(0, '127.0.0.1');
+      server.once('error', reject);
+      server.once('listening', () => resolve());
+    });
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Unable to resolve test server port');
+    baseUrl = `http://127.0.0.1:${address.port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    if (originalCcsHome === undefined) delete process.env.CCS_HOME;
+    else process.env.CCS_HOME = originalCcsHome;
+  });
+
+  it('responds with authenticated readiness while summary dependency hangs', async () => {
+    const summaryAbort = new AbortController();
+    const summary = fetch(`${baseUrl}/api/bar/summary`, {
+      signal: summaryAbort.signal,
+      headers: barProofHeaders('GET', '/api/bar/summary'),
+    }).catch((error: unknown) => error);
+    await summaryStarted;
+    const response = await Promise.race([
+      fetch(`${baseUrl}/api/bar/health`, {
+        headers: barProofHeaders('GET', '/api/bar/health'),
+      }),
+      new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 1000)),
+    ]);
+
+    expect(response).not.toBe('timeout');
+    if (response === 'timeout') return;
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(response.headers.get(BAR_AUTH_TOKEN_HEADER)).toBeTruthy();
+    summaryAbort.abort();
+    expect(await summary).toBeInstanceOf(Error);
+  });
+
+  it('requires nonce-bound auth v2', async () => {
+    expect((await fetch(`${baseUrl}/api/bar/health`)).status).toBe(401);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/bar/health`, {
+          headers: {
+            [BAR_AUTH_NONCE_HEADER]: '0123456789abcdef0123456789abcdef',
+            [BAR_AUTH_TOKEN_HEADER]: '0'.repeat(64),
+          },
+        })
+      ).status
+    ).toBe(403);
+  });
+});
+
+function barProofHeaders(method: string, requestPath: string): Record<string, string> {
+  const nonce = '0123456789abcdef0123456789abcdef';
+  return {
+    [BAR_AUTH_NONCE_HEADER]: nonce,
+    [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(
+      getOrCreateBarAuthToken(),
+      'request',
+      method,
+      requestPath,
+      nonce
+    ),
+  };
+}

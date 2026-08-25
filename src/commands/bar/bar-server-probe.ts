@@ -108,7 +108,7 @@ export async function defaultFindRunningServer(ccsDir: string): Promise<Dashboar
         if (settled) return;
         settled = true;
         clearTimeout(absoluteDeadline);
-        // Tear down the socket the moment we have enough to decide. The summary
+        // Tear down the socket the moment we have enough to decide. The health
         // endpoint only needs the status code for liveness, so a non-CCS
         // loopback service that streams forever cannot block discovery from
         // returning a higher-priority hit.
@@ -174,7 +174,7 @@ export async function defaultFindRunningServer(ccsDir: string): Promise<Dashboar
   const probeTargets = candidates.map((port) => ({
     port,
     baseUrl: `http://127.0.0.1:${port}`,
-    url: `http://127.0.0.1:${port}/api/bar/summary`,
+    url: `http://127.0.0.1:${port}/api/bar/health`,
   }));
 
   const probes = probeTargets.map((t) => probe(t.url));

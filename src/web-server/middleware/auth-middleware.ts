@@ -188,6 +188,26 @@ export function barAuthMiddleware(req: Request, res: Response, next: NextFunctio
   next();
 }
 
+export function barHealthMiddleware(req: Request, res: Response, next: NextFunction): void {
+  if (req.method !== 'GET' || req.path.toLowerCase() !== '/api/bar/health') {
+    next();
+    return;
+  }
+
+  if (!isIpv4LoopbackRemoteAddress(req.socket.remoteAddress)) {
+    res.status(403).json({ error: 'CCS Bar health requires IPv4 localhost access.' });
+    return;
+  }
+
+  res.status(200).json({ ok: true });
+}
+
+function isIpv4LoopbackRemoteAddress(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().replace(/^::ffff:/, '');
+  return normalized === '127.0.0.1' || normalized.startsWith('127.');
+}
+
 export function isLoopbackRemoteAddress(value: string | undefined): boolean {
   if (!value) return false;
   const normalized = value.trim().replace(/^\[|\]$/g, '');

@@ -1791,7 +1791,7 @@ describe('launch: bar.json contract (deterministic — GH-1500 null probe)', () 
 // ---------------------------------------------------------------------------
 
 describe('defaultFindRunningServer (GH-1500)', () => {
-  it('detects a real HTTP server responding 200 on /api/bar/summary', async () => {
+  it('detects a real HTTP server responding 200 on /api/bar/health', async () => {
     const http = await import('http');
 
     const ccsDir = path.join(tempHome, '.ccs');
@@ -1802,7 +1802,7 @@ describe('defaultFindRunningServer (GH-1500)', () => {
       const nonce = String(req.headers[BAR_AUTH_NONCE_HEADER] ?? '');
       res.writeHead(200, {
         'Content-Type': 'application/json',
-        [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(token, 'response', 'GET', '/api/bar/summary', nonce),
+        [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(token, 'response', 'GET', '/api/bar/health', nonce),
       });
       res.end('{}');
     });
@@ -2018,7 +2018,7 @@ describe('defaultFindRunningServer (GH-1500)', () => {
       const nonce = String(req.headers[BAR_AUTH_NONCE_HEADER] ?? '');
       res.writeHead(200, {
         'Content-Type': 'application/json',
-        [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(token, 'response', 'GET', '/api/bar/summary', nonce),
+        [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(token, 'response', 'GET', '/api/bar/health', nonce),
       });
       res.end('{}');
     });
@@ -2071,7 +2071,7 @@ describe('defaultFindRunningServer: priority over response speed (GH-1500)', () 
       const nonce = String(req.headers[BAR_AUTH_NONCE_HEADER] ?? '');
       res.writeHead(200, {
         'Content-Type': 'application/json',
-        [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(token, 'response', 'GET', '/api/bar/summary', nonce),
+        [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(token, 'response', 'GET', '/api/bar/health', nonce),
       });
       res.end('{}');
     });
@@ -2086,7 +2086,7 @@ describe('defaultFindRunningServer: priority over response speed (GH-1500)', () 
       setTimeout(() => {
         res.writeHead(200, {
           'Content-Type': 'application/json',
-          [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(token, 'response', 'GET', '/api/bar/summary', nonce),
+          [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(token, 'response', 'GET', '/api/bar/health', nonce),
         });
         res.end('{}');
       }, 300);
@@ -3151,7 +3151,7 @@ describe('defaultFindRunningServer: socket-level 401/403 classifies authRequired
             const nonce =
               request.match(new RegExp(`${BAR_AUTH_NONCE_HEADER}:\\s*([^\\r\\n]+)`, 'i'))?.[1] ??
               '';
-            const proof = createBarAuthProof(token, 'response', 'GET', '/api/bar/summary', nonce);
+            const proof = createBarAuthProof(token, 'response', 'GET', '/api/bar/health', nonce);
             setImmediate(() => {
               for (const cb of listeners.data ?? []) {
                 cb(
@@ -3265,7 +3265,7 @@ describe('defaultFindRunningServer: socket-level 401/403 classifies authRequired
             for (const cb of listeners.data ?? []) {
               cb(
                 Buffer.from(
-                  `HTTP/1.1 200 OK\r\n${BAR_AUTH_TOKEN_HEADER}: ${createBarAuthProof(token, 'response', 'GET', '/api/bar/summary', nonce)}\r\n\r\n`,
+                  `HTTP/1.1 200 OK\r\n${BAR_AUTH_TOKEN_HEADER}: ${createBarAuthProof(token, 'response', 'GET', '/api/bar/health', nonce)}\r\n\r\n`,
                   'utf8'
                 )
               );
@@ -3441,7 +3441,7 @@ describe('defaultWaitForServerLive: rogue 200 without matching token is rejected
       buildNetMock((request) => {
         const nonce =
           request.match(new RegExp(`${BAR_AUTH_NONCE_HEADER}:\\s*([^\\r\\n]+)`, 'i'))?.[1] ?? '';
-        return `HTTP/1.1 200 OK\r\n${BAR_AUTH_TOKEN_HEADER}: ${createBarAuthProof(realToken, 'response', 'GET', '/api/bar/summary', nonce)}\r\n\r\n`;
+        return `HTTP/1.1 200 OK\r\n${BAR_AUTH_TOKEN_HEADER}: ${createBarAuthProof(realToken, 'response', 'GET', '/api/bar/health', nonce)}\r\n\r\n`;
       })
     );
 
@@ -3514,7 +3514,7 @@ describe('defaultFindRunningServer: streaming lower-priority probes', () => {
               for (const cb of listeners.data ?? []) {
                 cb(
                   Buffer.from(
-                    `HTTP/1.1 200 OK\r\n${BAR_AUTH_TOKEN_HEADER}: ${createBarAuthProof(expectedToken, 'response', 'GET', '/api/bar/summary', nonce)}\r\n\r\n`,
+                    `HTTP/1.1 200 OK\r\n${BAR_AUTH_TOKEN_HEADER}: ${createBarAuthProof(expectedToken, 'response', 'GET', '/api/bar/health', nonce)}\r\n\r\n`,
                     'utf8'
                   )
                 );
@@ -3618,7 +3618,7 @@ describe('bar raw socket probes: absolute deadline for malformed streaming peers
             for (const cb of listeners.data ?? []) {
               cb(
                 Buffer.from(
-                  `HTTP/1.1 200 OK\r\n${BAR_AUTH_TOKEN_HEADER}: ${createBarAuthProof(expectedToken, 'response', 'GET', '/api/bar/summary', nonce)}\r\n\r\n`,
+                  `HTTP/1.1 200 OK\r\n${BAR_AUTH_TOKEN_HEADER}: ${createBarAuthProof(expectedToken, 'response', 'GET', '/api/bar/health', nonce)}\r\n\r\n`,
                   'utf8'
                 )
               );

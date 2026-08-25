@@ -13,7 +13,7 @@
  *      recorded port first, then the default candidates), refresh launch.json
  *      (including --port so the Swift app self-starts on the same port), spawn
  *      `ccs bar serve --port N` detached with stdio → serve.log, poll
- *      /api/bar/summary until 200 (timeout ~10 s), write bar.json, open app,
+ *      /api/bar/health until 200 (timeout ~10 s), write bar.json, open app,
  *      return. The CLI process exits; the server continues as a detached child.
  *
  * All side-effectful deps are injectable so tests can run without real
@@ -87,7 +87,7 @@ export interface LaunchDeps {
    */
   spawnDetachedServer: (port: number, logPath: string) => ChildProcess | void;
   /**
-   * Poll GET {baseUrl}/api/bar/summary until HTTP 200 or timeout.
+   * Poll GET {baseUrl}/api/bar/health until HTTP 200 or timeout.
    * Returns the live baseUrl on success, throws on timeout.
    */
   waitForServerLive: (baseUrl: string) => Promise<void>;
@@ -147,7 +147,7 @@ function defaultSpawnDetachedServer(port: number, logPath: string): ChildProcess
 }
 
 /**
- * Poll GET {baseUrl}/api/bar/summary every 250 ms until HTTP 200 or ~10 s.
+ * Poll GET {baseUrl}/api/bar/health every 250 ms until HTTP 200 or ~10 s.
  * Resolves when the server is live. Rejects on timeout.
  */
 export class BarServerAuthRequiredError extends Error {
@@ -176,7 +176,7 @@ export async function defaultWaitForServerLive(baseUrl: string): Promise<void> {
   const deadline = Date.now() + TIMEOUT_MS;
 
   async function probe(): Promise<{ statusCode: number | null; tokenMatched: boolean }> {
-    const url = new URL(`${baseUrl}/api/bar/summary`);
+    const url = new URL(`${baseUrl}/api/bar/health`);
     const nonce = createBarAuthNonce();
     const requestProof = createBarAuthProof(token, 'request', 'GET', url.pathname + url.search, nonce);
     return new Promise((resolve) => {

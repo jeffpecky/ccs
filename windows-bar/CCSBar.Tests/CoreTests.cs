@@ -21,6 +21,17 @@ public sealed class CoreTests
     }
 
     [TestMethod]
+    public async Task Probe_UsesLightweightAuthenticatedHealthEndpoint()
+    {
+        var handler = new RecordingHandler(request => AuthenticatedResponse(request, "{\"ok\":true}"));
+        var probe = new BarServerProbe(new HttpClient(handler), Token, TimeSpan.FromMilliseconds(100));
+
+        Assert.IsNotNull(await probe.FindLiveServerAsync(new("http://127.0.0.1:4321", 4321, "loopback")));
+        Assert.AreEqual("/api/bar/health", handler.Requests[0].RequestUri!.AbsolutePath);
+        Assert.AreEqual("127.0.0.1", handler.Requests[0].RequestUri!.Host);
+    }
+
+    [TestMethod]
     public void Auth_ProofsAreDirectionMethodAndPathBound()
     {
         var proof = BarAuth.Proof(Token, "request", "GET", "/api/bar/summary?b=2&a=1", "ab".PadRight(32, '0'));

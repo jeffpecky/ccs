@@ -18,6 +18,8 @@ describe('Swift CCS Bar authenticated probe contract', () => {
     expect(probe).toContain('x-ccs-bar-nonce');
     expect(probe).toContain('x-ccs-bar-token');
     expect(probe).toContain('CCSBarClient.proof');
+    expect(probe).toContain('api/bar/health');
+    expect(probe).not.toContain('api/bar/summary');
     expect(client).toContain('HMAC<SHA256>');
     expect(probe).toContain('.auth-token');
     expect(probe).not.toMatch(/return http\.statusCode == 200/);
@@ -34,6 +36,7 @@ describe('Swift CCS Bar authenticated probe contract', () => {
     expect(harness).toContain('probe auth: missing proof rejected');
     expect(harness).toContain('probe auth: invalid proof rejected');
     expect(harness).toContain('probe auth: nonce header sent');
+    expect(harness).toContain('/api/bar/health');
   });
 
   test('client signs summary, analytics, and mutation requests', () => {

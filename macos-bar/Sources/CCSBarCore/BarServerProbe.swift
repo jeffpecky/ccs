@@ -49,7 +49,7 @@ public struct BarLaunchDescriptor: Codable, Sendable {
 ///   1. bar.json port (if available)
 ///   2. 8080, 8181, 3000, 3001, 3002, 8000
 ///   Each port is tried on IPv4 loopback.
-///   Liveness check: GET /api/bar/summary -> 200 with authenticated nonce proof.
+///   Liveness check: GET /api/bar/health -> 200 with authenticated nonce proof.
 ///
 /// The transport is injectable so the check harness can test ordering without
 /// a live server.
@@ -101,7 +101,7 @@ public struct BarServerProbe: Sendable {
   }
 
   /// Try IPv4 loopback for the given port.
-  /// Returns the first base URL that responds 200 to /api/bar/summary, or nil.
+  /// Returns the first base URL that responds 200 to /api/bar/health, or nil.
   private func probePort(_ port: Int) async -> URL? {
     let hosts = ["127.0.0.1"]
     for host in hosts {
@@ -146,7 +146,7 @@ public struct BarServerProbe: Sendable {
   private func isLive(baseURL: URL) async -> Bool {
     guard let authToken else { return false }
     let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
-    let url = baseURL.appendingPathComponent("api/bar/summary")
+    let url = baseURL.appendingPathComponent("api/bar/health")
     var req = URLRequest(url: url)
     req.timeoutInterval = 2.0
     req.setValue(nonce, forHTTPHeaderField: "x-ccs-bar-nonce")

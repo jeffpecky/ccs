@@ -114,7 +114,7 @@ public sealed class BarServerProbe
         if (authToken is null) return false;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(probeTimeout);
-        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUri, "api/bar/summary"));
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUri, "api/bar/health"));
         request.Options.Set(new HttpRequestOptionsKey<TimeSpan>("CCSBar.Timeout"), probeTimeout);
         BarAuth.Authenticate(request, authToken);
         try

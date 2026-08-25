@@ -1596,7 +1596,7 @@ do {
 
 let probeAuthToken = String(repeating: "a", count: 64)
 
-func probeProof(_ nonce: String, direction: String = "response", url: URL = URL(string: "http://127.0.0.1:3000/api/bar/summary")!) -> String {
+func probeProof(_ nonce: String, direction: String = "response", url: URL = URL(string: "http://127.0.0.1:3000/api/bar/health")!) -> String {
   CCSBarClient.proof(probeAuthToken, direction, "GET", url, nonce)
 }
 
@@ -1724,12 +1724,14 @@ do {
     let proof: (String) -> String?
     var nonce: String?
     var requestProof: String?
+    var probedPath: String?
 
     init(proof: @escaping (String) -> String?) { self.proof = proof }
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
       nonce = request.value(forHTTPHeaderField: "x-ccs-bar-nonce")
       requestProof = request.value(forHTTPHeaderField: "x-ccs-bar-token")
+      probedPath = request.url?.path
       let headers = nonce.flatMap { proof($0) }.map { ["x-ccs-bar-token": $0] }
       let http = HTTPURLResponse(
         url: request.url!, statusCode: 200, httpVersion: nil, headerFields: headers)!
@@ -1741,6 +1743,7 @@ do {
   let accepted = await BarServerProbe(transport: valid, authToken: probeAuthToken)
     .findLiveServer(discovery: BarDiscovery(baseUrl: "http://127.0.0.1:3000", port: 3000, authMode: "loopback"))
   check(valid.nonce?.count == 32, "probe auth: nonce header sent")
+  check(valid.probedPath == "/api/bar/health", "probe: uses lightweight /api/bar/health")
   check(valid.requestProof == valid.nonce.map { probeProof($0, direction: "request") }, "probe auth: request proof sent")
   check(accepted != nil, "probe auth: valid proof accepted")
 
