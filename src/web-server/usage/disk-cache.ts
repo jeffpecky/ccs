@@ -9,6 +9,7 @@
  */
 
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import type { DailyUsage, HourlyUsage, MonthlyUsage, SessionUsage } from './types';
 import { ok, info, warn } from '../../utils/ui';
@@ -76,6 +77,45 @@ export function readDiskCache(): UsageDiskCache | null {
     return cache;
   } catch (err) {
     // Cache corrupted or unreadable - treat as miss
+    console.log(info('Cache read failed, will refresh:') + ` ${(err as Error).message}`);
+    return null;
+  }
+}
+
+/**
+ * Async variant of readDiskCache.
+ *
+ * The usage cache can grow to many megabytes; reading it through the thread
+ * pool keeps the event loop free to answer health/summary requests while the
+ * cache loads. Returns null on missing/corrupt/incompatible caches, mirroring
+ * the sync reader's semantics.
+ */
+export async function readDiskCacheAsync(): Promise<UsageDiskCache | null> {
+  try {
+    const cacheFile = getCacheFile();
+    let stat: fs.Stats;
+    try {
+      stat = await fsp.stat(cacheFile);
+    } catch {
+      return null;
+    }
+    if (!stat.isFile()) {
+      return null;
+    }
+
+    const data = await fsp.readFile(cacheFile, 'utf-8');
+    // Yield once so responses queued behind this load are not stuck behind
+    // the JSON parse of a large cache file.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const cache: UsageDiskCache = JSON.parse(data);
+
+    if (cache.version !== CACHE_VERSION) {
+      console.log(info('Cache version mismatch, will refresh'));
+      return null;
+    }
+
+    return cache;
+  } catch (err) {
     console.log(info('Cache read failed, will refresh:') + ` ${(err as Error).message}`);
     return null;
   }

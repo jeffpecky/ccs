@@ -10,6 +10,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { getCcsDir } from '../../config/config-loader-facade';
 import {
@@ -18,6 +19,13 @@ import {
 } from './cliproxy-usage-transformer';
 
 const SUPPORTED_SNAPSHOT_VERSION = 3;
+
+/**
+ * Hard cap on snapshot bytes parsed per read. The bar glance degrades to no
+ * cliproxy rows beyond this instead of blocking the event loop behind a
+ * pathologically large JSON.parse.
+ */
+const SNAPSHOT_MAX_BYTES = 32 * 1024 * 1024;
 
 function getLatestSnapshotPath(): string {
   return path.join(getCcsDir(), 'cache', 'cliproxy-usage', 'latest.json');
@@ -38,11 +46,19 @@ export async function loadCliproxySnapshotDetails(): Promise<CliproxyUsageHistor
   const snapshotPath = getLatestSnapshotPath();
 
   try {
-    if (!fs.existsSync(snapshotPath)) {
+    // Async stat/read keep this helper off the event loop even when the
+    // snapshot is large (it sits on the /api/bar/summary request path).
+    let stat: fs.Stats;
+    try {
+      stat = await fsp.stat(snapshotPath);
+    } catch {
+      return [];
+    }
+    if (!stat.isFile() || stat.size > SNAPSHOT_MAX_BYTES) {
       return [];
     }
 
-    const raw = fs.readFileSync(snapshotPath, 'utf-8');
+    const raw = await fsp.readFile(snapshotPath, 'utf-8');
     const snapshot = JSON.parse(raw) as Record<string, unknown>;
 
     if (snapshot.version !== SUPPORTED_SNAPSHOT_VERSION) {

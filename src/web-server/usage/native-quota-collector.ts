@@ -139,14 +139,17 @@ export interface NativeQuotaDeps {
    * Returns null when absent/unparseable.
    */
   readCodexNativeAuth?: (profile: string) => { accessToken: string; accountId: string } | null;
-  /** Enumerate Claude profile names. Injected so tests never touch real fs. */
-  listClaudeProfiles?: () => string[];
+  /**
+   * Enumerate Claude profile names. May be async (production offloads the disk
+   * scans off the request loop). Injected so tests never touch real fs.
+   */
+  listClaudeProfiles?: () => string[] | Promise<string[]>;
   /** Enumerate Codex profile names (including DEFAULT_PROFILE for bare ~/.codex). */
-  listCodexProfiles?: () => string[];
+  listCodexProfiles?: () => string[] | Promise<string[]>;
   /** Resolve the default Claude profile name. */
-  defaultClaudeProfile?: () => string | null;
+  defaultClaudeProfile?: () => string | null | Promise<string | null>;
   /** Resolve the default Codex profile name. */
-  defaultCodexProfile?: () => string | null;
+  defaultCodexProfile?: () => string | null | Promise<string | null>;
   /** Clock seam for deterministic backoff/TTL/breaker tests. */
   now?: () => number;
   /** Sleep seam (no real delay in tests). */
@@ -1619,34 +1622,12 @@ async function getNativeAccountRowsMultiProfile(
   const defaultClaude = deps.defaultClaudeProfile ?? getDefaultClaudeProfileFromDisk;
   const defaultCodex = deps.defaultCodexProfile ?? getDefaultCodexProfileFromDisk;
 
-  const claudeProfiles = (() => {
-    try {
-      return listClaude();
-    } catch {
-      return [];
-    }
-  })();
-  const codexProfiles = (() => {
-    try {
-      return listCodex();
-    } catch {
-      return [];
-    }
-  })();
-  const claudeDefault = (() => {
-    try {
-      return defaultClaude();
-    } catch {
-      return null;
-    }
-  })();
-  const codexDefault = (() => {
-    try {
-      return defaultCodex();
-    } catch {
-      return null;
-    }
-  })();
+  const [claudeProfiles, codexProfiles, claudeDefault, codexDefault] = await Promise.all([
+    Promise.resolve().then(listClaude).catch(() => []),
+    Promise.resolve().then(listCodex).catch(() => []),
+    Promise.resolve().then(defaultClaude).catch(() => null),
+    Promise.resolve().then(defaultCodex).catch(() => null),
+  ]);
 
   const tasks: Promise<BarSummaryRow | null>[] = [];
   const results: (BarSummaryRow | null)[] = [];

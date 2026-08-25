@@ -1057,6 +1057,30 @@ function makeMultiProfileDeps(opts: {
   };
 }
 
+describe('multi-profile: async (offloaded) profile enumeration', () => {
+  it('awaits promise-returning enumeration seams without breaking the row build', async () => {
+    const clock = { now: 1_000_000 };
+    const deps = makeMultiProfileDeps({
+      clock,
+      claudeProfiles: [],
+      codexProfiles: [],
+      claudeDefault: null,
+      codexDefault: null,
+    });
+    // Production offloads the disk scans behind async seams; the collector must
+    // await promise-returning enumerators instead of treating them as arrays.
+    deps.listClaudeProfiles = async () => ['async-profile'];
+    deps.defaultClaudeProfile = async () => 'async-profile';
+
+    const rows = await getNativeAccountRows(deps);
+
+    const row = rows.find((r) => r.profile === 'async-profile');
+    expect(row).toBeDefined();
+    expect(row?.surface).toBe('ccs');
+    expect(row?.is_default).toBe(true);
+  });
+});
+
 describe('multi-profile: account_id and wire fields', () => {
   it('Claude profile rows carry surface="ccs", account_id="ccs:<p>", is_subscription=true', async () => {
     const clock = { now: 1_000_000 };

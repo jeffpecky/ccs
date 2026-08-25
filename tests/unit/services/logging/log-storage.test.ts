@@ -10,6 +10,7 @@ import { invalidateLoggingConfigCache } from '../../../../src/services/logging/l
 import { getCurrentLogPath, getLogArchiveDir } from '../../../../src/services/logging/log-paths';
 import {
   appendStructuredLogEntry,
+  flushPendingLogMaintenance,
   pruneExpiredLogArchives,
 } from '../../../../src/services/logging/log-storage';
 import type { LogEntry } from '../../../../src/services/logging/log-types';
@@ -53,7 +54,7 @@ describe('log storage', () => {
     tempHome = '';
   });
 
-  it('rotates the current log into the archive when the file exceeds the age threshold', () => {
+  it('rotates the current log into the archive when the file exceeds the age threshold', async () => {
     const config = createEmptyUnifiedConfig();
     config.logging.retain_days = 7;
     config.logging.rotate_mb = 10;
@@ -77,6 +78,10 @@ describe('log storage', () => {
       })
     );
 
+    // Rotation is scheduled off the append path so request logging never
+    // blocks the event loop on gzip work; drain pending maintenance first.
+    await flushPendingLogMaintenance();
+
     const archiveDir = getLogArchiveDir();
     const archives = fs.readdirSync(archiveDir);
     expect(archives).toHaveLength(1);
@@ -91,7 +96,46 @@ describe('log storage', () => {
     expect(currentContent).not.toContain('"id":"old-entry"');
   });
 
-  it('prunes expired archives according to retention settings', () => {
+  it('never loses entries appended around an in-flight rotation', async () => {
+    const config = createEmptyUnifiedConfig();
+    config.logging.retain_days = 7;
+    config.logging.rotate_mb = 10;
+    saveUnifiedConfig(config);
+    invalidateLoggingConfigCache();
+
+    const currentLogPath = getCurrentLogPath();
+    fs.mkdirSync(path.dirname(currentLogPath), { recursive: true });
+    fs.writeFileSync(
+      currentLogPath,
+      `${JSON.stringify(createEntry({ id: 'pre-rotation' }))}\n`,
+      'utf8'
+    );
+    const staleTimestamp = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    fs.utimesSync(currentLogPath, staleTimestamp, staleTimestamp);
+
+    // First append schedules rotation; second append races the in-flight pass.
+    appendStructuredLogEntry(createEntry({ id: 'rotation-trigger' }));
+    appendStructuredLogEntry(createEntry({ id: 'during-rotation' }));
+
+    await flushPendingLogMaintenance();
+
+    const archiveDir = getLogArchiveDir();
+    const archives = fs.readdirSync(archiveDir);
+    expect(archives.length).toBeGreaterThanOrEqual(1);
+
+    const archivedContent = archives
+      .map((name) => zlib.gunzipSync(fs.readFileSync(path.join(archiveDir, name))).toString('utf8'))
+      .join('\n');
+    expect(archivedContent).toContain('"id":"pre-rotation"');
+
+    // Every entry survives somewhere: nothing dropped by the rotation race.
+    const currentContent = fs.readFileSync(currentLogPath, 'utf8');
+    const allContent = `${archivedContent}\n${currentContent}`;
+    expect(allContent).toContain('"id":"rotation-trigger"');
+    expect(allContent).toContain('"id":"during-rotation"');
+  });
+
+  it('prunes expired archives according to retention settings', async () => {
     const config = createEmptyUnifiedConfig();
     config.logging.retain_days = 1;
     saveUnifiedConfig(config);
@@ -110,7 +154,7 @@ describe('log storage', () => {
     fs.utimesSync(oldArchive, oldTimestamp, oldTimestamp);
     fs.utimesSync(freshArchive, freshTimestamp, freshTimestamp);
 
-    pruneExpiredLogArchives();
+    await pruneExpiredLogArchives();
 
     expect(fs.existsSync(oldArchive)).toBe(false);
     expect(fs.existsSync(freshArchive)).toBe(true);

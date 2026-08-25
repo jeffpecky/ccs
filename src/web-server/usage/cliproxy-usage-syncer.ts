@@ -9,6 +9,7 @@
  */
 
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import {
   fetchCliproxyUsageRaw,
@@ -76,19 +77,19 @@ function getLatestSnapshotPath(): string {
   return path.join(getCliproxyCacheDir(), 'latest.json');
 }
 
-function ensurePrivateDirectory(dir: string): void {
-  fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
-  fs.chmodSync(dir, PRIVATE_DIR_MODE);
+async function ensurePrivateDirectory(dir: string): Promise<void> {
+  await fsp.mkdir(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
+  await fsp.chmod(dir, PRIVATE_DIR_MODE);
 }
 
-function ensureCliproxyCacheDir(): void {
+async function ensureCliproxyCacheDir(): Promise<void> {
   const ccsDir = getCcsDir();
   const cacheDir = path.join(ccsDir, 'cache');
   const cliproxyCacheDir = path.join(cacheDir, 'cliproxy-usage');
 
-  ensurePrivateDirectory(ccsDir);
-  ensurePrivateDirectory(cacheDir);
-  ensurePrivateDirectory(cliproxyCacheDir);
+  await ensurePrivateDirectory(ccsDir);
+  await ensurePrivateDirectory(cacheDir);
+  await ensurePrivateDirectory(cliproxyCacheDir);
 }
 
 function getSnapshotTimestamp(): number {
@@ -191,14 +192,22 @@ function migrateLegacySnapshot(
   };
 }
 
-function readSnapshot(emitWarnings = true): CliproxyUsageSnapshot | null {
+async function readSnapshot(emitWarnings = true): Promise<CliproxyUsageSnapshot | null> {
   try {
     const snapshotPath = getLatestSnapshotPath();
-    if (!fs.existsSync(snapshotPath)) {
+    let stat: fs.Stats;
+    try {
+      stat = await fsp.stat(snapshotPath);
+    } catch {
+      return null;
+    }
+    if (!stat.isFile()) {
       return null;
     }
 
-    const raw = fs.readFileSync(snapshotPath, 'utf-8');
+    // Snapshot reads go through the thread pool: the file can hold a year of
+    // history details and must never block the event loop on the request path.
+    const raw = await fsp.readFile(snapshotPath, 'utf-8');
     const snapshot = JSON.parse(raw) as CliproxyUsageSnapshot | LegacyCliproxyUsageSnapshot;
 
     if (snapshot.version === SNAPSHOT_VERSION) {
@@ -271,30 +280,30 @@ function buildSnapshot(
 async function writeSnapshotWithMerge(
   incomingDetails: CliproxyUsageHistoryDetail[]
 ): Promise<void> {
-  ensureCliproxyCacheDir();
+  await ensureCliproxyCacheDir();
   const snapshotPath = getLatestSnapshotPath();
 
   for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt++) {
-    const baseSnapshot = readSnapshot(false);
+    const baseSnapshot = await readSnapshot(false);
     const baseTimestamp = baseSnapshot?.timestamp ?? -Infinity;
     const snapshot = buildSnapshot(baseSnapshot?.details ?? [], incomingDetails);
     const tempFile = `${snapshotPath}.${process.pid}.${snapshot.timestamp}.tmp`;
 
-    fs.writeFileSync(tempFile, JSON.stringify(snapshot), {
+    await fsp.writeFile(tempFile, JSON.stringify(snapshot), {
       encoding: 'utf-8',
       mode: PRIVATE_FILE_MODE,
     });
-    fs.chmodSync(tempFile, PRIVATE_FILE_MODE);
+    await fsp.chmod(tempFile, PRIVATE_FILE_MODE);
 
-    const latestSnapshot = readSnapshot(false);
+    const latestSnapshot = await readSnapshot(false);
     const latestTimestamp = latestSnapshot?.timestamp ?? -Infinity;
     if (latestTimestamp > baseTimestamp) {
-      fs.rmSync(tempFile, { force: true });
+      await fsp.rm(tempFile, { force: true });
       continue;
     }
 
-    fs.renameSync(tempFile, snapshotPath);
-    fs.chmodSync(snapshotPath, PRIVATE_FILE_MODE);
+    await fsp.rename(tempFile, snapshotPath);
+    await fsp.chmod(snapshotPath, PRIVATE_FILE_MODE);
     console.log(ok('CLIProxy usage snapshot updated'));
     return;
   }
@@ -309,7 +318,7 @@ export async function loadCachedCliproxyData(): Promise<{
 }> {
   const empty = { daily: [], hourly: [], monthly: [] };
 
-  const snapshot = readSnapshot();
+  const snapshot = await readSnapshot();
   if (!snapshot) {
     return empty;
   }

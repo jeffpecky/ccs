@@ -22,7 +22,7 @@ import {
 } from './middleware/auth-middleware';
 import { requestLoggingMiddleware } from './middleware/request-logging-middleware';
 import { startAutoSyncWatcher, stopAutoSyncWatcher } from '../cliproxy/sync';
-import { shutdownUsageAggregator } from './usage/aggregator';
+import { initUsageAggregator, shutdownUsageAggregator } from './usage/aggregator';
 import { createLogger } from '../services/logging';
 import { DEFAULT_DASHBOARD_HOST, isLoopbackHost } from './dashboard-host';
 
@@ -31,6 +31,23 @@ export interface ServerOptions {
   host?: string;
   staticDir?: string;
   dev?: boolean;
+  /**
+   * Background services deferred until AFTER the server is listening.
+   *
+   * Readiness (listen + /api/bar/health) must never wait on profile watching or
+   * usage aggregation: both are scheduled on the next event-loop turn via
+   * setImmediate and their failures are contained instead of crashing the
+   * server. Tests inject slow/throwing implementations here to pin that
+   * contract.
+   */
+  backgroundServices?: ServerBackgroundServices;
+}
+
+export interface ServerBackgroundServices {
+  /** Prepare the profile auto-sync watcher. */
+  startAutoSyncWatcher?: () => void | Promise<void>;
+  /** Warm usage aggregator caches/services off the request path. */
+  initUsageAggregator?: () => void | Promise<void>;
 }
 
 export interface ServerInstance {
@@ -171,9 +188,6 @@ export async function startServer(options: ServerOptions): Promise<ServerInstanc
   // WebSocket connection handler + file watcher
   const { cleanup: wsCleanup } = setupWebSocket(wss);
 
-  // Start auto-sync watcher (if enabled in config)
-  startAutoSyncWatcher();
-
   // Combined cleanup function
   const cleanup = () => {
     wsCleanup();
@@ -209,14 +223,17 @@ export async function startServer(options: ServerOptions): Promise<ServerInstanc
         return;
       }
 
-      logger.info('server.listening', 'Dashboard server listening', {
-        host: listenHost,
-        port: options.port,
-        dev: Boolean(options.dev),
-      });
-      // Usage cache loads on-demand when Analytics page is visited
-      // This keeps server startup instant for users who don't need analytics
       resolve({ server, wss, cleanup });
+      setImmediate(() => {
+        logger.info('server.listening', 'Dashboard server listening', {
+          host: listenHost,
+          port: options.port,
+          dev: Boolean(options.dev),
+        });
+      });
+      // Watcher, usage cache, and startup log scans begin only after listen has
+      // resolved, leaving the first readiness response free of disk work.
+      scheduleBackgroundServices(options);
     };
 
     try {
@@ -288,4 +305,48 @@ function formatListenError(error: NodeJS.ErrnoException, options: ServerOptions)
   }
 
   return `Cannot bind to ${listenHost}:${options.port}: ${error.message}`;
+}
+
+/**
+ * Run one deferred background service, containing both synchronous throws and
+ * async rejections. A failing watcher or aggregator must never take the
+ * listening server (and with it Bar readiness) down.
+ */
+function runBackgroundService(name: string, start: () => void | Promise<void>): void {
+  try {
+    const result = start();
+    if (
+      result &&
+      typeof result === 'object' &&
+      typeof (result as Promise<void>).catch === 'function'
+    ) {
+      (result as Promise<void>).catch((error: unknown) => {
+        logger.warn('server.background_init_failed', 'Background service failed', {
+          service: name,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+  } catch (error) {
+    logger.warn('server.background_init_failed', 'Background service failed', {
+      service: name,
+      error: error instanceof Error ? (error as Error).message : String(error),
+    });
+  }
+}
+
+function scheduleBackgroundServices(options: ServerOptions): void {
+  const services = options.backgroundServices ?? {
+    startAutoSyncWatcher: () => startAutoSyncWatcher(),
+    initUsageAggregator: () => initUsageAggregator(),
+  };
+
+  setImmediate(() => {
+    if (services.startAutoSyncWatcher) {
+      runBackgroundService('auto-sync-watcher', services.startAutoSyncWatcher);
+    }
+    if (services.initUsageAggregator) {
+      runBackgroundService('usage-aggregator', services.initUsageAggregator);
+    }
+  });
 }

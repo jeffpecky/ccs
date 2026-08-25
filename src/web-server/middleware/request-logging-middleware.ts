@@ -9,7 +9,8 @@ export function requestLoggingMiddleware(req: Request, res: Response, next: Next
   const startTime = Date.now();
   res.locals.ccsRequestId = requestId;
   res.setHeader('x-ccs-request-id', requestId);
-  const shouldSkipLogging = req.originalUrl.startsWith('/api/logs');
+  const shouldSkipLogging =
+    req.originalUrl.startsWith('/api/logs') || req.originalUrl === '/api/bar/health';
 
   res.on('finish', () => {
     if (shouldSkipLogging) {

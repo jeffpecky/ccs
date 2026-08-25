@@ -18,6 +18,7 @@ import type { DailyUsage, HourlyUsage, MonthlyUsage, SessionUsage } from './type
 import {
   readDiskCache,
   writeDiskCache,
+  readDiskCacheAsync,
   isDiskCacheFresh,
   isDiskCacheStale,
   clearDiskCache,
@@ -368,6 +369,9 @@ const pendingRequests = new Map<string, Promise<unknown>>();
 // Track if disk cache has been loaded into memory
 let diskCacheInitialized = false;
 
+// In-flight async disk-cache load shared by concurrent first requests
+let diskCacheLoadPromise: Promise<void> | null = null;
+
 // Track if background refresh is in progress
 let isRefreshing = false;
 
@@ -547,17 +551,29 @@ async function refreshFromSourceCoalesced(force = false): Promise<{
 }
 
 /**
- * Initialize in-memory cache from disk cache (lazy - called on first API request).
+ * Initialize in-memory cache from disk cache.
+ *
+ * The cache file can be many megabytes, so the read is asynchronous: a request
+ * triggering this path must not block the event loop behind a sync filesystem
+ * scan. Concurrent callers share one in-flight load. `startCliproxySync()` is
+ * idempotent and only schedules async work.
  */
-function ensureDiskCacheLoaded(): void {
+function ensureDiskCacheLoaded(): Promise<void> {
   // Start sync when usage APIs are actually accessed.
-  // startCliproxySync() is idempotent.
   startCliproxySync();
 
-  if (diskCacheInitialized) return;
-  diskCacheInitialized = true;
+  if (diskCacheInitialized) return Promise.resolve();
+  if (!diskCacheLoadPromise) {
+    diskCacheLoadPromise = loadDiskCacheIntoMemory().finally(() => {
+      diskCacheLoadPromise = null;
+    });
+  }
+  return diskCacheLoadPromise;
+}
 
-  const diskCache = readDiskCache();
+async function loadDiskCacheIntoMemory(): Promise<void> {
+  const diskCache = await readDiskCacheAsync();
+  diskCacheInitialized = true;
   if (!diskCache) return;
 
   // Load disk cache into memory (regardless of freshness)
@@ -573,8 +589,8 @@ function ensureDiskCacheLoaded(): void {
  * Implements stale-while-revalidate pattern for instant responses
  */
 async function getCachedData<T>(key: string, ttl: number, loader: () => Promise<T>): Promise<T> {
-  // Ensure disk cache is loaded on first request
-  ensureDiskCacheLoaded();
+  // Ensure disk cache is loaded on first request (async; never blocks the loop)
+  await ensureDiskCacheLoaded();
 
   const cached = cache.get(key) as CacheEntry<T> | undefined;
   const now = Date.now();
@@ -750,6 +766,22 @@ export async function prewarmUsageCache(): Promise<{
   } catch (err) {
     console.error(fail(`Failed to prewarm usage cache: ${err}`));
     throw err;
+  }
+}
+
+/**
+ * Deferred startup init for the usage aggregator (runs after listen).
+ *
+ * Starts the CLIProxy usage syncer and warms the in-memory cache from disk
+ * asynchronously, so the first analytics/bar request never performs a large
+ * synchronous filesystem scan. Never throws: failures are logged and retried
+ * lazily on demand.
+ */
+export async function initUsageAggregator(): Promise<void> {
+  try {
+    await ensureDiskCacheLoaded();
+  } catch (err) {
+    console.error(fail(`Usage aggregator init failed: ${err}`));
   }
 }
 
