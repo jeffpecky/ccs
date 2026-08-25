@@ -13,6 +13,12 @@
     <AssemblyName>CCS Bar</AssemblyName>
     <ApplicationIcon>..\..\ui\public\favicon.ico</ApplicationIcon>
     <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <BarVersion>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\..\..\macos-bar\VERSION').Trim())</BarVersion>
+    <Version>$(BarVersion)</Version>
+    <AssemblyVersion>$(BarVersion).0</AssemblyVersion>
+    <FileVersion>$(BarVersion).0</FileVersion>
+    <InformationalVersion>$(BarVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\CCSBar.Core\CCSBar.Core.csproj" />

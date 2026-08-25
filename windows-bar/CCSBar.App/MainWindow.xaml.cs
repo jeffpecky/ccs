@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     {
         quitArmed = false; QuitButton.Content = "Power"; Render(); UpdateLayout();
         var screen = Forms.Screen.FromPoint(cursor); var source = PresentationSource.FromVisual(this); var fromDevice = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity; var topLeft = fromDevice.Transform(new System.Windows.Point(screen.WorkingArea.Left, screen.WorkingArea.Top)); var bottomRight = fromDevice.Transform(new System.Windows.Point(screen.WorkingArea.Right, screen.WorkingArea.Bottom)); var pointer = fromDevice.Transform(new System.Windows.Point(cursor.X, cursor.Y)); var work = new BarRect(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y); var tray = new BarRect(pointer.X, pointer.Y, 1, 1);
+        ContentScroll.MaxHeight = Math.Max(240, work.Height - 120); UpdateLayout();
         var place = PanelPlacement.Anchor(work, tray, 360, Math.Min(ActualHeight > 0 ? ActualHeight : 700, work.Height));
         Left = place.X; Top = place.Y; firstShow = true; Show();
     }
@@ -34,11 +35,10 @@ public partial class MainWindow : Window
     {
         var focusName = Keyboard.FocusedElement is DependencyObject focused ? AutomationProperties.GetName(focused) : null;
         if (!IsInitialized) return; OfflinePanel.Visibility = vm.Offline || vm.IsStarting ? Visibility.Visible : Visibility.Collapsed; ContentScroll.Visibility = OfflinePanel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
-        OfflineTitle.Text = vm.IsStarting ? "Starting CCS..." : "CCS is not running"; OfflineBody.Text = vm.LastError ?? (vm.IsStarting ? "Waiting for CCS Bar server." : "Start CCS, then panel connects automatically."); StartButton.IsEnabled = RetryButton.IsEnabled = !vm.IsStarting; AutomationProperties.SetLiveSetting(StatusText, AutomationLiveSetting.Polite); StatusText.Text = vm.StatusTitle;
-        UpdateButton.Visibility = vm.UpdateAvailable ? Visibility.Visible : Visibility.Collapsed; UpdateButton.Content = vm.IsInstallingUpdate ? "Updating..." : $"Update {vm.LatestVersion}";
-        ContentPanel.Children.Clear(); if (vm.Offline || vm.IsStarting) return;
+        OfflineTitle.Text = vm.IsStarting ? "Starting CCS…" : "CCS is not running"; OfflineBody.Text = "Start CCS, then the menu will connect automatically."; OfflineBody.Visibility = OfflineActions.Visibility = vm.IsStarting ? Visibility.Collapsed : Visibility.Visible; StartingProgress.Visibility = vm.IsStarting ? Visibility.Visible : Visibility.Collapsed; StartButton.IsEnabled = RetryButton.IsEnabled = !vm.IsStarting; HeaderRefresh.Visibility = vm.IsRefreshing ? Visibility.Visible : Visibility.Collapsed; AutomationProperties.SetLiveSetting(StatusText, AutomationLiveSetting.Polite); StatusText.Text = vm.StatusTitle;
+        ContentPanel.Children.Clear(); EmptyState.Visibility = Visibility.Collapsed; if (vm.Offline || vm.IsStarting) return;
         if (vm.UpdateAvailable) ContentPanel.Children.Add(Banner("Update available", $"CCS Bar {vm.LatestVersion}", "AccentBrush")); if (vm.SummaryStale) ContentPanel.Children.Add(Banner("Accounts stale", "Showing last successful account refresh.", "AmberBrush"));
-        AddAlerts(); var (subscriptions, pool) = BarRows.Partition(vm.Rows); AddSubscriptions(subscriptions); AddSpend(); AddPool(subscriptions, pool); AddBreakdown();
+        AddAlerts(); var (subscriptions, pool) = BarRows.Partition(vm.Rows); AddSubscriptions(subscriptions); AddSpend(); AddPool(subscriptions, pool); AddBreakdown(); EmptyState.Visibility = ContentPanel.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (!string.IsNullOrEmpty(focusName)) FindNamedControl(ContentPanel, focusName)?.Focus();
         if (vm.LastError is not null) ContentPanel.Children.Add(Banner("Last refresh failed", vm.LastError, "RedBrush"));
     }
@@ -99,10 +99,9 @@ public partial class MainWindow : Window
     Border Banner(string title, string body, string brush) { var stack = new StackPanel(); stack.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource(brush) }); stack.Children.Add(Muted(body)); return Card(stack); }
     System.Windows.Controls.Button SmallButton(string text) { var button = new Button { Content = text, Padding = new(6, 2, 6, 2), Margin = new(2), FontSize = 11 }; AutomationProperties.SetName(button, text); return button; }
     async void Refresh_Click(object sender, RoutedEventArgs e) => await vm.ForceRefreshAsync(); async void Retry_Click(object sender, RoutedEventArgs e) => await vm.RetryAsync(); async void Start_Click(object sender, RoutedEventArgs e) => await vm.StartAsync();
-    void Chart_Click(object sender, RoutedEventArgs e) { settings.Ui = settings.Ui with { ChartStyle = settings.Ui.ChartStyle == SpendChartStyle.Bars ? SpendChartStyle.Line : SpendChartStyle.Bars }; settings.Save(); Render(); }
+    void Icon_Click(object sender, RoutedEventArgs e) { settings.Ui = settings.Ui with { IconStyle = settings.Ui.IconStyle == BarIconStyle.Color ? BarIconStyle.Template : BarIconStyle.Color }; settings.Save(); ((App)Application.Current).SettingsChanged(); }
     void Dashboard_Click(object sender, RoutedEventArgs e) { if (vm.ActiveBaseUrl is not null) try { new DashboardLauncher(WindowsProcess.Start).Open(vm.ActiveBaseUrl); } catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "CCS Bar", MessageBoxButton.OK, MessageBoxImage.Error); } Hide(); }
     void Settings_Click(object sender, RoutedEventArgs e) { settingsWindow ??= new SettingsWindow(vm, settings) { Owner = null }; settingsWindow.Closed += (_, _) => settingsWindow = null; settingsWindow.Show(); settingsWindow.Activate(); }
-    void Update_Click(object sender, RoutedEventArgs e) { if (vm.IsInstallingUpdate) return; vm.IsInstallingUpdate = true; try { new WindowsBarUpdater(WindowsProcess.Start).Install(); ((App)Application.Current).Exit(); } catch (Exception ex) { vm.IsInstallingUpdate = false; System.Windows.MessageBox.Show(ex.Message, "CCS Bar update failed", MessageBoxButton.OK, MessageBoxImage.Error); } }
     void Quit_Click(object sender, RoutedEventArgs e) { if (!quitArmed) { quitArmed = true; QuitButton.Content = "Confirm quit"; QuitButton.Foreground = (Brush)FindResource("RedBrush"); return; } ((App)Application.Current).Exit(); }
     void Window_Deactivated(object sender, EventArgs e) { if (firstShow) { firstShow = false; return; } if (settingsWindow?.IsActive != true) Hide(); } void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { if (e.Key == Key.Escape) Hide(); }
 }

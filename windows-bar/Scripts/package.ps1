@@ -11,7 +11,7 @@ $Zip = Join-Path $Dist 'CCS-Bar-windows-x64.zip'
 $Checksum = "$Zip.sha256"
 $Project = Join-Path $Root 'CCSBar.App\CCSBar.App.csproj'
 
-$arguments = @('publish', $Project, '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-p:PublishSingleFile=true', '-p:IncludeNativeLibrariesForSelfExtract=true', "-p:Version=$Version", '-o', $Publish)
+$arguments = @('publish', $Project, '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true', '-p:PublishSingleFile=true', '-p:IncludeNativeLibrariesForSelfExtract=true', "-p:Version=$Version", "-p:AssemblyVersion=$Version.0", "-p:FileVersion=$Version.0", "-p:InformationalVersion=$Version", '-o', $Publish)
 if ($DryRun) {
     "dotnet $($arguments -join ' ')"
     "Package manifest.json with CCS Bar.exe, runtime=win-x64, selfContained=true, version=$Version"

@@ -305,6 +305,115 @@ public sealed class VisualContractTests
             "MainWindow width must be 360 to match macOS reference");
     }
 
+    [STATestMethod]
+    public void MainWindow_RuntimeShell_MatchesMacOSGeometryAndStates()
+    {
+        var connector = new TestConnector();
+        var vm = new BarViewModel(connector, new TestSettings());
+        var window = CreateMainWindow(vm);
+        try
+        {
+            window.Measure(new Size(360, 900));
+            window.Arrange(new Rect(0, 0, 360, window.DesiredSize.Height));
+            window.UpdateLayout();
+
+            Assert.AreEqual(360, window.Width);
+            Assert.AreEqual(new Thickness(14, 10, 14, 10), ((Grid)window.FindName("Header")).Margin);
+            Assert.AreEqual(24, ((Image)window.FindName("HeaderLogo")).Width);
+            Assert.AreEqual(24, ((Image)window.FindName("HeaderLogo")).Height);
+            Assert.AreEqual("CCS", ((TextBlock)window.FindName("HeaderTitle")).Text);
+            Assert.AreEqual("usage & accounts", ((TextBlock)window.FindName("HeaderSubtitle")).Text);
+            var version = File.ReadAllText(Path.Combine(ProjectRoot, "..", "macos-bar", "VERSION")).Trim();
+            Assert.AreEqual($"v{version}", ((TextBlock)window.FindName("VersionText")).Text);
+            Assert.AreEqual(new Thickness(14, 11, 14, 11), ((Grid)window.FindName("Footer")).Margin);
+            Assert.AreEqual(0, ((ScrollViewer)window.FindName("ContentScroll")).MinHeight);
+            Assert.AreEqual(780, ((ScrollViewer)window.FindName("ContentScroll")).MaxHeight);
+
+            vm.RetryAsync().GetAwaiter().GetResult();
+            window.Render();
+            Assert.AreEqual(Visibility.Visible, ((FrameworkElement)window.FindName("OfflinePanel")).Visibility);
+            Assert.AreEqual("CCS is not running", ((TextBlock)window.FindName("OfflineTitle")).Text);
+            Assert.AreEqual("Start CCS, then the menu will connect automatically.", ((TextBlock)window.FindName("OfflineBody")).Text);
+            Assert.AreEqual(Visibility.Visible, ((FrameworkElement)window.FindName("OfflineActions")).Visibility);
+            Assert.AreEqual(Visibility.Collapsed, ((FrameworkElement)window.FindName("StartingProgress")).Visibility);
+
+            connector.Block = true;
+            var start = vm.StartAsync();
+            window.Render();
+            Assert.AreEqual("Starting CCS…", ((TextBlock)window.FindName("OfflineTitle")).Text);
+            Assert.AreEqual(Visibility.Collapsed, ((FrameworkElement)window.FindName("OfflineActions")).Visibility);
+            Assert.AreEqual(Visibility.Visible, ((FrameworkElement)window.FindName("StartingProgress")).Visibility);
+            connector.Release.SetResult();
+            start.GetAwaiter().GetResult();
+
+            window.Render();
+            Assert.AreEqual(Visibility.Visible, ((FrameworkElement)window.FindName("EmptyState")).Visibility);
+            Assert.AreEqual("No accounts configured", ((TextBlock)window.FindName("EmptyStateText")).Text);
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [STATestMethod]
+    public void MainWindow_RuntimeFooter_PreservesMacOSControlOrder()
+    {
+        var window = CreateMainWindow(new BarViewModel(new TestConnector(), new TestSettings()));
+        try
+        {
+            var left = ((StackPanel)window.FindName("FooterPrimary")).Children.Cast<Button>().Select(x => x.Content?.ToString()).ToArray();
+            var right = ((StackPanel)window.FindName("FooterActions")).Children.OfType<Button>().Where(x => x.Visibility == Visibility.Visible).Select(x => x.ToolTip?.ToString()).ToArray();
+            CollectionAssert.AreEqual(new[] { "Dashboard", "Icon", "Settings" }, left);
+            CollectionAssert.AreEqual(new[] { "Refresh", "Quit CCS Bar (click again to confirm)" }, right);
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [TestMethod]
+    public void DevelopmentAssembly_UsesMacOSVersionFile()
+    {
+        var expected = File.ReadAllText(Path.Combine(ProjectRoot, "..", "macos-bar", "VERSION")).Trim();
+        Assert.AreEqual(expected, typeof(MainWindow).Assembly.GetName().Version?.ToString(3));
+        Assert.AreEqual(expected, typeof(MainWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+        Assert.AreNotEqual("1.0.0", expected);
+    }
+
+    static MainWindow CreateMainWindow(BarViewModel vm)
+    {
+        var settingsType = typeof(MainWindow).Assembly.GetType("CCSBar.App.JsonBarSettings")!;
+        var settings = Activator.CreateInstance(settingsType, nonPublic: true)!;
+        return (MainWindow)Activator.CreateInstance(typeof(MainWindow), BindingFlags.Instance | BindingFlags.NonPublic, null, [vm, settings], null)!;
+    }
+
+    sealed class TestConnector : IBarConnector
+    {
+        public bool Block { get; set; }
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task<IBarDataClient?> ConnectAsync(bool launch, CancellationToken cancellationToken)
+        {
+            if (Block) { Started.SetResult(); await Release.Task.WaitAsync(cancellationToken); }
+            return launch ? new EmptyClient() : null;
+        }
+    }
+
+    sealed class EmptyClient : IBarDataClient
+    {
+        public Task<IReadOnlyList<BarSummaryRow>> SummaryAsync(bool force, CancellationToken ct) => Task.FromResult<IReadOnlyList<BarSummaryRow>>([]);
+        public Task<BarAnalytics?> AnalyticsAsync(CancellationToken ct) => Task.FromResult<BarAnalytics?>(null);
+        public Task PauseAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
+        public Task ResumeAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
+        public Task SoloAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
+        public Task SetDefaultAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
+        public Task TierLockAsync(BarSummaryRow row, string? tier, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    sealed class TestSettings : IBarSettings
+    {
+        public BarUiSettings Ui { get; set; } = new();
+        public BarPreferences Alerts { get; set; } = new();
+        public IReadOnlySet<string> FiredKeys { get; set; } = new HashSet<string>();
+        public void Save() { }
+    }
+
     [TestMethod]
     public void PanelCornerRadius_MatchesMacOSReference()
     {
