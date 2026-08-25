@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using System.Windows.Media.Imaging;
 using System.Runtime.InteropServices;
 using CCSBar.Core;
+using Microsoft.Win32;
 
 namespace CCSBar.App;
 
@@ -37,6 +38,7 @@ public partial class App : System.Windows.Application
         settings = new();
         var connector = new WindowsBarConnector();
         ApplyTheme(settings.Ui.Appearance);
+        SystemEvents.UserPreferenceChanged += SystemPreferenceChanged;
         tray = new NotifyIcon { Visible = true, Text = "CCS Bar", Icon = LoadTrayIcon(settings.Ui.IconStyle) };
         viewModel = new(connector, settings, updateChecker: ct => BarUpdate.FetchLatestPublishedVersionAsync(new HttpClient(), ct), currentVersion: VersionText.Value, notifier: new WindowsBarNotifier(tray, action => Dispatcher.BeginInvoke(action)));
         tray.MouseClick += (_, args) => { if (args.Button == MouseButtons.Left) TogglePanel(); };
@@ -107,6 +109,7 @@ public partial class App : System.Windows.Application
 
     public new async void Exit()
     {
+        SystemEvents.UserPreferenceChanged -= SystemPreferenceChanged;
         tray?.Dispose();
         if (viewModel is not null && statusChanged is not null) viewModel.PropertyChanged -= statusChanged;
         panel?.Detach();
@@ -136,17 +139,18 @@ public partial class App : System.Windows.Application
 
     public static void ApplyTheme(BarAppearance appearance)
     {
-        var glass = SystemParameters.WindowGlassColor;
-        var dark = appearance == BarAppearance.Dark || appearance == BarAppearance.System && (glass.R * .299 + glass.G * .587 + glass.B * .114) < 128;
+        var dark = appearance == BarAppearance.Dark || appearance == BarAppearance.System && !SystemUsesLightTheme();
         var p = dark ? BarThemePalette.Dark : BarThemePalette.Light;
         var resources = Current.Resources;
-        resources["WindowBrush"] = Brush(p.WindowSurface);
-        resources["TextBrush"] = Brush(dark ? "#F2F2F2" : "#1D1D1F");
+        resources["WindowBrush"] = Brush(dark ? "#E6202124" : p.WindowSurface);
+        resources["TextBrush"] = Brush(p.Text);
         resources["MutedBrush"] = Brush(dark ? "#A8A8AC" : "#68686C");
         resources["BorderBrush"] = Brush(dark ? "#404044" : "#D7D7DB");
-        resources["CardBrush"] = Brush(dark ? "#2B2C2F" : "#EAEAED");
-        resources["TrackBrush"] = Brush(dark ? "#45464A" : "#D6D6DA");
+        resources["CardBrush"] = Brush(p.Text, .05);
+        resources["TrackBrush"] = Brush(p.Text, .12);
         resources["AccentBrush"] = Brush(p.Accent);
+        resources["PrimaryHoverBrush"] = Brush(p.Accent, .86);
+        resources["PrimaryPressedBrush"] = Brush(p.Accent, .72);
         resources["SubscriptionBrush"] = Brush(p.Subscription);
         resources["GreenBrush"] = Brush(p.Green);
         resources["AmberBrush"] = Brush(p.Amber);
@@ -154,7 +158,20 @@ public partial class App : System.Windows.Application
         resources["RedBrush"] = Brush(p.Red);
     }
 
+    void SystemPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        if (settings?.Ui.Appearance != BarAppearance.System) return;
+        Dispatcher.BeginInvoke(() => { ApplyTheme(BarAppearance.System); panel?.Render(); });
+    }
+
+    static bool SystemUsesLightTheme()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+        return key?.GetValue("AppsUseLightTheme") is not int value || value != 0;
+    }
+
     static System.Windows.Media.Brush Brush(string value) => (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString(value)!;
+    static System.Windows.Media.Brush Brush(string value, double opacity) { var brush = Brush(value); brush.Opacity = opacity; return brush; }
 }
 
 static class VersionText { public static string Value => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0"; }

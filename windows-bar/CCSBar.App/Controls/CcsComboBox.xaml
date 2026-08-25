@@ -97,7 +97,7 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="10,6"/>
         <Setter Property="MinWidth" Value="120"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource CcsFocusVisual}"/>
         <Setter Property="ItemContainerStyle" Value="{StaticResource CcsComboBoxItemTemplate}"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -188,5 +188,6 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style TargetType="ComboBox" BasedOn="{StaticResource CcsComboBoxTemplate}"/>
 
 </ResourceDictionary>

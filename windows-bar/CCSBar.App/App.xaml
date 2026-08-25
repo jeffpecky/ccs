@@ -18,23 +18,32 @@
                 <ResourceDictionary Source="Controls/CcsToolTip.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- ============================================================
-                 COLOR TOKENS - Exact port from BarTheme.swift
-                 Dark: lines 57-65, Light: lines 71-79
-                 Applied at runtime via App.ApplyTheme()
-                 ============================================================ -->
+            <!-- macOS dark window uses native material. Windows keeps a translucent
+                 fallback surface so acrylic-capable hosts can supply material. -->
             <SolidColorBrush x:Key="AccentBrush" Color="#E2732A"/>
+            <SolidColorBrush x:Key="PrimaryHoverBrush" Color="#E2732A" Opacity="0.86"/>
+            <SolidColorBrush x:Key="PrimaryPressedBrush" Color="#E2732A" Opacity="0.72"/>
             <SolidColorBrush x:Key="SubscriptionBrush" Color="#5B63D9"/>
             <SolidColorBrush x:Key="GreenBrush" Color="#5CBC8F"/>
             <SolidColorBrush x:Key="AmberBrush" Color="#DBAB4F"/>
             <SolidColorBrush x:Key="CoralBrush" Color="#E8755C"/>
             <SolidColorBrush x:Key="RedBrush" Color="#D9564F"/>
-            <SolidColorBrush x:Key="WindowBrush" Color="#202124"/>
-            <SolidColorBrush x:Key="CardBrush" Color="#2B2C2F"/>
-            <SolidColorBrush x:Key="TrackBrush" Color="#45464A"/>
+            <SolidColorBrush x:Key="WindowBrush" Color="#E6202124"/>
+            <SolidColorBrush x:Key="CardBrush" Color="#F2F2F2" Opacity="0.05"/>
+            <SolidColorBrush x:Key="TrackBrush" Color="#F2F2F2" Opacity="0.12"/>
             <SolidColorBrush x:Key="TextBrush" Color="#F2F2F2"/>
             <SolidColorBrush x:Key="MutedBrush" Color="#A8A8AC"/>
             <SolidColorBrush x:Key="BorderBrush" Color="#404044"/>
+
+            <Style x:Key="CcsFocusVisual" TargetType="Control">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Control">
+                            <Border BorderBrush="{DynamicResource AccentBrush}" BorderThickness="2" CornerRadius="6" Margin="-3"/>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
             <!-- ============================================================
                  TYPOGRAPHY TOKENS - Matching SwiftUI system fonts

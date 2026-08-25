@@ -17,6 +17,9 @@ public sealed class VisualContractTests
     static readonly string AppXamlPath = Path.Combine(ProjectRoot, "CCSBar.App", "App.xaml");
     static readonly string MainWindowXamlPath = Path.Combine(ProjectRoot, "CCSBar.App", "MainWindow.xaml");
     static readonly string SettingsWindowXamlPath = Path.Combine(ProjectRoot, "CCSBar.App", "SettingsWindow.xaml");
+    static readonly string MainWindowCodePath = Path.Combine(ProjectRoot, "CCSBar.App", "MainWindow.xaml.cs");
+    static readonly string AppCodePath = Path.Combine(ProjectRoot, "CCSBar.App", "App.xaml.cs");
+    static readonly string SwiftThemePath = Path.GetFullPath(Path.Combine(ProjectRoot, "..", "macos-bar", "Sources", "CCSBarCore", "BarTheme.swift"));
     static readonly string ControlsDir = Path.Combine(ProjectRoot, "CCSBar.App", "Controls");
 
     static App? s_app;
@@ -34,27 +37,97 @@ public sealed class VisualContractTests
     [TestMethod]
     public void BarThemePalette_Dark_MatchesSwiftSourceValues()
     {
-        // BarTheme.swift dark palette (lines 57-65)
-        Assert.AreEqual("#E2732A", BarThemePalette.Dark.Accent, "Accent orange #E2732A");
-        Assert.AreEqual("#5B63D9", BarThemePalette.Dark.Subscription, "Subscription indigo #5B63D9");
-        Assert.AreEqual("#5CBC8F", BarThemePalette.Dark.Green, "Band green #5CBC8F");
-        Assert.AreEqual("#DBAB4F", BarThemePalette.Dark.Amber, "Band amber #DBAB4F");
-        Assert.AreEqual("#E8755C", BarThemePalette.Dark.Coral, "Band coral #E8755C");
-        Assert.AreEqual("#D9564F", BarThemePalette.Dark.Red, "Band red #D9564F");
-        Assert.AreEqual("#202124", BarThemePalette.Dark.WindowSurface, "Window surface #202124");
+        CollectionAssert.AreEqual(SwiftPalette("dark"), ThemeColors(BarThemePalette.Dark));
     }
 
     [TestMethod]
     public void BarThemePalette_Light_MatchesSwiftSourceValues()
     {
-        // BarTheme.swift light palette (lines 71-79)
-        Assert.AreEqual("#CF5B10", BarThemePalette.Light.Accent, "Accent orange #CF5B10");
-        Assert.AreEqual("#464DBE", BarThemePalette.Light.Subscription, "Subscription indigo #464DBE");
-        Assert.AreEqual("#1B945B", BarThemePalette.Light.Green, "Band green #1B945B");
-        Assert.AreEqual("#B87D0B", BarThemePalette.Light.Amber, "Band amber #B87D0B");
-        Assert.AreEqual("#D44D28", BarThemePalette.Light.Coral, "Band coral #D44D28");
-        Assert.AreEqual("#C62823", BarThemePalette.Light.Red, "Band red #C62823");
-        Assert.AreEqual("#F5F5F7", BarThemePalette.Light.WindowSurface, "Window surface #F5F5F7");
+        CollectionAssert.AreEqual(SwiftPalette("light"), ThemeColors(BarThemePalette.Light));
+    }
+
+    [STATestMethod]
+    public void RuntimeCreatedControls_ResolveSharedImplicitStyles()
+    {
+        foreach (var control in new FrameworkElement[] { new Button(), new MenuItem(), new Separator(), new ProgressBar(), new ContextMenu(), new ToolTip() })
+        {
+            var style = (Style)s_resources![control.GetType()];
+            Assert.AreEqual(control.GetType(), style.TargetType, $"Implicit {control.GetType().Name} style missing");
+        }
+    }
+
+    [STATestMethod]
+    public void DeterminateProgressBar_RendersValueThroughTemplateParts()
+    {
+        var progress = new ProgressBar { Style = (Style)s_resources![typeof(ProgressBar)], Minimum = 0, Maximum = 100, Value = 50, Width = 200, Height = 8 };
+        progress.Measure(new Size(200, 8));
+        progress.Arrange(new Rect(0, 0, 200, 8));
+        progress.ApplyTemplate();
+        progress.UpdateLayout();
+
+        var track = (FrameworkElement)progress.Template.FindName("PART_Track", progress);
+        var indicator = (FrameworkElement)progress.Template.FindName("PART_Indicator", progress);
+        Assert.IsTrue(track.ActualWidth > 0);
+        Assert.AreEqual(track.ActualWidth / 2, indicator.ActualWidth, 1);
+    }
+
+    [TestMethod]
+    public void RuntimeControlSource_IsCoveredByImplicitResources()
+    {
+        var source = File.ReadAllText(MainWindowCodePath);
+        var created = Regex.Matches(source, @"new\s+(?:System\.Windows\.Controls\.)?(Button|MenuItem|Separator|ProgressBar|ContextMenu|ToolTip)\b")
+            .Select(match => match.Groups[1].Value)
+            .Distinct();
+
+        foreach (var name in created)
+        {
+            var type = typeof(Control).Assembly.GetType($"System.Windows.Controls.{name}")!;
+            Assert.IsNotNull(s_resources![type], $"Code-created {name} lacks implicit shared style");
+        }
+    }
+
+    [TestMethod]
+    public void SystemTheme_UsesWindowsPreferenceAndSubscribesToChanges()
+    {
+        var source = File.ReadAllText(AppCodePath);
+        StringAssert.Contains(source, "AppsUseLightTheme");
+        StringAssert.Contains(source, "SystemEvents.UserPreferenceChanged");
+        Assert.IsFalse(source.Contains("WindowGlassColor"));
+    }
+
+    [TestMethod]
+    public void CustomControls_PreserveFocusAndAccessibleNames()
+    {
+        var buttons = File.ReadAllText(Path.Combine(ControlsDir, "CcsButton.xaml"));
+        StringAssert.Contains(buttons, "CcsFocusVisual");
+        Assert.IsFalse(buttons.Contains("FocusVisualStyle\" Value=\"{x:Null}"));
+
+        var main = File.ReadAllText(MainWindowXamlPath);
+        Assert.AreEqual(Regex.Matches(main, @"<Button\b").Count, Regex.Matches(main, @"<Button\b[^>]*AutomationProperties\.Name=").Count);
+    }
+
+    [TestMethod]
+    public void PrimaryInteractionColors_AndDarkMaterial_AreThemeDerived()
+    {
+        var buttons = File.ReadAllText(Path.Combine(ControlsDir, "CcsButton.xaml"));
+        StringAssert.Contains(buttons, "PrimaryHoverBrush");
+        StringAssert.Contains(buttons, "PrimaryPressedBrush");
+
+        App.ApplyTheme(BarAppearance.Dark);
+        var window = ((SolidColorBrush)s_resources!["WindowBrush"]).Color;
+        Assert.IsTrue(window.A < byte.MaxValue, "Dark window surface must allow native transparency/acrylic fallback");
+    }
+
+    static string[] ThemeColors(BarThemePalette palette) =>
+        [palette.Accent, palette.Subscription, palette.Green, palette.Amber, palette.Coral, palette.Red, palette.WindowSurface];
+
+    static string[] SwiftPalette(string appearance)
+    {
+        var source = File.ReadAllText(SwiftThemePath);
+        var block = Regex.Match(source, $@"public static let {appearance} = BarPalette\((?<body>.*?)\n  \)", RegexOptions.Singleline).Groups["body"].Value;
+        return Regex.Matches(block, @"//\s*(#[0-9A-Fa-f]{6}|unused in dark)")
+            .Select(match => match.Groups[1].Value == "unused in dark" ? "Transparent" : match.Groups[1].Value.ToUpperInvariant())
+            .ToArray();
     }
 
     [TestMethod]
@@ -166,40 +239,6 @@ public sealed class VisualContractTests
             catch (Exception ex)
             {
                 Assert.Fail($"{key} threw: {ex.Message}");
-            }
-        }
-    }
-
-    [TestMethod]
-    public void ProductXaml_RejectsBareStockControls()
-    {
-        // Scan all product XAML files for bare stock controls
-        var xamlFiles = new[] { MainWindowXamlPath, SettingsWindowXamlPath };
-        if (Directory.Exists(ControlsDir))
-        {
-            xamlFiles = xamlFiles.Concat(Directory.GetFiles(ControlsDir, "*.xaml")).ToArray();
-        }
-
-        var stockControlPatterns = new[]
-        {
-            @"<Button\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsButton)",
-            @"<CheckBox\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsCheckBox)",
-            @"<ComboBox\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsComboBox)",
-            @"<ProgressBar\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsProgressBar)",
-            @"<MenuItem\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsMenuItem)",
-            @"<ScrollBar\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsScrollBar)",
-            @"<Separator\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsSeparator)",
-            @"<ToolTip\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsToolTip)",
-        };
-
-        foreach (var file in xamlFiles)
-        {
-            var content = File.ReadAllText(file);
-            foreach (var pattern in stockControlPatterns)
-            {
-                var matches = Regex.Matches(content, pattern, RegexOptions.IgnoreCase);
-                Assert.AreEqual(0, matches.Count,
-                    $"File {Path.GetFileName(file)} contains bare stock control matching pattern: {pattern}. All controls must use Ccs* custom templates.");
             }
         }
     }
@@ -341,7 +380,7 @@ public sealed class VisualContractTests
         Assert.AreEqual(Color.FromRgb(0xD9, 0x56, 0x4F), red, "Dark Red = #D9564F");
 
         var window = ((SolidColorBrush)resources["WindowBrush"]).Color;
-        Assert.AreEqual(Color.FromRgb(0x20, 0x21, 0x24), window, "Dark Window = #202124");
+        Assert.AreEqual(Color.FromArgb(0xE6, 0x20, 0x21, 0x24), window, "Dark Window uses translucent Windows material fallback");
 
         var text = ((SolidColorBrush)resources["TextBrush"]).Color;
         Assert.AreEqual(Color.FromRgb(0xF2, 0xF2, 0xF2), text, "Dark Text = #F2F2F2");
@@ -352,11 +391,13 @@ public sealed class VisualContractTests
         var border = ((SolidColorBrush)resources["BorderBrush"]).Color;
         Assert.AreEqual(Color.FromRgb(0x40, 0x40, 0x44), border, "Dark Border = #404044");
 
-        var card = ((SolidColorBrush)resources["CardBrush"]).Color;
-        Assert.AreEqual(Color.FromRgb(0x2B, 0x2C, 0x2F), card, "Dark Card = #2B2C2F");
+        var card = (SolidColorBrush)resources["CardBrush"];
+        Assert.AreEqual(Color.FromRgb(0xF2, 0xF2, 0xF2), card.Color);
+        Assert.AreEqual(.05, card.Opacity);
 
-        var track = ((SolidColorBrush)resources["TrackBrush"]).Color;
-        Assert.AreEqual(Color.FromRgb(0x45, 0x46, 0x4A), track, "Dark Track = #45464A");
+        var track = (SolidColorBrush)resources["TrackBrush"];
+        Assert.AreEqual(Color.FromRgb(0xF2, 0xF2, 0xF2), track.Color);
+        Assert.AreEqual(.12, track.Opacity);
     }
 
     [TestMethod]
@@ -395,10 +436,12 @@ public sealed class VisualContractTests
         var border = ((SolidColorBrush)resources["BorderBrush"]).Color;
         Assert.AreEqual(Color.FromRgb(0xD7, 0xD7, 0xDB), border, "Light Border = #D7D7DB");
 
-        var card = ((SolidColorBrush)resources["CardBrush"]).Color;
-        Assert.AreEqual(Color.FromRgb(0xEA, 0xEA, 0xED), card, "Light Card = #EAEAED");
+        var card = (SolidColorBrush)resources["CardBrush"];
+        Assert.AreEqual(Color.FromRgb(0x1D, 0x1D, 0x1F), card.Color);
+        Assert.AreEqual(.05, card.Opacity);
 
-        var track = ((SolidColorBrush)resources["TrackBrush"]).Color;
-        Assert.AreEqual(Color.FromRgb(0xD6, 0xD6, 0xDA), track, "Light Track = #D6D6DA");
+        var track = (SolidColorBrush)resources["TrackBrush"];
+        Assert.AreEqual(Color.FromRgb(0x1D, 0x1D, 0x1F), track.Color);
+        Assert.AreEqual(.12, track.Opacity);
     }
 }

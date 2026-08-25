@@ -50,7 +50,7 @@ public partial class MainWindow : Window
     {
         if (vm.ActiveAlerts.Count == 0) return; ContentPanel.Children.Add(Section("ALERTS")); var expanded = settings.Ui.AlertsExpanded; var shown = expanded ? vm.ActiveAlerts : vm.ActiveAlerts.Take(3);
         foreach (var alert in shown) ContentPanel.Children.Add(Banner(alert.Title, alert.Body, alert.Kind is BarAlertKind.ReauthNeeded ? "RedBrush" : "AmberBrush"));
-        if (!expanded && vm.ActiveAlerts.Count > 3) { var more = new Button { Content = $"+{vm.ActiveAlerts.Count - 3} more", HorizontalAlignment = HorizontalAlignment.Left }; more.Click += (_, _) => { settings.Ui = settings.Ui with { AlertsExpanded = true }; settings.Save(); Render(); }; ContentPanel.Children.Add(more); }
+        if (!expanded && vm.ActiveAlerts.Count > 3) { var more = new Button { Content = $"+{vm.ActiveAlerts.Count - 3} more", HorizontalAlignment = HorizontalAlignment.Left }; AutomationProperties.SetName(more, "Show all alerts"); more.Click += (_, _) => { settings.Ui = settings.Ui with { AlertsExpanded = true }; settings.Save(); Render(); }; ContentPanel.Children.Add(more); }
     }
     void AddSubscriptions(IReadOnlyList<BarSummaryRow> subscriptions)
     {
@@ -83,7 +83,7 @@ public partial class MainWindow : Window
     }
     ContextMenu ActionsMenu(BarSummaryRow row)
     {
-        var menu = new ContextMenu(); void Add(string text, Func<Task> action) { var item = new MenuItem { Header = text }; item.Click += async (_, _) => await action(); menu.Items.Add(item); }
+        var menu = new ContextMenu(); AutomationProperties.SetName(menu, $"Actions for {row.DisplayName ?? BarRows.AccountTitle(row)}"); void Add(string text, Func<Task> action) { var item = new MenuItem { Header = text }; AutomationProperties.SetName(item, text); item.Click += async (_, _) => await action(); menu.Items.Add(item); }
         if (!row.IsDefault) Add("Set default", () => vm.SetDefaultAsync(row)); Add("Solo", () => vm.SoloAsync(row)); menu.Items.Add(new Separator()); foreach (var tier in new string?[] { null, "free", "pro", "max" }) Add(tier is null ? "Clear tier lock" : $"Lock tier: {tier}", () => vm.TierLockAsync(row, tier)); return menu;
     }
     void AddBreakdown()
@@ -97,7 +97,7 @@ public partial class MainWindow : Window
     TextBlock Section(string text) => new() { Text = text, FontSize = 11, FontWeight = FontWeights.Bold, Foreground = (Brush)FindResource("MutedBrush"), Margin = new(0, 5, 0, 4) };
     TextBlock Muted(string text) => new() { Text = text, FontSize = 11, Foreground = (Brush)FindResource("MutedBrush"), TextWrapping = TextWrapping.Wrap, Margin = new(0, 3, 0, 2) };
     Border Banner(string title, string body, string brush) { var stack = new StackPanel(); stack.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource(brush) }); stack.Children.Add(Muted(body)); return Card(stack); }
-    System.Windows.Controls.Button SmallButton(string text) => new() { Content = text, Padding = new(6, 2, 6, 2), Margin = new(2), FontSize = 11 };
+    System.Windows.Controls.Button SmallButton(string text) { var button = new Button { Content = text, Padding = new(6, 2, 6, 2), Margin = new(2), FontSize = 11 }; AutomationProperties.SetName(button, text); return button; }
     async void Refresh_Click(object sender, RoutedEventArgs e) => await vm.ForceRefreshAsync(); async void Retry_Click(object sender, RoutedEventArgs e) => await vm.RetryAsync(); async void Start_Click(object sender, RoutedEventArgs e) => await vm.StartAsync();
     void Chart_Click(object sender, RoutedEventArgs e) { settings.Ui = settings.Ui with { ChartStyle = settings.Ui.ChartStyle == SpendChartStyle.Bars ? SpendChartStyle.Line : SpendChartStyle.Bars }; settings.Save(); Render(); }
     void Dashboard_Click(object sender, RoutedEventArgs e) { if (vm.ActiveBaseUrl is not null) try { new DashboardLauncher(WindowsProcess.Start).Open(vm.ActiveBaseUrl); } catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "CCS Bar", MessageBoxButton.OK, MessageBoxImage.Error); } Hide(); }

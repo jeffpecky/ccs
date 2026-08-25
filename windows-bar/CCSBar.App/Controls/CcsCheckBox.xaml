@@ -17,7 +17,7 @@
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}"/>
         <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}"/>
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource CcsFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
@@ -98,5 +98,6 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style TargetType="CheckBox" BasedOn="{StaticResource CcsCheckBoxTemplate}"/>
 
 </ResourceDictionary>

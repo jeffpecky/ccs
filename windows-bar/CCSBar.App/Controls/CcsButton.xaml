@@ -20,6 +20,7 @@
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}"/>
         <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Medium}"/>
         <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource CcsFocusVisual}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -36,10 +37,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Border" Property="Background" Value="#CC5F0D"/> <!-- Darker accent -->
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource PrimaryHoverBrush}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Border" Property="Background" Value="#A04A0A"/> <!-- Even darker -->
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource PrimaryPressedBrush}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Border" Property="Background" Value="{DynamicResource BorderBrush}"/>
@@ -54,6 +55,7 @@
 
     <!-- Secondary Button Style (bordered equivalent) -->
     <Style x:Key="CcsButton.Secondary" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource CcsFocusVisual}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
@@ -99,6 +101,7 @@
 
     <!-- Plain/Icon Button Style (borderless equivalent) -->
     <Style x:Key="CcsButton.Plain" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource CcsFocusVisual}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
         <Setter Property="BorderThickness" Value="0"/>
@@ -142,6 +145,7 @@
 
     <!-- Footer Icon Button (used in panel footer) -->
     <Style x:Key="CcsButton.FooterIcon" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource CcsFocusVisual}"/>
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
         <Setter Property="BorderThickness" Value="0"/>
@@ -189,5 +193,6 @@
 
     <!-- Default button style (base style for implicit Button styling) -->
     <Style x:Key="CcsButtonTemplate" TargetType="Button" BasedOn="{StaticResource CcsButton.Plain}"/>
+    <Style TargetType="Button" BasedOn="{StaticResource CcsButtonTemplate}"/>
 
 </ResourceDictionary>

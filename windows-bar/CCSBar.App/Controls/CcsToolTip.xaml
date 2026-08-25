@@ -46,5 +46,6 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style TargetType="ToolTip" BasedOn="{StaticResource CcsToolTipTemplate}"/>
 
 </ResourceDictionary>

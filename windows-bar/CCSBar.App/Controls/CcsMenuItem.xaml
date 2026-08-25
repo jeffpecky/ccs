@@ -178,5 +178,7 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style TargetType="MenuItem" BasedOn="{StaticResource CcsMenuItemTemplate}"/>
+    <Style TargetType="ContextMenu" BasedOn="{StaticResource CcsContextMenuTemplate}"/>
 
 </ResourceDictionary>

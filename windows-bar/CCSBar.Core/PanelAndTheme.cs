@@ -21,8 +21,8 @@ public static class PanelPlacement
 }
 
 /// <summary>
-/// Exact port of BarTheme.swift palette values.
-/// Dark values from lines 57-65, Light values from lines 71-79 of BarTheme.swift.
+/// Port of BarTheme.swift named colors. Semantic surfaces are translated by Windows UI
+/// from foreground opacity because macOS dark window delegates to native material.
 /// </summary>
 public sealed record BarThemePalette(
     string Accent,
@@ -47,9 +47,9 @@ public sealed record BarThemePalette(
         Amber: "#DBAB4F",            // RGB(0.86, 0.67, 0.31)
         Coral: "#E8755C",            // RGB(0.91, 0.46, 0.36)
         Red: "#D9564F",              // RGB(0.85, 0.34, 0.31)
-        WindowSurface: "#202124",    // Dark window plate
-        CardSurface: "#2B2C2F",      // Color.primary.opacity(0.05) on dark ≈ #2B2C2F
-        BarTrack: "#45464A",         // Color.primary.opacity(0.12) on dark ≈ #45464A
+        WindowSurface: "Transparent", // macOS uses .clear over native material
+        CardSurface: "#2B2C2F",      // Windows fallback; runtime brush derives from foreground at 5%
+        BarTrack: "#45464A",         // Windows fallback; runtime brush derives from foreground at 12%
         Text: "#F2F2F2",             // Primary text on dark
         Muted: "#A8A8AC",            // Secondary text on dark
         Border: "#404044"            // Border on dark
@@ -64,8 +64,8 @@ public sealed record BarThemePalette(
         Coral: "#D44D28",            // RGB(0.831, 0.302, 0.157)
         Red: "#C62823",              // RGB(0.776, 0.157, 0.137)
         WindowSurface: "#F5F5F7",    // RGB(0.961, 0.961, 0.969)
-        CardSurface: "#EAEAED",      // Color.primary.opacity(0.05) on light ≈ #EAEAED
-        BarTrack: "#D6D6DA",         // Color.primary.opacity(0.12) on light ≈ #D6D6DA
+        CardSurface: "#EAEAED",      // Windows fallback; runtime brush derives from foreground at 5%
+        BarTrack: "#D6D6DA",         // Windows fallback; runtime brush derives from foreground at 12%
         Text: "#1D1D1F",             // Primary text on light
         Muted: "#68686C",            // Secondary text on light
         Border: "#D7D7DB"            // Border on light
