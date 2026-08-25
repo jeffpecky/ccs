@@ -2,6 +2,7 @@ using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using CCSBar.App;
@@ -9,6 +10,8 @@ using CCSBar.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace CCSBar.App.Tests;
+
+using Ellipse = System.Windows.Shapes.Ellipse;
 
 [TestClass]
 public sealed class VisualContractTests
@@ -376,11 +379,243 @@ public sealed class VisualContractTests
         Assert.AreNotEqual("1.0.0", expected);
     }
 
-    static MainWindow CreateMainWindow(BarViewModel vm)
+    static MainWindow CreateMainWindow(BarViewModel vm, IBarClock? clock = null)
     {
         var settingsType = typeof(MainWindow).Assembly.GetType("CCSBar.App.JsonBarSettings")!;
         var settings = Activator.CreateInstance(settingsType, nonPublic: true)!;
-        return (MainWindow)Activator.CreateInstance(typeof(MainWindow), BindingFlags.Instance | BindingFlags.NonPublic, null, [vm, settings], null)!;
+        return (MainWindow)Activator.CreateInstance(typeof(MainWindow), BindingFlags.Instance | BindingFlags.NonPublic, null, [vm, settings, clock], null)!;
+    }
+
+    const string CardTag = "subscription-card";
+    const string PoolTag = "pool-card";
+
+    [STATestMethod]
+    public void MainWindow_SubscriptionSection_MatchesMacOSCardContract()
+    {
+        var window = CreateFixtureWindow(out _);
+        try
+        {
+            var panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "SUBSCRIPTIONS"), "Section heading missing");
+            Assert.AreEqual("most room: Codex 88%", Text(panel, "most room: Codex 88%")!.Text);
+            Assert.AreEqual(10d, Text(panel, "Claude Code")!.FontSize, "Per-provider caption missing");
+            Assert.AreEqual(10d, Text(panel, "Codex")!.FontSize, "Per-provider caption missing");
+
+            var cards = Tagged<Border>(panel, CardTag);
+            Assert.AreEqual(2, cards.Count, "One visible card per provider carousel");
+            var claude = cards.First(c => Text(c, "72%") is not null);
+            var codex = cards.First(c => Text(c, "88%") is not null);
+            Assert.AreEqual(1d, claude.Opacity);
+            Assert.AreEqual(1d, codex.Opacity);
+
+            CollectionAssert.AreEqual(new[] { "default", "subscription", "pro" }, ChipTexts(claude));
+            CollectionAssert.AreEqual(new[] { "default", "subscription", "plus" }, ChipTexts(codex));
+
+            var fiveHour = Tagged<Grid>(claude, "five_hour").Single();
+            var sevenDay = Tagged<Grid>(claude, "seven_day").Single();
+            CollectionAssert.AreEqual(new[] { GridUnitType.Pixel, GridUnitType.Pixel, GridUnitType.Pixel, GridUnitType.Pixel, GridUnitType.Pixel, GridUnitType.Pixel, GridUnitType.Auto }, fiveHour.ColumnDefinitions.Select(c => c.Width.GridUnitType).ToArray());
+            CollectionAssert.AreEqual(new[] { 32d, 110d, 5d, 32d, 5d, 48d }, fiveHour.ColumnDefinitions.Take(6).Select(c => c.Width.Value).ToArray());
+            Assert.AreEqual(5d, Track(fiveHour).Height, "Non-binding bar is 5 DIP");
+            Assert.AreEqual(7d, Track(sevenDay).Height, "Binding bar is 7 DIP");
+            Assert.AreEqual(110 * 0.72, Fill(fiveHour).Width, 0.01);
+            Assert.AreEqual(110 * 0.48, Fill(sevenDay).Width, 0.01);
+            Assert.AreEqual(8d, Tagged<Ellipse>(claude, "health-dot").Single().Width);
+            Assert.IsNotNull(Text(claude, "5h"));
+            Assert.IsNotNull(Text(claude, "wk"));
+            Assert.IsNotNull(Text(claude, "2h 18m"));
+            Assert.IsNotNull(Text(claude, "Mon"));
+            Assert.IsFalse(All<TextBlock>(claude).Any(t => t.Text.StartsWith("⚠")), "Pace warning only on at-risk binding windows");
+            Assert.IsFalse(All<TextBlock>(codex).Any(t => t.Text.StartsWith("⚠")));
+            Assert.IsNull(Text(claude, "as of 11:25, older session"));
+            Assert.IsNotNull(Text(codex, "as of 11:25, older session"), "Stale footnote missing");
+            var refresh = Named<Button>(codex, "Force refresh");
+            Assert.IsNotNull(refresh, "Inline stale refresh missing");
+            Assert.AreEqual("Force refresh to get the latest data", refresh!.ToolTip?.ToString());
+            Assert.AreEqual("ok status", AutomationProperties.GetName(Tagged<Ellipse>(claude, "health-dot").Single()));
+            Assert.AreEqual("ok status", AutomationProperties.GetName(Tagged<Ellipse>(codex, "health-dot").Single()));
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [STATestMethod]
+    public void MainWindow_ProfileCarousel_PagesWithDotsArrowsAndKeepsKeyboardHost()
+    {
+        var window = CreateFixtureWindow(out _);
+        try
+        {
+            var panel = (StackPanel)window.FindName("ContentPanel")!;
+            var prev = Named<Button>(panel, "Previous Claude Code profile");
+            var next = Named<Button>(panel, "Next Claude Code profile");
+            Assert.IsNotNull(prev);
+            Assert.IsNotNull(next);
+            Assert.IsFalse(prev!.IsEnabled, "Prev disabled on first page");
+            Assert.IsTrue(next!.IsEnabled);
+            Assert.AreEqual(2, All<Button>(panel).Count(b => AutomationProperties.GetName(b) is { } name && name.StartsWith("Show ") && name.EndsWith(" profile")), "Page dots missing");
+            Assert.IsTrue(All<StackPanel>(panel).Any(s => s.Focusable), "Keyboard carousel host missing");
+            Assert.IsNull(Text(panel, "⚠ ~22m"));
+
+            Invoke(next!);
+            Assert.IsNull(Text(panel, "72%"), "Default card should page away");
+            Assert.IsNotNull(Text(panel, "⚠ ~22m"), "Pace warning on parked binding window");
+            var ck = Tagged<Border>(panel, CardTag).Single(c => Text(c, "⚠ ~22m") is not null);
+            Assert.AreEqual(0.5, ck.Opacity, "Parked card dimmed to 0.5");
+            CollectionAssert.AreEqual(new[] { "ccsx", "subscription" }, ChipTexts(ck));
+            Assert.IsTrue(Named<Button>(panel, "Previous Claude Code profile")!.IsEnabled);
+            Assert.IsFalse(Named<Button>(panel, "Next Claude Code profile")!.IsEnabled);
+
+            Invoke(Named<Button>(panel, "Show Claude Code profile")!);
+            Assert.IsNotNull(Text(panel, "72%"), "Dot click returns to default profile");
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [STATestMethod]
+    public void MainWindow_PoolRows_MatchMacOSRowContract()
+    {
+        var window = CreateFixtureWindow(out _);
+        try
+        {
+            var panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "POOL ACCOUNTS"));
+            var pools = Tagged<Border>(panel, PoolTag);
+            Assert.AreEqual(2, pools.Count);
+            var gemini = pools.First(p => Text(p, "Gemini pool") is not null);
+            var kiro = pools.First(p => Text(p, "Kiro") is not null);
+            CollectionAssert.AreEqual(new[] { "default", "cliproxy" }, ChipTexts(gemini));
+            CollectionAssert.AreEqual(new[] { "paused", "kiro", "free" }, ChipTexts(kiro));
+
+            var gauge = Tagged<Grid>(gemini, "pool-gauge").Single();
+            Assert.AreEqual(54d, gauge.Width);
+            Assert.AreEqual(6d, gauge.Height);
+            Assert.AreEqual("Quota remaining", AutomationProperties.GetName(gauge));
+            Assert.AreEqual("80%", AutomationProperties.GetHelpText(gauge));
+            Assert.IsNotNull(Text(gemini, "80%"));
+            Assert.IsNotNull(Text(gemini, "resets in 3h 0m"));
+            Assert.IsNotNull(Text(kiro, "no quota"));
+            Assert.IsNotNull(Text(gemini, "$0.00"), "Real zero cost renders as $0.00");
+            Assert.IsNotNull(Text(kiro, "no data"));
+            Assert.IsNotNull(Text(gemini, "Last active today"));
+            Assert.IsNotNull(Named<Button>(gemini, "Pause Gemini pool"));
+            Assert.IsNotNull(Named<Button>(kiro, "Resume Kiro"));
+
+            var geminiMenu = Named<Button>(gemini, "Actions for Gemini pool")!.ContextMenu!;
+            CollectionAssert.AreEqual(new[] { "Set as default", "Solo (pause others)", "Clear tier lock" }, MenuHeaders(geminiMenu));
+            var kiroMenu = Named<Button>(kiro, "Actions for Kiro")!.ContextMenu!;
+            CollectionAssert.AreEqual(new[] { "Set as default", "Solo (pause others)", "Lock to free", "Clear tier lock" }, MenuHeaders(kiroMenu));
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [STATestMethod]
+    public void MainWindow_ConditionalSectionNaming_MatchesMacOS()
+    {
+        var both = CreateFixtureWindow(out _);
+        try
+        {
+            var panel = (StackPanel)both.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "SUBSCRIPTIONS"));
+            Assert.IsNotNull(Text(panel, "POOL ACCOUNTS"));
+        }
+        finally { both.Detach(); both.Close(); }
+
+        var poolOnly = CreateFixtureWindow(out _, ScreenshotRows()[3..]);
+        try
+        {
+            var panel = (StackPanel)poolOnly.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "ACCOUNTS"), "CLIProxy-only setup keeps the single Accounts header");
+            Assert.IsNull(Text(panel, "SUBSCRIPTIONS"));
+            Assert.IsNull(Text(panel, "POOL ACCOUNTS"));
+            Assert.IsNull(Text(panel, "most room: Codex 88%"));
+        }
+        finally { poolOnly.Detach(); poolOnly.Close(); }
+
+        var subsOnly = CreateFixtureWindow(out _, [ScreenshotRows()[0], ScreenshotRows()[2]]);
+        try
+        {
+            var panel = (StackPanel)subsOnly.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "SUBSCRIPTIONS"));
+            Assert.IsNull(Text(panel, "POOL ACCOUNTS"));
+        }
+        finally { subsOnly.Detach(); subsOnly.Close(); }
+
+        var empty = CreateFixtureWindow(out _, []);
+        try
+        {
+            var state = (StackPanel)empty.FindName("EmptyState")!;
+            Assert.AreEqual("ACCOUNTS", ((TextBlock)state.Children[0]).Text);
+            Assert.AreEqual("No accounts configured", ((TextBlock)state.Children[1]).Text);
+        }
+        finally { empty.Detach(); empty.Close(); }
+    }
+
+    static MainWindow CreateFixtureWindow(out BarViewModel vm, BarSummaryRow[]? rows = null)
+    {
+        var clock = new FixtureClock();
+        vm = new BarViewModel(new FixtureConnector(new FixtureClient(rows ?? ScreenshotRows())), new TestSettings(), clock);
+        var window = CreateMainWindow(vm, clock);
+        vm.ReconnectAndLoadAsync(false).GetAwaiter().GetResult();
+        window.Render();
+        return window;
+    }
+
+    static readonly DateTimeOffset FixtureNow = DateTimeOffset.Parse("2026-08-22T12:00:00+00:00");
+
+    static QuotaWindowDetail Win(string key, double remaining, int minutes, string resetAt) => new(key, key, 100 - remaining, remaining, resetAt, minutes);
+
+    static BarSummaryRow SubscriptionRow(string account, string provider, string profile, string? surface, bool isDefault, bool paused, string? tier, QuotaWindowDetail[] windows, string? staleAsOf = null, string? lastActivityAt = null, double? todayCost = null) =>
+        new(account, provider, null, tier, paused, windows.Min(x => x.RemainingPercent), "ok", null, isDefault, lastActivityAt, todayCost, "ok", false, null, false, surface, profile, true, windows, staleAsOf);
+
+    static BarSummaryRow PoolRow(string account, string provider, string display, bool isDefault, bool paused, string? tier, double? quota, string status, string? nextReset, string? lastActivityAt, double? todayCost, string health) =>
+        new(account, provider, display, tier, paused, quota, status, nextReset, isDefault, lastActivityAt, todayCost, health, false, null, false, null, null, null, null, null);
+
+    internal static BarSummaryRow[] ScreenshotRows() =>
+    [
+        SubscriptionRow("claude-code", "claude-code", "default", null, true, false, "pro",
+            [Win("five_hour", 72, 300, "2026-08-22T14:18:00+00:00"), Win("seven_day", 48, 10080, "2026-08-24T12:00:00+00:00")],
+            lastActivityAt: "2026-08-22T11:48:00+00:00", todayCost: 2.26),
+        SubscriptionRow("ck", "claude-code", "ck", "ccsx", false, true, null,
+            [Win("five_hour", 8, 300, "2026-08-22T12:40:00+00:00"), Win("seven_day", 60, 10080, "2026-08-27T12:00:00+00:00")]),
+        SubscriptionRow("codex", "codex", "default", null, true, false, "plus",
+            [Win("five_hour", 88, 300, "2026-08-22T16:02:00+00:00"), Win("seven_day", 91, 10080, "2026-08-25T12:00:00+00:00")],
+            staleAsOf: "2026-08-22T11:25:00+00:00", lastActivityAt: "2026-08-22T11:26:00+00:00", todayCost: 0),
+        PoolRow("gemini-pool", "cliproxy", "Gemini pool", true, false, null, 80, "ok", "2026-08-22T15:00:00+00:00", "2026-08-22T11:00:00+00:00", 0, "ok"),
+        PoolRow("kiro-1", "kiro", "Kiro", false, true, "free", null, "unsupported", null, null, null, "warning"),
+    ];
+
+    static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            yield return child;
+            foreach (var nested in Descendants(child)) yield return nested;
+        }
+    }
+
+    static IReadOnlyList<T> All<T>(DependencyObject root) => Descendants(root).OfType<T>().ToArray();
+    static IReadOnlyList<T> Tagged<T>(DependencyObject root, object tag) where T : FrameworkElement => Descendants(root).OfType<T>().Where(x => Equals(x.Tag, tag)).ToArray();
+    static T? Named<T>(DependencyObject root, string name) where T : DependencyObject => Descendants(root).OfType<T>().FirstOrDefault(x => AutomationProperties.GetName(x) == name);
+    static TextBlock? Text(DependencyObject root, string text) => Descendants(root).OfType<TextBlock>().FirstOrDefault(t => t.Text == text);
+    static string[] ChipTexts(DependencyObject root) => [.. Descendants(root)
+        .OfType<Border>()
+        .Where(b => b.Child is TextBlock && b.CornerRadius.TopLeft == 100)
+        .Select(b => ((TextBlock)b.Child!).Text)];
+    static void Invoke(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    static Border Track(DependencyObject quotaRow) => Tagged<Border>(quotaRow, "quota-track").Single();
+    static Border Fill(DependencyObject quotaRow) => Tagged<Border>(quotaRow, "quota-fill").Single();
+    static string[] MenuHeaders(ContextMenu menu) => [.. menu.Items.OfType<MenuItem>().Select(i => i.Header!.ToString()!)];
+
+    sealed class FixtureClock : IBarClock { public DateTimeOffset Now => FixtureNow; }
+    sealed class FixtureConnector(IBarDataClient client) : IBarConnector { public Task<IBarDataClient?> ConnectAsync(bool launch, CancellationToken cancellationToken) => Task.FromResult<IBarDataClient?>(client); }
+    sealed class FixtureClient(IReadOnlyList<BarSummaryRow> rows) : IBarDataClient
+    {
+        public Task<IReadOnlyList<BarSummaryRow>> SummaryAsync(bool force, CancellationToken ct) => Task.FromResult(rows);
+        public Task<BarAnalytics?> AnalyticsAsync(CancellationToken ct) => Task.FromResult<BarAnalytics?>(null);
+        public Task PauseAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
+        public Task ResumeAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
+        public Task SoloAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
+        public Task SetDefaultAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
+        public Task TierLockAsync(BarSummaryRow row, string? tier, CancellationToken ct) => Task.CompletedTask;
     }
 
     sealed class TestConnector : IBarConnector
@@ -554,3 +789,4 @@ public sealed class VisualContractTests
         Assert.AreEqual(.12, track.Opacity);
     }
 }
+

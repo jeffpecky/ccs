@@ -263,6 +263,50 @@ public sealed class CoreTests
         Assert.AreEqual(TimeSpan.FromSeconds(8), handler.Timeouts.Single());
     }
 
+    [TestMethod]
+    public void CardFormatting_ShortResetAndClockTimeMatchMacTiers()
+    {
+        var now = DateTimeOffset.Parse("2026-08-22T12:00:00+00:00");
+        Assert.AreEqual("2h 18m", BarCardFormatting.ShortReset("2026-08-22T14:18:00+00:00", now));
+        Assert.AreEqual("4h 2m", BarCardFormatting.ShortReset("2026-08-22T16:02:00+00:00", now));
+        Assert.AreEqual("due", BarCardFormatting.ShortReset("2026-08-22T11:55:00+00:00", now));
+        Assert.AreEqual("Mon", BarCardFormatting.ShortReset("2026-08-24T12:00:00+00:00", now));
+        Assert.AreEqual("Sep 5", BarCardFormatting.ShortReset("2026-09-05T12:00:00+00:00", now));
+        Assert.IsNull(BarCardFormatting.ShortReset("junk", now));
+        Assert.IsNull(BarCardFormatting.ShortReset(null, now));
+        Assert.AreEqual("11:25", BarCardFormatting.ClockTime("2026-08-22T11:25:00+00:00"));
+        Assert.IsNull(BarCardFormatting.ClockTime("junk"));
+        Assert.IsNull(BarCardFormatting.ClockTime(null));
+    }
+
+    [TestMethod]
+    public void Quota_PaceWarningExtractsInlineChipFromPaceClause()
+    {
+        var now = DateTimeOffset.Parse("2026-08-22T12:00:00+00:00");
+        Assert.AreEqual("⚠ ~22m", BarQuota.PaceWarning(92, 8, "2026-08-22T12:40:00+00:00", 300, now));
+        Assert.IsNull(BarQuota.PaceWarning(28, 72, "2026-08-22T14:18:00+00:00", 300, now));
+        Assert.IsNull(BarQuota.PaceWarning(100, 0, "2026-08-22T12:40:00+00:00", 300, now));
+        Assert.IsNull(BarQuota.PaceWarning(92, 8, null, 300, now));
+    }
+
+    [TestMethod]
+    public void Quota_OrderedWindowsFollowStableKeyRank()
+    {
+        var windows = new[] { Window("seven_day_sonnet", 10, 10080), Window("five_hour", 50, 300), Window("seven_day_opus", 20, 10080), Window("seven_day", 30, 10080) };
+        CollectionAssert.AreEqual(new[] { "five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet" }, BarQuota.OrderedWindows(windows).Select(x => x.Key).ToArray());
+    }
+
+    [TestMethod]
+    public void Subscriptions_OrderDefaultFirstThenTightestBindingSinksWindowless()
+    {
+        var lead = Row("lead", windows: new[] { Window("five_hour", 72, 300), Window("seven_day", 48, 10080) }) with { IsDefault = true };
+        var tight = Row("tight", windows: new[] { Window("five_hour", 8, 300) });
+        var codex = Row("codex", windows: new[] { Window("five_hour", 88, 300) });
+        var windowless = Row("broken");
+        var ordered = BarRows.OrderSubscriptions(new[] { tight, windowless, codex, lead });
+        CollectionAssert.AreEqual(new[] { "agy:lead", "agy:tight", "agy:codex", "agy:broken" }, ordered.Select(x => x.Id).ToArray());
+    }
+
     static QuotaWindowDetail Window(string key, double remaining, int minutes) => new(key, key, 100 - remaining, remaining, null, minutes);
     static BarSummaryRow Row(string id, double? quota = null, IReadOnlyList<QuotaWindowDetail>? windows = null, string? display = null, string? reset = null, bool paused = false, bool reauth = false) => new(id, "agy", display, null, paused, quota, quota is null ? "unsupported" : "ok", reset, false, null, null, "ok", false, null, reauth, null, null, false, windows, null);
     static string ResponseProof(HttpRequestMessage request) => BarAuth.Proof(Token, "response", request.Method.Method, request.RequestUri!.PathAndQuery, request.Headers.GetValues(BarAuth.NonceHeader).Single());
@@ -366,6 +410,19 @@ public sealed class ViewModelTests
         Assert.AreEqual("b", carousel.Selected.AccountId);
         carousel.Move(1);
         Assert.AreEqual("a", carousel.Selected.AccountId);
+    }
+
+    [TestMethod]
+    public void Carousel_PagesOrderDefaultFirstThenTightestBindingWindowlessLast()
+    {
+        QuotaWindowDetail Win(double remaining) => new("five_hour", "5h", 100 - remaining, remaining, null, 300);
+        var lead = Row with { AccountId = "lead", QuotaWindows = new[] { Win(80) } };
+        var mid = Row with { AccountId = "mid", IsDefault = false, QuotaWindows = new[] { Win(50) } };
+        var tight = Row with { AccountId = "tight", IsDefault = false, QuotaWindows = new[] { Win(8) } };
+        var broken = Row with { AccountId = "broken", IsDefault = false, QuotaWindows = null };
+        var carousel = new ProfileCarousel(new[] { tight, broken, mid, lead });
+        CollectionAssert.AreEqual(new[] { "lead", "tight", "mid", "broken" }, carousel.Pages.Select(x => x.AccountId).ToArray());
+        Assert.AreEqual(0, carousel.Index);
     }
 
     [TestMethod]

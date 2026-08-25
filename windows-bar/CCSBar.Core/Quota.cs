@@ -29,6 +29,14 @@ public static class BarQuota
         .ThenBy(x => x.WindowMinutes ?? int.MaxValue)
         .ThenBy(x => KeyRank(x.Key))
         .FirstOrDefault();
+    public static IReadOnlyList<QuotaWindowDetail> OrderedWindows(IEnumerable<QuotaWindowDetail> windows) => windows
+        .OrderBy(x => KeyRank(x.Key))
+        .ToArray();
+    public static string? PaceWarning(double usedPercent, double remainingPercent, string? resetAt, int? windowMinutes, DateTimeOffset now)
+    {
+        var clause = PaceClause(usedPercent, remainingPercent, resetAt, windowMinutes, now);
+        return clause is not null && clause.StartsWith('~') ? $"⚠ {clause.Replace(" left at this pace", "")}" : null;
+    }
     public static string? PaceClause(double usedPercent, double remainingPercent, string? resetAt, int? windowMinutes, DateTimeOffset now)
     {
         if (usedPercent >= 100 || remainingPercent <= 0) return ResetCountdown(resetAt, now) is { } reset ? $"limit reached, {reset}" : "limit reached";

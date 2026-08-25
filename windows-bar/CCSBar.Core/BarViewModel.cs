@@ -36,10 +36,9 @@ public interface IBarDataClient
 public sealed class ProfileCarousel
 {
     readonly IReadOnlyList<BarSummaryRow> rows; int index;
-    public ProfileCarousel(IEnumerable<BarSummaryRow> source)
-    {
-        rows = source.OrderByDescending(x => x.IsDefault || BarRows.IsBaseAccount(x)).ThenBy(x => x.Id, StringComparer.Ordinal).ToArray();
-    }
+    public ProfileCarousel(IEnumerable<BarSummaryRow> source) => rows = BarRows.OrderSubscriptions(source);
+    public IReadOnlyList<BarSummaryRow> Pages => rows;
+    public int Index => index;
     public BarSummaryRow Selected => rows[index];
     public int Count => rows.Count;
     public void Move(int delta) { if (rows.Count > 0) index = (index + delta % rows.Count + rows.Count) % rows.Count; }

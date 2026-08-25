@@ -64,6 +64,22 @@ public sealed class RefreshDebouncer(TimeSpan? interval = null)
     public bool ShouldRefresh(DateTimeOffset now) { if (lastArmed is not null && now - lastArmed < interval) return false; lastArmed = now; return true; }
 }
 
+public static class BarCardFormatting
+{
+    public static string? ShortReset(string? iso, DateTimeOffset now)
+    {
+        if (!DateTimeOffset.TryParse(iso, out var date)) return null;
+        var seconds = (date - now).TotalSeconds;
+        if (seconds <= 0) return "due";
+        var minutes = (int)(seconds / 60);
+        if (minutes < 24 * 60) return BarQuota.CompactDuration(minutes);
+        return date.ToString(minutes < 7 * 24 * 60 ? "ddd" : "MMM d", CultureInfo.InvariantCulture);
+    }
+    public static string? ClockTime(string? iso) => DateTimeOffset.TryParse(iso, out var date)
+        ? date.ToString("HH:mm", CultureInfo.InvariantCulture)
+        : null;
+}
+
 public static class BarRows
 {
     public static bool IsNativeSubscription(BarSummaryRow row) => row.IsSubscription ??
@@ -85,4 +101,10 @@ public static class BarRows
         foreach (var row in rows) (IsNativeSubscription(row) ? subscriptions : pool).Add(row);
         return (subscriptions, pool);
     }
+    public static IReadOnlyList<BarSummaryRow> OrderSubscriptions(IEnumerable<BarSummaryRow> subscriptions) => subscriptions
+        .OrderByDescending(x => x.IsDefault)
+        .ThenBy(x => BarQuota.SelectBindingWindow(x.QuotaWindows ?? []) is { } binding ? binding.RemainingPercent : double.MaxValue)
+        .ThenBy(x => x.DisplayName ?? x.Provider, StringComparer.Ordinal)
+        .ThenBy(x => x.Id, StringComparer.Ordinal)
+        .ToArray();
 }

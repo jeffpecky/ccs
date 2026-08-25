@@ -51,6 +51,7 @@
                     <Grid>
                         <StackPanel x:Name="ContentPanel" Margin="14,12"/>
                         <StackPanel x:Name="EmptyState" Margin="14" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed">
+                            <TextBlock Text="ACCOUNTS" FontSize="{DynamicResource FontSize.SectionLabel}" FontWeight="{DynamicResource FontWeight.Bold}" Foreground="{DynamicResource MutedBrush}" TextAlignment="Center" Margin="0,0,0,4"/>
                             <TextBlock x:Name="EmptyStateText" Text="No accounts configured" FontSize="13" Foreground="{DynamicResource MutedBrush}" TextAlignment="Center"/>
                         </StackPanel>
                     </Grid>
