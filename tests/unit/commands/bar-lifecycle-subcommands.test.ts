@@ -609,10 +609,22 @@ describe('launch: detached-spawn model', () => {
       port: number;
       baseUrl: string;
       authMode: string;
+      launchId?: string;
     };
     expect(barJson.port).toBe(4242);
     expect(barJson.baseUrl).toBe('http://127.0.0.1:4242');
     expect(barJson.authMode).toBe('loopback');
+
+    // The published discovery carries the owning attempt's launch id and the
+    // replace-on-write latest-launch pointer references the same attempt.
+    const pointer = JSON.parse(
+      fs.readFileSync(path.join(ccsDir, 'bar', 'latest-launch.json'), 'utf8')
+    ) as { schema: number; launchId: string; port: number; logPath: string };
+    expect(pointer.schema).toBe(1);
+    expect(pointer.launchId).toBe(barJson.launchId);
+    expect(pointer.port).toBe(4242);
+    expect(pointer.logPath).toContain(path.join('bar', 'launches', pointer.launchId));
+    expect(fs.existsSync(pointer.logPath)).toBe(false);
   });
 
   it('reuses live server without spawning — spawnDetachedServer NOT called', async () => {
@@ -1108,22 +1120,32 @@ describe('bar command dispatcher: serve / stop / status routing', () => {
     moduleSeq++;
     const { mock } = await import('bun:test');
 
+    // Keep every real export so other suites importing this module are unaffected.
+    const actualServe = await import('../../../src/commands/bar/serve-subcommand');
+    const actualStop = await import('../../../src/commands/bar/stop-subcommand');
+    const actualStatus = await import('../../../src/commands/bar/status-subcommand');
+    const actualLaunch = await import('../../../src/commands/bar/launch-subcommand');
+
     mock.module('../../../src/commands/bar/serve-subcommand', () => ({
+      ...actualServe,
       handleBarServe: async (subArgs: string[]) => {
         routed.push(`serve:${subArgs.join(' ')}`);
       },
     }));
     mock.module('../../../src/commands/bar/stop-subcommand', () => ({
+      ...actualStop,
       handleBarStop: async (subArgs: string[]) => {
         routed.push(`stop:${subArgs.join(' ')}`);
       },
     }));
     mock.module('../../../src/commands/bar/status-subcommand', () => ({
+      ...actualStatus,
       handleBarStatus: async (subArgs: string[]) => {
         routed.push(`status:${subArgs.join(' ')}`);
       },
     }));
     mock.module('../../../src/commands/bar/launch-subcommand', () => ({
+      ...actualLaunch,
       handleBarLaunch: async (subArgs: string[]) => {
         routed.push(`launch:${subArgs.join(' ')}`);
       },

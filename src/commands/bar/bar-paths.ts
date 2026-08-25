@@ -33,6 +33,53 @@ export function getBarDir(ccsDir: string): string {
   return path.join(ccsDir, 'bar');
 }
 
+/** bar/launches/ — parent of per-launch diagnostics directories. */
+export function getLaunchesDir(ccsDir: string): string {
+  return path.join(getBarDir(ccsDir), 'launches');
+}
+
+/** bar/launches/<launchId>/ — diagnostics for one detached launch attempt. */
+export function getLaunchDir(ccsDir: string, launchId: string): string {
+  return path.join(getLaunchesDir(ccsDir), launchId);
+}
+
+/** bar/launches/<launchId>/serve.log — stdout/stderr of one detached server child. */
+export function getLaunchServeLogPath(ccsDir: string, launchId: string): string {
+  return path.join(getLaunchDir(ccsDir, launchId), 'serve.log');
+}
+
+/** bar/latest-launch.json — replace-on-launch pointer to the newest attempt. */
+export function getLatestLaunchPointerPath(ccsDir: string): string {
+  return path.join(getBarDir(ccsDir), 'latest-launch.json');
+}
+
+/** Schema version constant for latest-launch.json. */
+export const LATEST_LAUNCH_SCHEMA = 1;
+
+/**
+ * Shape of latest-launch.json. This is a single-slot pointer that is fully
+ * replaced on every detached launch attempt — never appended to — so readers
+ * can never mistake an older entry for the current launch.
+ */
+export interface LatestLaunchPointer {
+  schema: typeof LATEST_LAUNCH_SCHEMA;
+  /** Identity minted by the launcher that owns this attempt. */
+  launchId: string;
+  /** Port the detached server child was asked to bind. */
+  port: number;
+  /** ISO timestamp of when the attempt started. */
+  startedAt: string;
+  /** Absolute path of this attempt's serve.log. */
+  logPath: string;
+}
+
+/** Accepted launchId shape: URL/path safe, non-empty, bounded length. */
+export const LAUNCH_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+export function isValidLaunchId(value: unknown): value is string {
+  return typeof value === 'string' && LAUNCH_ID_PATTERN.test(value);
+}
+
 /** Schema version constant for launch.json. */
 export const LAUNCH_JSON_SCHEMA = 1;
 

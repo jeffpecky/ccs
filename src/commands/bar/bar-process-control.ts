@@ -1,11 +1,17 @@
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import { ConfigError } from '../../errors/error-types';
-import { getServerPidPath } from './bar-paths';
+import { getServerPidPath, isValidLaunchId } from './bar-paths';
 
 export interface BarServerProcessRecord {
   pid: number;
   birthIdentity: string;
+  /**
+   * Identity of the `ccs bar launch` attempt that owns this server, when one
+   * exists. Foreground/direct serve runs have no launcher and omit it. Cleanup
+   * that supplies a launchId only removes records stamped with the same id.
+   */
+  launchId?: string;
 }
 
 export type BarServerStopResult =
@@ -40,7 +46,12 @@ export function parseBarServerProcessRecord(raw: string): BarServerProcessRecord
     const pid = parsed.pid;
     if (!Number.isSafeInteger(pid) || (pid ?? 0) <= 0) return null;
     if (typeof parsed.birthIdentity !== 'string' || parsed.birthIdentity.trim() === '') return null;
-    return { pid: pid as number, birthIdentity: parsed.birthIdentity };
+    const record: BarServerProcessRecord = { pid: pid as number, birthIdentity: parsed.birthIdentity };
+    if (parsed.launchId !== undefined) {
+      if (!isValidLaunchId(parsed.launchId)) return null;
+      record.launchId = parsed.launchId;
+    }
+    return record;
   } catch {
     return null;
   }
@@ -246,7 +257,7 @@ export async function stopBarServerProcessFile(
   };
 }
 
-/** Remove server.pid only when it still belongs to this exact serve process. */
+/** Remove server.pid only when it still belongs to this exact serve process and launch. */
 export function removeBarServerProcessRecordIfOwned(
   pidPath: string,
   expectedRecord: BarServerProcessRecord
@@ -266,14 +277,43 @@ export function removeBarServerProcessRecordIfOwned(
     // Preserve unreadable state below.
   }
 
-  if (
+  const identityMatches =
     claimedRecord?.pid === expectedRecord.pid &&
-    claimedRecord.birthIdentity === expectedRecord.birthIdentity
-  ) {
+    claimedRecord.birthIdentity === expectedRecord.birthIdentity;
+  const launchMatches =
+    expectedRecord.launchId === undefined || claimedRecord?.launchId === expectedRecord.launchId;
+  if (identityMatches && launchMatches) {
     unlinkIfPresent(claimPath);
     return;
   }
   restoreClaimWithoutOverwrite(claimPath, pidPath);
+}
+
+export type StaleProcessClaimResult = 'absent' | 'claimed-stale' | 'preserved';
+
+/**
+ * Claim server.pid when it verifiably names a dead process, so a fresh serve
+ * can publish its own record without silently discarding live recovery state.
+ * Anything unreadable, unparsable, legacy, or still alive is preserved.
+ */
+export function claimStaleBarServerProcessRecord(
+  pidPath: string,
+  deps: Partial<Pick<BarServerStopDeps, 'getProcessBirthIdentity'>> = {}
+): StaleProcessClaimResult {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(pidPath, 'utf8');
+  } catch (err) {
+    if (isErrno(err, 'ENOENT')) return 'absent';
+    throw err;
+  }
+
+  const record = parseBarServerProcessRecord(raw);
+  if (record === null) return 'preserved';
+  const identity = (deps.getProcessBirthIdentity ?? getProcessBirthIdentity)(record.pid);
+  if (identity !== null) return 'preserved';
+  unlinkIfPresent(pidPath);
+  return 'claimed-stale';
 }
 
 /** Claim stale discovery state so a replacement write can never be unlinked. */

@@ -11,6 +11,7 @@ import {
 import {
   serializeBarServerProcessRecord,
   getProcessBirthIdentity,
+  parseBarServerProcessRecord,
   removeBarDiscoveryIfNoProcess,
   removeBarServerProcessRecordIfOwned,
   stopDetachedBarServer,
@@ -18,9 +19,25 @@ import {
   stopRecordedBarServer,
   waitForProcessExit,
 } from '../../../src/commands/bar/bar-process-control';
-import { parsePortFlag, validatePortArgs } from '../../../src/commands/bar/port-arg';
+import { parseLaunchIdFlag, parsePortFlag, validatePortArgs } from '../../../src/commands/bar/port-arg';
+import { getLatestLaunchPointerPath, LATEST_LAUNCH_SCHEMA } from '../../../src/commands/bar/bar-paths';
 import { handleBarServe } from '../../../src/commands/bar/serve-subcommand';
 import { handleBarStop } from '../../../src/commands/bar/stop-subcommand';
+import type { LatestLaunchPointer } from '../../../src/commands/bar/bar-paths';
+
+// Dispatcher suites mock.module('launch-subcommand') and those patches persist
+// across files in a Bun worker, so load a private real instance here.
+let moduleSeq = 0;
+
+async function loadTransactionalLaunch() {
+  moduleSeq += 1;
+  return import(
+    `../../../src/commands/bar/launch-subcommand?test=${Date.now()}-${moduleSeq}`
+  ) as Promise<{
+    handleBarLaunch: (args: string[], deps?: Record<string, unknown>) => Promise<void>;
+    BarServerTimeoutError: new (baseUrl: string, timeoutSeconds: number) => Error;
+  }>;
+}
 
 let tempHome: string;
 let originalHome: string | undefined;
@@ -323,6 +340,397 @@ describe('Bar serve publication ownership', () => {
     ).rejects.toThrow('exit 1');
 
     expect(fs.existsSync(pidPath)).toBe(false);
+  });
+});
+
+describe('transactional detached launch', () => {
+  interface LaunchHarness {
+    ccsDir: string;
+    events: string[];
+    pointerPath: string;
+    launchesDir: string;
+  }
+
+  function makeLaunchHarness(name: string): LaunchHarness {
+    const ccsDir = path.join(tempHome, name);
+    fs.mkdirSync(ccsDir, { recursive: true });
+    return {
+      ccsDir,
+      events: [],
+      pointerPath: getLatestLaunchPointerPath(ccsDir),
+      launchesDir: path.join(ccsDir, 'bar', 'launches'),
+    };
+  }
+
+  async function loadLaunch() {
+    return import('../../../src/commands/bar/launch-subcommand');
+  }
+
+  it('kills a bound-but-unresponsive detached child and preserves prior discovery state', async () => {
+    const harness = makeLaunchHarness('unresponsive-child');
+    const port = 4577;
+    const priorBarJson = path.join(harness.ccsDir, 'bar.json');
+    const priorLaunchJson = path.join(harness.ccsDir, 'bar', 'launch.json');
+    fs.mkdirSync(path.dirname(priorLaunchJson), { recursive: true });
+    fs.writeFileSync(priorBarJson, '{"port":3000,"baseUrl":"http://127.0.0.1:3000"}');
+    fs.writeFileSync(priorLaunchJson, '{"schema":1,"prior":true}');
+
+    const unresponsiveChild = spawn(
+      process.execPath,
+      [
+        '-e',
+        `const net=require('net');net.createServer(s=>{s.on('error',()=>{})}).listen(${port},'127.0.0.1');setInterval(()=>{},1000);`,
+      ],
+      { stdio: 'ignore' }
+    );
+    liveChildren.add(unresponsiveChild);
+
+    let killed = false;
+    const { handleBarLaunch, BarServerTimeoutError } = await loadTransactionalLaunch();
+    await handleBarLaunch(['--port', String(port)], {
+      getCcsDir: () => harness.ccsDir,
+      findRunningServer: async () => null,
+      getPort: async () => port,
+      spawnDetachedServer: (_p: number, logPath: string) => {
+        harness.events.push('spawn');
+        fs.mkdirSync(path.dirname(logPath), { recursive: true });
+        fs.closeSync(fs.openSync(logPath, 'a'));
+        return {
+          pid: unresponsiveChild.pid,
+          kill: () => {
+            killed = true;
+            try {
+              unresponsiveChild.kill('SIGKILL');
+            } catch {
+              /* already gone */
+            }
+            return true;
+          },
+        };
+      },
+      waitForServerLive: async () => {
+        harness.events.push('health-failed');
+        throw new BarServerTimeoutError(`http://127.0.0.1:${port}`, 10);
+      },
+      writeLaunchDescriptor: () => {
+        harness.events.push('descriptor');
+      },
+      openApp: async () => {},
+      appInstallPath: path.join(tempHome, 'Applications', 'CCS Bar.app'),
+    });
+
+    expect(killed).toBe(true);
+    await waitForChildExit(unresponsiveChild, 5_000);
+    liveChildren.delete(unresponsiveChild);
+    expect(process.exitCode).toBe(1);
+    process.exitCode = 0;
+
+    expect(fs.readFileSync(priorBarJson, 'utf8')).toBe('{"port":3000,"baseUrl":"http://127.0.0.1:3000"}');
+    expect(fs.readFileSync(priorLaunchJson, 'utf8')).toBe('{"schema":1,"prior":true}');
+
+    const pointer = JSON.parse(fs.readFileSync(harness.pointerPath, 'utf8')) as LatestLaunchPointer;
+    expect(pointer.schema).toBe(LATEST_LAUNCH_SCHEMA);
+    expect(typeof pointer.launchId).toBe('string');
+    expect(pointer.launchId.length).toBeGreaterThan(0);
+    expect(pointer.port).toBe(port);
+    expect(pointer.logPath).toBe(path.join(harness.launchesDir, pointer.launchId, 'serve.log'));
+    expect(fs.existsSync(pointer.logPath)).toBe(true);
+
+    const launchDirs = fs.readdirSync(harness.launchesDir);
+    expect(launchDirs).toEqual([pointer.launchId]);
+  }, 30000);
+
+  it('publishes discovery and descriptor only after authenticated health succeeds', async () => {
+    const harness = makeLaunchHarness('publication-order');
+    const { handleBarLaunch } = await loadTransactionalLaunch();
+
+    await handleBarLaunch(['--port', '4556'], {
+      getCcsDir: () => harness.ccsDir,
+      findRunningServer: async () => null,
+      getPort: async () => 4556,
+      spawnDetachedServer: () => {
+        harness.events.push('spawn');
+        return { pid: 455601, kill: () => true };
+      },
+      waitForServerLive: async () => {
+        harness.events.push('health-ok');
+      },
+      writeLaunchDescriptor: () => {
+        harness.events.push('descriptor');
+      },
+      openApp: async () => {},
+      appInstallPath: path.join(tempHome, 'Applications', 'CCS Bar.app'),
+    });
+
+    expect(harness.events.indexOf('spawn')).toBeGreaterThanOrEqual(0);
+    expect(harness.events.indexOf('health-ok')).toBeGreaterThan(harness.events.indexOf('spawn'));
+    expect(harness.events.indexOf('descriptor')).toBeGreaterThan(harness.events.indexOf('health-ok'));
+    expect(process.exitCode).toBe(0);
+
+    const pointer = JSON.parse(fs.readFileSync(harness.pointerPath, 'utf8')) as LatestLaunchPointer;
+    const barJson = JSON.parse(
+      fs.readFileSync(path.join(harness.ccsDir, 'bar.json'), 'utf8')
+    ) as { port: number; launchId?: string };
+    expect(barJson.port).toBe(4556);
+    expect(barJson.launchId).toBe(pointer.launchId);
+  });
+
+  it('stamps one launch identity across pointer, per-launch log, and discovery', async () => {
+    const harness = makeLaunchHarness('identity-threading');
+    const ids = ['aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000002'];
+    let idIndex = 0;
+    const { handleBarLaunch } = await loadTransactionalLaunch();
+
+    for (const expectedId of ids) {
+      await handleBarLaunch(['--port', '4558'], {
+        getCcsDir: () => harness.ccsDir,
+        createLaunchId: () => ids[idIndex++]!,
+        findRunningServer: async () => null,
+        getPort: async () => 4558,
+        spawnDetachedServer: () => ({ pid: 455801, kill: () => true }),
+        waitForServerLive: async () => {},
+        writeLaunchDescriptor: () => {},
+        openApp: async () => {},
+        appInstallPath: path.join(tempHome, 'Applications', 'CCS Bar.app'),
+      });
+      expect(process.exitCode).toBe(0);
+    }
+
+    const pointer = JSON.parse(fs.readFileSync(harness.pointerPath, 'utf8')) as LatestLaunchPointer;
+    expect(pointer.launchId).toBe(ids[1]);
+    const barJson = JSON.parse(
+      fs.readFileSync(path.join(harness.ccsDir, 'bar.json'), 'utf8')
+    ) as { launchId?: string };
+    expect(barJson.launchId).toBe(ids[1]);
+    expect(fs.readdirSync(harness.launchesDir).sort()).toEqual([...ids].sort());
+  });
+
+  it('replaces the latest-launch pointer without append-only history files', () => {
+    const ccsDir = path.join(tempHome, 'pointer-replace');
+    const barDir = path.join(ccsDir, 'bar');
+    fs.mkdirSync(barDir, { recursive: true });
+    const pointerPath = getLatestLaunchPointerPath(ccsDir);
+    const first: LatestLaunchPointer = {
+      schema: LATEST_LAUNCH_SCHEMA,
+      launchId: 'bbbbbbbb-0000-4000-8000-00000000000a',
+      port: 4559,
+      startedAt: '2026-08-24T10:00:00.000Z',
+      logPath: path.join(barDir, 'launches', 'bbbbbbbb-0000-4000-8000-00000000000a', 'serve.log'),
+    };
+    const second: LatestLaunchPointer = { ...first, launchId: 'cccccccc-0000-4000-8000-00000000000b' };
+
+    const writePointer = (pointer: LatestLaunchPointer): void => {
+      const tmp = `${pointerPath}.tmp-${process.pid}`;
+      fs.writeFileSync(tmp, JSON.stringify(pointer, null, 2));
+      fs.renameSync(tmp, pointerPath);
+    };
+    writePointer(first);
+    writePointer(second);
+
+    const raw = fs.readFileSync(pointerPath, 'utf8');
+    expect(JSON.parse(raw).launchId).toBe(second.launchId);
+    expect(raw.match(/launchId/g)?.length).toBe(1);
+    expect(fs.readdirSync(barDir)).toEqual(['latest-launch.json']);
+  });
+});
+
+describe('ownership-safe cleanup with launch identity', () => {
+  let pidPath = '';
+
+  beforeEach(() => {
+    pidPath = path.join(tempHome, 'cleanup-owner', 'server.pid');
+    fs.mkdirSync(path.dirname(pidPath), { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(path.dirname(pidPath), { recursive: true, force: true });
+  });
+
+  function writeOwnedRecord(): string {
+    const record = serializeBarServerProcessRecord({
+      pid: 4321,
+      birthIdentity: 'birth-a',
+      launchId: 'dddddddd-0000-4000-8000-00000000000d',
+    });
+    fs.writeFileSync(pidPath, record);
+    return record;
+  }
+
+  it('removes the record only when process, birth identity, and launch id all match', () => {
+    writeOwnedRecord();
+    removeBarServerProcessRecordIfOwned(pidPath, {
+      pid: 4321,
+      birthIdentity: 'birth-a',
+      launchId: 'dddddddd-0000-4000-8000-00000000000d',
+    });
+    expect(fs.existsSync(pidPath)).toBe(false);
+  });
+
+  it('preserves the record when a different launch id owns it now', () => {
+    const record = writeOwnedRecord();
+    removeBarServerProcessRecordIfOwned(pidPath, {
+      pid: 4321,
+      birthIdentity: 'birth-a',
+      launchId: 'eeeeeeee-0000-4000-8000-00000000000e',
+    });
+    expect(fs.readFileSync(pidPath, 'utf8')).toBe(record);
+  });
+
+  it('preserves the record when the birth identity differs even with matching launch id', () => {
+    const record = writeOwnedRecord();
+    removeBarServerProcessRecordIfOwned(pidPath, {
+      pid: 4321,
+      birthIdentity: 'birth-b',
+      launchId: 'dddddddd-0000-4000-8000-00000000000d',
+    });
+    expect(fs.readFileSync(pidPath, 'utf8')).toBe(record);
+  });
+
+  it('parses records carrying a launch id and rejects malformed launch ids', () => {
+    expect(parseBarServerProcessRecord(writeOwnedRecord())).toEqual({
+      pid: 4321,
+      birthIdentity: 'birth-a',
+      launchId: 'dddddddd-0000-4000-8000-00000000000d',
+    });
+    expect(
+      parseBarServerProcessRecord(
+        JSON.stringify({ pid: 5, birthIdentity: 'b', launchId: 'bad id!' })
+      )
+    ).toBeNull();
+    expect(
+      parseBarServerProcessRecord(JSON.stringify({ pid: 5, birthIdentity: 'b', launchId: '' }))
+    ).toBeNull();
+  });
+});
+
+describe('launched serve defers discovery to the launcher', () => {
+  const LAUNCH_ID = 'ffffffff-0000-4000-8000-0000000000ff';
+
+  function baseServeDeps(ccsDir: string) {
+    return {
+      getCcsDir: () => ccsDir,
+      findRunningServer: async () => null,
+      startServer: async () => ({ port: 4560, baseUrl: 'http://127.0.0.1:4560' }),
+      getPort: async () => 4560,
+      writeFile: (filePath: string, content: string) => {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        fs.writeFileSync(filePath, content);
+      },
+      removeFile: () => {},
+      onSignal: () => {},
+      exit: (code: number) => {
+        throw new Error(`__EXIT_${code}__`);
+      },
+      getProcessBirthIdentity: () => 'test-birth',
+    };
+  }
+
+  it('writes a launch-stamped process record but never discovery', async () => {
+    const ccsDir = path.join(tempHome, 'serve-launched');
+    const deps = baseServeDeps(ccsDir);
+    const written: Record<string, string> = {};
+    deps.writeFile = (filePath: string, content: string) => {
+      written[filePath] = content;
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, content);
+    };
+
+    await handleBarServe(['--port', '4560', '--launch-id', LAUNCH_ID], deps as never);
+
+    const pidPath = path.join(ccsDir, 'bar', 'server.pid');
+    expect(written[pidPath]).toBeDefined();
+    expect(JSON.parse(written[pidPath])).toEqual({
+      pid: process.pid,
+      birthIdentity: 'test-birth',
+      launchId: LAUNCH_ID,
+    });
+    expect(written[path.join(ccsDir, 'bar.json')]).toBeUndefined();
+    expect(fs.existsSync(path.join(ccsDir, 'bar.json'))).toBe(false);
+  });
+
+  it('cleans up only when the recorded launch id matches on shutdown', async () => {
+    const ccsDir = path.join(tempHome, 'serve-launched-shutdown');
+    const deps = baseServeDeps(ccsDir);
+    const removals: unknown[] = [];
+    let signalHandler: (() => void) | null = null;
+    deps.onSignal = (_signal: string, handler: () => void) => {
+      signalHandler = handler;
+    };
+    deps.writeFile = () => {};
+
+    await handleBarServe(['--port', '4560', '--launch-id', LAUNCH_ID], {
+      ...deps,
+      removeProcessRecordIfOwned: (filePath: string, record: unknown) => {
+        removals.push({ filePath, record });
+      },
+    } as never);
+
+    expect(signalHandler).not.toBeNull();
+    expect(() => (signalHandler as () => void)()).toThrow('__EXIT_0__');
+    expect(removals).toHaveLength(1);
+    const entry = removals[0] as { filePath: string; record: { launchId?: string } };
+    expect(entry.filePath).toContain('server.pid');
+    expect(entry.record.launchId).toBe(LAUNCH_ID);
+  });
+
+  it('refuses to publish over a living foreign process record before binding', async () => {
+    const ccsDir = path.join(tempHome, 'serve-live-foreign');
+    const barDir = path.join(ccsDir, 'bar');
+    fs.mkdirSync(barDir, { recursive: true });
+    const pidPath = path.join(barDir, 'server.pid');
+    const foreign = serializeBarServerProcessRecord({ pid: 999111, birthIdentity: 'foreign' });
+    fs.writeFileSync(pidPath, foreign);
+    const deps = baseServeDeps(ccsDir);
+    let started = false;
+    deps.startServer = async () => {
+      started = true;
+      return { port: 4560, baseUrl: 'http://127.0.0.1:4560' };
+    };
+    deps.getProcessBirthIdentity = (pid: number) =>
+      pid === 999111 ? 'still-running' : 'test-birth';
+
+    await expect(
+      handleBarServe(['--port', '4560'], deps as never)
+    ).rejects.toThrow('__EXIT_1__');
+
+    expect(started).toBe(false);
+    expect(fs.readFileSync(pidPath, 'utf8')).toBe(foreign);
+    expect(fs.existsSync(path.join(ccsDir, 'bar.json'))).toBe(false);
+  });
+
+  it('claims a verifiably stale record before publishing its own', async () => {
+    const ccsDir = path.join(tempHome, 'serve-stale-claim');
+    const barDir = path.join(ccsDir, 'bar');
+    fs.mkdirSync(barDir, { recursive: true });
+    const pidPath = path.join(barDir, 'server.pid');
+    fs.writeFileSync(
+      pidPath,
+      serializeBarServerProcessRecord({ pid: 999222, birthIdentity: 'ghost' })
+    );
+    const deps = baseServeDeps(ccsDir);
+    deps.getProcessBirthIdentity = (pid: number) => (pid === 999222 ? null : 'test-birth');
+
+    await handleBarServe(['--port', '4560'], deps as never);
+
+    const published = JSON.parse(fs.readFileSync(pidPath, 'utf8')) as { pid: number };
+    expect(published.pid).toBe(process.pid);
+  });
+
+  it('requires --port in launched mode', async () => {
+    const ccsDir = path.join(tempHome, 'serve-launched-no-port');
+    await expect(
+      handleBarServe(['--launch-id', LAUNCH_ID], baseServeDeps(ccsDir) as never)
+    ).rejects.toThrow('__EXIT_1__');
+  });
+
+  it('rejects malformed --launch-id values loudly', () => {
+    expect(validatePortArgs(['--launch-id'])).toBe('Missing value for --launch-id');
+    expect(validatePortArgs(['--launch-id', 'a', '--launch-id', 'b'])).toBe(
+      'Duplicate option: --launch-id'
+    );
+    expect(parseLaunchIdFlag(['--launch-id', 'has space']).launchId).toBeNull();
+    expect(parseLaunchIdFlag(['--launch-id', 'ok-id_1']).launchId).toBe('ok-id_1');
+    expect(parseLaunchIdFlag([]).present).toBe(false);
   });
 });
 

@@ -20,6 +20,20 @@ import {
   getOrCreateBarAuthToken,
 } from '../../../src/utils/bar-auth-token';
 
+// Bun's mock.module patches persist across files in a worker. Dispatcher mocks
+// below must keep every real launch-subcommand export so later suites that
+// import BarServerTimeoutError etc. are unaffected.
+const actualLaunchModule = await import('../../../src/commands/bar/launch-subcommand');
+
+function mockLaunchSubcommandRoute(): void {
+  mock.module('../../../src/commands/bar/launch-subcommand', () => ({
+    ...actualLaunchModule,
+    handleBarLaunch: async (args: string[]) => {
+      calls.push(`launch:${args.join(' ')}`);
+    },
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -126,11 +140,7 @@ afterEach(() => {
 
 describe('bar command dispatcher (index.ts)', () => {
   beforeEach(() => {
-    mock.module('../../../src/commands/bar/launch-subcommand', () => ({
-      handleBarLaunch: async (args: string[]) => {
-        calls.push(`launch:${args.join(' ')}`);
-      },
-    }));
+    mockLaunchSubcommandRoute();
 
     mock.module('../../../src/commands/bar/install-subcommand', () => ({
       handleBarInstall: async (args: string[]) => {
@@ -1593,11 +1603,7 @@ describe('bar install: stale version-pin removal on null plist read (Fix 1)', ()
 
 describe('bar command dispatcher: --help anywhere in args (Fix 2)', () => {
   beforeEach(() => {
-    mock.module('../../../src/commands/bar/launch-subcommand', () => ({
-      handleBarLaunch: async (args: string[]) => {
-        calls.push(`launch:${args.join(' ')}`);
-      },
-    }));
+    mockLaunchSubcommandRoute();
 
     mock.module('../../../src/commands/bar/install-subcommand', () => ({
       handleBarInstall: async (args: string[]) => {
@@ -3775,11 +3781,7 @@ describe('bar install: --await-quit waits for the running app to quit (GH-1588)'
 
 describe('bar dispatcher: bare flags route to launch', () => {
   beforeEach(() => {
-    mock.module('../../../src/commands/bar/launch-subcommand', () => ({
-      handleBarLaunch: async (args: string[]) => {
-        calls.push(`launch:${args.join(' ')}`);
-      },
-    }));
+    mockLaunchSubcommandRoute();
   });
 
   it('dispatches `ccs bar --port 3999` to launch with the flag preserved', async () => {

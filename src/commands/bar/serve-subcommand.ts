@@ -1,15 +1,21 @@
 /**
  * `ccs bar serve` — long-lived server host for CCS Bar.
  *
- * Reuse-or-start: probe candidate ports first. If a live server exists,
- * write bar.json pointing at it and exit 0 (no double-start). Otherwise
- * pick a free port, call startServer(), write bar.json + server.pid,
- * then stay alive until SIGINT/SIGTERM.
+ * Two modes:
  *
- * This is the process that `ccs bar launch` spawns detached. The Swift
- * app also spawns it directly via launch.json.
+ * Foreground/direct (no --launch-id): reuse-or-start. Probe candidate ports;
+ * if a live server exists, write bar.json pointing at it and exit 0 (no
+ * double-start). Otherwise pick a free port, call startServer(), publish
+ * server.pid then bar.json, then stay alive until SIGINT/SIGTERM. The native
+ * macOS/Windows apps self-starting via launch.json run in this mode.
  *
- * Accepts: --port N (honours a port the launcher pre-selected via getPort).
+ * Launched (--launch-id <id>): the child of a transactional `ccs bar launch`.
+ * The launcher already probed ports, so this mode requires --port and skips
+ * discovery probing. It publishes a launch-stamped server.pid as the stop
+ * ownership barrier but NEVER writes bar.json — the launcher owns discovery
+ * and publishes it only after authenticated health succeeds. Shutdown cleanup
+ * removes the record only when pid, birth identity, and launch id all match,
+ * so it can never unlink a replacement launch's state.
  */
 
 import * as fs from 'fs';
@@ -17,10 +23,11 @@ import * as path from 'path';
 import { getCcsDir } from '../../config/config-loader-facade';
 import { getBarJsonPath, getServerPidPath } from './bar-paths';
 import { BAR_PORT_CANDIDATES, defaultFindRunningServer, resolveBarPort } from './bar-server-probe';
-import { parsePortFlag, validatePortArgs } from './port-arg';
+import { parseLaunchIdFlag, parsePortFlag, validatePortArgs } from './port-arg';
 import type { DashboardInfo } from './bar-server-probe';
 import type { BarDiscoveryJson } from './launch-subcommand';
 import {
+  claimStaleBarServerProcessRecord,
   getProcessBirthIdentity,
   removeBarServerProcessRecordIfOwned,
   serializeBarServerProcessRecord,
@@ -107,6 +114,15 @@ export async function handleBarServe(args: string[], deps: Partial<ServeDeps> = 
     (deps.exit ?? defaultExit)(1);
     return;
   }
+  const launchIdFlag = parseLaunchIdFlag(args);
+  if (launchIdFlag.present && launchIdFlag.launchId === null) {
+    console.error('[X] Invalid --launch-id value. Use a URL-safe id of at most 128 characters.');
+    (deps.exit ?? defaultExit)(1);
+    return;
+  }
+  const launchId = launchIdFlag.launchId;
+  const launchedMode = launchId !== null;
+
   const ccsDir = (deps.getCcsDir ?? defaultGetCcsDir)();
   const findRunningServer = deps.findRunningServer ?? (() => defaultFindRunningServer(ccsDir));
   const startServerFn = deps.startServer ?? defaultStartServer;
@@ -121,36 +137,8 @@ export async function handleBarServe(args: string[], deps: Partial<ServeDeps> = 
   const barJsonPath = getBarJsonPath(ccsDir);
   const serverPidPath = getServerPidPath(ccsDir);
 
-  // 1. Reuse-or-start: probe candidate ports first.
-  let running: DashboardInfo | null = null;
-  try {
-    running = await findRunningServer();
-  } catch {
-    /* probe errors count as null */
-  }
-
-  if (running !== null) {
-    // A live server is already running — write bar.json and exit cleanly.
-    const barJson: BarDiscoveryJson = {
-      baseUrl: running.baseUrl,
-      port: running.port,
-      authMode: 'loopback',
-    };
-    try {
-      writeFile(barJsonPath, JSON.stringify(barJson, null, 2));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[X] Failed to write bar.json: ${msg}`);
-      exit(1);
-    }
-    console.log(`[OK] CCS server already running at ${running.baseUrl} — reusing.`);
-    exit(0);
-  }
-
-  // 2. No live server found — start one.
-  // Honor --port N from the launcher (it pre-selected via getPort to avoid races).
-  // Without it, prefer the port recorded in bar.json so the server keeps coming
-  // back on the port the user last chose (sticky port).
+  // Parse --port before any branching so a malformed value is rejected loudly
+  // in every mode.
   const portFlag = parsePortFlag(args);
   if (portFlag.present && portFlag.port === null) {
     console.error('[X] Invalid --port value. Use an integer between 1 and 65535.');
@@ -158,15 +146,77 @@ export async function handleBarServe(args: string[], deps: Partial<ServeDeps> = 
     return;
   }
   const requestedPort = portFlag.port;
+
   let port: number;
-  if (requestedPort !== null) {
-    port = requestedPort;
+
+  if (!launchedMode) {
+    // 1. Reuse-or-start: probe candidate ports first.
+    let running: DashboardInfo | null = null;
+    try {
+      running = await findRunningServer();
+    } catch {
+      /* probe errors count as null */
+    }
+
+    if (running !== null) {
+      // A live server is already running — write bar.json and exit cleanly.
+      const barJson: BarDiscoveryJson = {
+        baseUrl: running.baseUrl,
+        port: running.port,
+        authMode: 'loopback',
+      };
+      try {
+        writeFile(barJsonPath, JSON.stringify(barJson, null, 2));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[X] Failed to write bar.json: ${msg}`);
+        exit(1);
+      }
+      console.log(`[OK] CCS server already running at ${running.baseUrl} — reusing.`);
+      exit(0);
+    }
+
+    // 2. No live server found — start one.
+    // Honor --port N from the launcher (it pre-selected via getPort to avoid races).
+    // Without it, prefer the port recorded in bar.json so the server keeps coming
+    // back on the port the user last chose (sticky port).
+    if (requestedPort !== null) {
+      port = requestedPort;
+    } else {
+      const stickyPort = resolveBarPort(ccsDir);
+      const base = BAR_PORT_CANDIDATES;
+      const candidates =
+        stickyPort !== null ? [stickyPort, ...base.filter((p) => p !== stickyPort)] : base;
+      port = await getPortFn({ port: candidates, host: '127.0.0.1' });
+    }
   } else {
-    const stickyPort = resolveBarPort(ccsDir);
-    const base = BAR_PORT_CANDIDATES;
-    const candidates =
-      stickyPort !== null ? [stickyPort, ...base.filter((p) => p !== stickyPort)] : base;
-    port = await getPortFn({ port: candidates, host: '127.0.0.1' });
+    // Launched mode: the launcher probed ports and pre-selected one.
+    if (requestedPort === null) {
+      console.error('[X] Launched serve requires --port N from its launcher.');
+      exit(1);
+      return;
+    }
+    port = requestedPort;
+  }
+
+  // Ownership barrier: never publish over a record that names a live or
+  // unverifiable process. Verified-stale records are claimed instead.
+  let claim: 'absent' | 'claimed-stale' | 'preserved';
+  try {
+    claim = claimStaleBarServerProcessRecord(serverPidPath, {
+      getProcessBirthIdentity: readProcessBirthIdentity,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[X] Failed to inspect server.pid before publication: ${msg}`);
+    exit(1);
+    return;
+  }
+  if (claim === 'preserved') {
+    console.error('[X] server.pid names a live or unverifiable process; refusing to overwrite it.');
+    console.error('[i] Run `ccs bar stop` to verify and clean up, then retry.');
+    exit(1);
+    return;
   }
 
   // TypeScript cannot infer that exit(1) is `never` when it is injected as a dep,
@@ -184,11 +234,7 @@ export async function handleBarServe(args: string[], deps: Partial<ServeDeps> = 
 
   // 3. Publish the owned process record before discovery. Stop cleanup uses
   // server.pid as the ownership barrier, so discovery must never appear first.
-  const barJson: BarDiscoveryJson = {
-    baseUrl: dashboardInfo.baseUrl,
-    port: dashboardInfo.port,
-    authMode: 'loopback',
-  };
+  // In launched mode discovery is owned by the launcher and is not written here.
   const birthIdentity = readProcessBirthIdentity(process.pid);
   if (birthIdentity === null) {
     console.error('[X] Failed to record CCS Bar process identity; stopping unmanaged server.');
@@ -196,7 +242,9 @@ export async function handleBarServe(args: string[], deps: Partial<ServeDeps> = 
     return;
   }
 
-  const processRecord = { pid: process.pid, birthIdentity };
+  const processRecord: BarServerProcessRecord = launchedMode
+    ? { pid: process.pid, birthIdentity, launchId }
+    : { pid: process.pid, birthIdentity };
   try {
     writeFile(serverPidPath, serializeBarServerProcessRecord(processRecord));
   } catch (err) {
@@ -206,25 +254,35 @@ export async function handleBarServe(args: string[], deps: Partial<ServeDeps> = 
     return;
   }
 
-  try {
-    writeFile(barJsonPath, JSON.stringify(barJson, null, 2));
-  } catch (err) {
+  if (!launchedMode) {
+    const barJson: BarDiscoveryJson = {
+      baseUrl: dashboardInfo.baseUrl,
+      port: dashboardInfo.port,
+      authMode: 'loopback',
+    };
     try {
-      removeProcessRecordIfOwned(serverPidPath, processRecord);
-    } catch (cleanupErr) {
-      const cleanupMessage = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
-      console.error(`[!] Failed to roll back server.pid: ${cleanupMessage}`);
+      writeFile(barJsonPath, JSON.stringify(barJson, null, 2));
+    } catch (err) {
+      try {
+        removeProcessRecordIfOwned(serverPidPath, processRecord);
+      } catch (cleanupErr) {
+        const cleanupMessage = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+        console.error(`[!] Failed to roll back server.pid: ${cleanupMessage}`);
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[X] Failed to write bar.json: ${msg}`);
+      exit(1);
+      return;
     }
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[X] Failed to write bar.json: ${msg}`);
-    exit(1);
-    return;
   }
 
   console.log(`[OK] CCS Bar server started at ${dashboardInfo.baseUrl}`);
   console.log(`[i]  PID ${process.pid} — stop with \`ccs bar stop\``);
+  if (launchedMode) console.log(`[i]  Launch id ${launchId} — discovery is owned by its launcher.`);
 
-  // 4. Clean shutdown on SIGINT / SIGTERM.
+  // 4. Clean shutdown on SIGINT / SIGTERM. Removal is conditional on the full
+  // process identity (pid + birth identity + launch id), so this handler can
+  // never unlink a replacement launch's or a foreign process's record.
   const shutdown = (): void => {
     removeProcessRecordIfOwned(serverPidPath, processRecord);
     // bar.json is intentionally left in place on clean shutdown so

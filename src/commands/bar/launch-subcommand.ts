@@ -2,25 +2,34 @@
  * `ccs bar launch` — start the CCS Bar server detached, write bar.json, open the app.
  *
  * bar.json shape (v1):
- *   { baseUrl: string, port: number, authMode: "loopback" }
+ *   { baseUrl: string, port: number, authMode: "loopback", launchId?: string }
  *
  * Detached model (replaces the old in-process model):
  *   1. Probe candidate ports (bar.json port first, then 3000/3001/3002/8000/8080).
  *   2. If a live server is found → reuse it, write bar.json, open app, return.
  *      With an explicit --port that differs from the running server's port,
  *      stop that server first and fall through to a fresh start instead.
- *   3. Else → pick a port (--port exactly when given; otherwise bar.json's
- *      recorded port first, then the default candidates), refresh launch.json
- *      (including --port so the Swift app self-starts on the same port), spawn
- *      `ccs bar serve --port N` detached with stdio → serve.log, poll
- *      /api/bar/health until 200 (timeout ~10 s), write bar.json, open app,
- *      return. The CLI process exits; the server continues as a detached child.
+ *   3. Else → run a transactional fresh start:
+ *        a. Mint a launchId owning every artefact of this attempt.
+ *        b. Point latest-launch.json at this attempt (replace-on-write, never
+ *           append) and give the attempt its own log under ~/.ccs/bar/launches.
+ *        c. Pick a port (--port exactly when given; otherwise bar.json's
+ *           recorded port first, then the default candidates).
+ *        d. Spawn `ccs bar serve --port N --launch-id <id>` detached with
+ *           stdio → the per-launch serve.log.
+ *        e. Poll /api/bar/health with nonce-bound token proofs until
+ *           authenticated 200 (~10 s timeout).
+ *        f. ONLY after health succeeds: refresh launch.json, then publish
+ *           bar.json carrying the same launchId. Any earlier failure leaves
+ *           prior discovery/recovery state byte-for-byte intact.
+ *      The CLI process exits; the server continues as a detached child.
  *
  * All side-effectful deps are injectable so tests can run without real
  * servers, ports, or file-system writes.
  */
 
 import * as fs from 'fs';
+import { randomUUID } from 'crypto';
 import * as os from 'os';
 import * as path from 'path';
 import type { ChildProcess } from 'child_process';
@@ -33,8 +42,17 @@ import {
   isMatchingBarAuthProof,
   getOrCreateBarAuthToken,
 } from '../../utils/bar-auth-token';
-import { getBarDir, getBarJsonPath, getLaunchJsonPath, getServeLogPath } from './bar-paths';
-import type { LaunchJson } from './bar-paths';
+import {
+  getBarDir,
+  getBarJsonPath,
+  getLaunchDir,
+  getLaunchJsonPath,
+  getLaunchServeLogPath,
+  getLatestLaunchPointerPath,
+  getServeLogPath,
+} from './bar-paths';
+import type { LaunchJson, LatestLaunchPointer } from './bar-paths';
+import { LATEST_LAUNCH_SCHEMA } from './bar-paths';
 import { createBarLaunchDescriptor } from './launch-descriptor';
 import { parsePortFlag, validatePortArgs } from './port-arg';
 import {
@@ -65,6 +83,8 @@ export interface BarDiscoveryJson {
   baseUrl: string;
   port: number;
   authMode: 'loopback';
+  /** Set when this discovery was published by a transactional detached launch. */
+  launchId?: string;
 }
 
 export type DashboardInfo = _DashboardInfo;
@@ -85,12 +105,19 @@ export interface LaunchDeps {
    * Spawn the `ccs bar serve --port N` process detached and return immediately.
    * The spawned process must be unref()ed so the launcher can exit.
    */
-  spawnDetachedServer: (port: number, logPath: string) => ChildProcess | void;
+  spawnDetachedServer: (port: number, logPath: string, launchId?: string) => ChildProcess | void;
   /**
-   * Poll GET {baseUrl}/api/bar/health until HTTP 200 or timeout.
-   * Returns the live baseUrl on success, throws on timeout.
+   * Poll GET {baseUrl}/api/bar/health until an authenticated HTTP 200 or
+   * timeout. Returns the live baseUrl on success, throws on timeout.
    */
   waitForServerLive: (baseUrl: string) => Promise<void>;
+  /** Mint the identity that owns this launch attempt's artefacts. */
+  createLaunchId?: () => string;
+  /**
+   * Replace the latest-launch.json pointer for this attempt. Implementations
+   * must replace, never append, so readers always see exactly one attempt.
+   */
+  writeLatestLaunchPointer?: (pointerPath: string, pointer: LatestLaunchPointer) => void;
   /**
    * Build the launch.json descriptor (includes the chosen --port so the Swift
    * app self-starts the server on the same port).
@@ -126,15 +153,20 @@ async function defaultGetPort(opts: { port: number[]; host: string }): Promise<n
 /**
  * Spawn `ccs bar serve --port N` detached so it outlives this CLI process.
  *
- * stdio is redirected to serve.log so server output is preserved for
- * debugging without a terminal.  unref() lets the launcher exit immediately.
+ * stdio is redirected to the per-launch serve.log so server output is
+ * preserved for debugging without a terminal.  unref() lets the launcher exit
+ * immediately. The child receives --launch-id so its self-published process
+ * record and shutdown cleanup are bound to this launch's identity.
  */
-function defaultSpawnDetachedServer(port: number, logPath: string): ChildProcess {
+function defaultSpawnDetachedServer(port: number, logPath: string, launchId?: string): ChildProcess {
   const { spawn } = require('child_process') as typeof import('child_process');
+
+  const args = [process.argv[1], 'bar', 'serve', '--port', String(port)];
+  if (launchId !== undefined) args.push('--launch-id', launchId);
 
   // Open (or create) the log file for appending.
   const logFd = fs.openSync(logPath, 'a');
-  const child = spawn(process.execPath, [process.argv[1], 'bar', 'serve', '--port', String(port)], {
+  const child = spawn(process.execPath, args, {
     detached: true,
     stdio: ['ignore', logFd, logFd],
     cwd: os.homedir(),
@@ -252,6 +284,18 @@ function defaultWriteLaunchDescriptor(jsonPath: string, descriptor: LaunchJson):
   fs.writeFileSync(jsonPath, JSON.stringify(descriptor, null, 2));
 }
 
+function defaultCreateLaunchId(): string {
+  return randomUUID();
+}
+
+/** Replace the pointer atomically so readers never observe a partial file. */
+function defaultWriteLatestLaunchPointer(pointerPath: string, pointer: LatestLaunchPointer): void {
+  fs.mkdirSync(path.dirname(pointerPath), { recursive: true });
+  const tmpPath = `${pointerPath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmpPath, JSON.stringify(pointer, null, 2));
+  fs.renameSync(tmpPath, pointerPath);
+}
+
 async function defaultOpenApp(appPath: string): Promise<void> {
   if (process.platform === 'win32') {
     const { openWindowsBar } = await import('./platform-adapter');
@@ -295,6 +339,8 @@ export async function handleBarLaunch(
   const spawnDetachedServer = deps.spawnDetachedServer ?? defaultSpawnDetachedServer;
   const waitForServerLive = deps.waitForServerLive ?? defaultWaitForServerLive;
   const createLaunchDescriptor = deps.createLaunchDescriptor ?? createBarLaunchDescriptor;
+  const createLaunchId = deps.createLaunchId ?? defaultCreateLaunchId;
+  const writeLatestLaunchPointer = deps.writeLatestLaunchPointer ?? defaultWriteLatestLaunchPointer;
   const writeLaunchDescriptor = deps.writeLaunchDescriptor ?? defaultWriteLaunchDescriptor;
   const stopDetachedServer = deps.stopDetachedServer ?? stopDetachedBarServer;
 
@@ -430,10 +476,31 @@ export async function handleBarLaunch(
   }
   const selectedPort = port;
 
+  // 2b. Transactional fresh start. Every artefact of this attempt is owned by
+  //     a freshly minted launchId. Prior discovery/recovery state is never
+  //     modified before the new server proves healthy, so any failure below
+  //     preserves the previous valid state byte-for-byte.
+  const launchId = createLaunchId();
+  const serveLogPath = getLaunchServeLogPath(ccsDir, launchId);
+  const latestPointerPath = getLatestLaunchPointerPath(ccsDir);
+
+  try {
+    writeLatestLaunchPointer(latestPointerPath, {
+      schema: LATEST_LAUNCH_SCHEMA,
+      launchId,
+      port: selectedPort,
+      startedAt: new Date().toISOString(),
+      logPath: serveLogPath,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[!] Could not update latest-launch pointer: ${msg}`);
+  }
+
   const rollbackPriorServer = async (): Promise<void> => {
     if (movingFrom === null) return;
     try {
-      spawnDetachedServer(movingFrom.port, serveLogPath);
+      spawnDetachedServer(movingFrom.port, getServeLogPath(ccsDir));
       await waitForServerLive(movingFrom.baseUrl);
       console.log(`[OK] Restored CCS Bar server at ${movingFrom.baseUrl}.`);
     } catch (rollbackErr) {
@@ -443,14 +510,12 @@ export async function handleBarLaunch(
     }
   };
 
-  // 2b. Spawn the detached server. launch.json is not replaced until the new
-  // server is proven live, preserving the prior recovery path during a move.
-  const serveLogPath = getServeLogPath(ccsDir);
   const baseUrl = `http://127.0.0.1:${selectedPort}`;
   let spawnedChild: ChildProcess | void;
   try {
     fs.mkdirSync(getBarDir(ccsDir), { recursive: true });
-    spawnedChild = spawnDetachedServer(selectedPort, serveLogPath);
+    fs.mkdirSync(getLaunchDir(ccsDir, launchId), { recursive: true });
+    spawnedChild = spawnDetachedServer(selectedPort, serveLogPath, launchId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Could not start CCS web-server: ${msg}`);
@@ -462,7 +527,9 @@ export async function handleBarLaunch(
 
   console.log('[i] Starting CCS Bar server...');
 
-  // 2d. Poll until live or timeout.
+  // 2c. Poll until authenticated health succeeds or times out. Nothing is
+  //     published while the child is merely bound — an unresponsive child is
+  //     killed and its attempt rolled back below.
   try {
     await waitForServerLive(baseUrl);
   } catch (err) {
@@ -477,7 +544,7 @@ export async function handleBarLaunch(
     } else {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[X] Could not connect to CCS web-server: ${msg}`);
-      console.error(`[i] Check logs at ${serveLogPath}`);
+      console.error(`[i] Check the launch log at ${serveLogPath}`);
     }
     spawnedChild?.kill();
     await rollbackPriorServer();
@@ -485,7 +552,8 @@ export async function handleBarLaunch(
     return;
   }
 
-  // 2d. Persist the proven-good recovery descriptor.
+  // 2d. Health proven — publish. Recovery descriptor first, discovery last:
+  //     bar.json appearing means every other piece of this launch is in place.
   try {
     const launchDescriptor = createLaunchDescriptor({ port: selectedPort });
     writeLaunchDescriptor(launchJsonPath, launchDescriptor);
@@ -499,6 +567,7 @@ export async function handleBarLaunch(
     baseUrl,
     port: selectedPort,
     authMode: 'loopback',
+    launchId,
   };
   try {
     fs.mkdirSync(ccsDir, { recursive: true });
