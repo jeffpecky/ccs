@@ -31,9 +31,14 @@ public sealed class VisualContractTests
     [ClassInitialize]
     public static void ClassInit(TestContext context)
     {
-        // Create a single Application instance for all tests
-        s_app = new App();
-        s_app.InitializeComponent();
+        EnsureApplication();
+    }
+
+    internal static void EnsureApplication()
+    {
+        if (s_resources is not null) return;
+        s_app = Application.Current as App ?? new App();
+        if (s_app.Resources.Count == 0) s_app.InitializeComponent();
         s_resources = s_app.Resources;
     }
 
@@ -547,7 +552,7 @@ public sealed class VisualContractTests
         finally { empty.Detach(); empty.Close(); }
     }
 
-    static MainWindow CreateFixtureWindow(out BarViewModel vm, BarSummaryRow[]? rows = null)
+    internal static MainWindow CreateFixtureWindow(out BarViewModel vm, BarSummaryRow[]? rows = null)
     {
         var clock = new FixtureClock();
         var settings = new TestSettings();
@@ -581,6 +586,36 @@ public sealed class VisualContractTests
         PoolRow("gemini-pool", "cliproxy", "Gemini pool", true, false, null, 80, "ok", "2026-08-22T15:00:00+00:00", "2026-08-22T11:00:00+00:00", 0, "ok"),
         PoolRow("kiro-1", "kiro", "Kiro", false, true, "free", null, "unsupported", null, null, null, "warning"),
     ];
+
+    internal static MainWindow CreateVisualFixture(VisualFixture fixture)
+    {
+        if (fixture is VisualFixture.PopulatedLight or VisualFixture.PopulatedDark)
+            return CreateAnalyticsFixtureWindow(out _, ScreenshotAnalytics());
+        var clock = new FixtureClock();
+        var settings = new TestSettings();
+        BarViewModel vm;
+
+        if (fixture == VisualFixture.Offline)
+        {
+            vm = new BarViewModel(new TestConnector(), settings, clock);
+            vm.ReconnectAndLoadAsync(false).GetAwaiter().GetResult();
+        }
+        else
+        {
+            vm = new BarViewModel(
+                new FixtureConnector(new FixtureClient(fixture == VisualFixture.Alerts ? ExtendedAlertRows() : ScreenshotRows(), ScreenshotAnalytics())), settings, clock,
+                _ => Task.FromResult<string?>("9.9.9"), currentVersion: "0.0.0");
+            vm.ReconnectAndLoadAsync(false).GetAwaiter().GetResult();
+            if (fixture == VisualFixture.Starting)
+                typeof(BarViewModel).GetProperty(nameof(BarViewModel.IsStarting))!.SetValue(vm, true);
+            if (fixture == VisualFixture.Update)
+                vm.CheckForUpdatesAsync().GetAwaiter().GetResult();
+        }
+
+        var window = CreateMainWindow(vm, clock, settings);
+        window.Render();
+        return window;
+    }
 
     static IEnumerable<DependencyObject> Descendants(DependencyObject root)
     {
@@ -1202,7 +1237,7 @@ public sealed class VisualContractTests
 
     internal static BarAnalytics EmptyRecentAnalytics() => IdleAnalytics() with { HasRecentData = true };
 
-    static BarSummaryRow[] ExtendedAlertRows() =>
+    internal static BarSummaryRow[] ExtendedAlertRows() =>
     [
         .. ScreenshotRows(),
         PoolRow("x-pool", "cliproxy", "X pool", false, false, null, 15, "ok", "2026-08-22T16:00:00+00:00", "2026-08-22T10:00:00+00:00", 0, "ok"),
@@ -1211,7 +1246,7 @@ public sealed class VisualContractTests
         PoolRow("kiro-eu", "kiro", "Kiro EU", false, true, null, null, "unsupported", null, null, null, "warning"),
     ];
 
-    static MainWindow CreateAnalyticsFixtureWindow(out BarViewModel vm, BarAnalytics analytics)
+    internal static MainWindow CreateAnalyticsFixtureWindow(out BarViewModel vm, BarAnalytics analytics)
     {
         var clock = new FixtureClock();
         var settings = new TestSettings();
