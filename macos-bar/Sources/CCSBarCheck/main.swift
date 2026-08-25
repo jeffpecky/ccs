@@ -1628,8 +1628,8 @@ final class SelectiveTransport: HTTPTransport, @unchecked Sendable {
 }
 
 // (P1) bar.json port is probed FIRST, then fallbacks in order.
-// With no live server the probe visits: bar.json port (127.0.0.1 then ::1),
-// then 3000, 3001, ... until it finds one or exhausts all.
+// With no live server the probe visits: bar.json port on 127.0.0.1,
+// then fallback ports until it finds one or exhausts all.
 do {
   // bar.json says port 9999 (unusual, not in fallbacks). We make 127.0.0.1:9999 succeed.
   let transport = SelectiveTransport(successPrefix: "http://127.0.0.1:9999")
@@ -1666,25 +1666,15 @@ do {
   }
 }
 
-// (P3) IPv4 tried before IPv6 for each port.
-// Make only the IPv6 address of 3000 succeed so we can verify that 127.0.0.1
-// was tried before [::1] for the same port.
+// (P3) IPv6-only servers are ignored.
 do {
   let transport = SelectiveTransport(successPrefix: "http://[::1]:3000")
   let probe = BarServerProbe(transport: transport, authToken: probeAuthToken)
-  // No bar.json — nil discovery.
   let result = await probe.findLiveServer(discovery: nil)
 
-  check(result?.absoluteString.hasPrefix("http://[::1]:3000") == true,
-    "probe: IPv6 [::1]:3000 selected when 127.0.0.1:3000 is dead")
-
-  let idx4 = transport.probed.firstIndex(where: { $0.contains("127.0.0.1:3000") })
-  let idx6 = transport.probed.firstIndex(where: { $0.contains("[::1]:3000") })
-  if let i = idx4, let j = idx6 {
-    check(i < j, "probe: 127.0.0.1 tried before [::1] for same port")
-  } else {
-    check(false, "probe: expected probes for both 127.0.0.1:3000 and [::1]:3000")
-  }
+  check(result == nil, "probe: IPv6-only CCS server is ignored")
+  check(!transport.probed.contains(where: { $0.contains("[::1]") }),
+    "probe: IPv6 loopback is never probed")
 }
 
 // (P4) Returns nil when no server responds.

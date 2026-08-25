@@ -52,7 +52,7 @@ public sealed record BarDiscovery(string BaseUrl, int Port, string AuthMode)
     public bool IsSafe(out Uri? uri)
     {
         uri = null;
-        if (AuthMode != "loopback" || Port is < 1 or > 65535 || !Uri.TryCreate(BaseUrl, UriKind.Absolute, out var parsed) || parsed.Scheme != Uri.UriSchemeHttp || parsed.Port != Port || !IPAddress.TryParse(parsed.Host, out var address) || !IPAddress.IsLoopback(address) || parsed.AbsolutePath != "/" || !string.IsNullOrEmpty(parsed.Query) || !string.IsNullOrEmpty(parsed.Fragment)) return false;
+        if (AuthMode != "loopback" || Port is < 1 or > 65535 || !Uri.TryCreate(BaseUrl, UriKind.Absolute, out var parsed) || parsed.Scheme != Uri.UriSchemeHttp || parsed.Port != Port || !IPAddress.TryParse(parsed.Host, out var address) || !address.Equals(IPAddress.Loopback) || parsed.AbsolutePath != "/" || !string.IsNullOrEmpty(parsed.Query) || !string.IsNullOrEmpty(parsed.Fragment)) return false;
         uri = parsed;
         return true;
     }
@@ -85,7 +85,7 @@ public sealed record BarLaunchDescriptor(int Schema, string Runtime, IReadOnlyLi
 
 public sealed class BarServerProbe
 {
-    public static readonly int[] FallbackPorts = [3000, 3001, 3002, 8000, 8080];
+    public static readonly int[] FallbackPorts = [8080, 8181, 3000, 3001, 3002, 8000];
     readonly HttpClient http; readonly string? authToken; readonly TimeSpan probeTimeout;
     public BarServerProbe(HttpClient http, string? authToken = null, TimeSpan? probeTimeout = null, string? home = null, IReadOnlyDictionary<string, string?>? environment = null)
     { this.http = http; this.authToken = authToken ?? LoadAuthToken(home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), environment); this.probeTimeout = probeTimeout ?? TimeSpan.FromSeconds(1.5); }
@@ -103,7 +103,7 @@ public sealed class BarServerProbe
     public async Task<Uri?> FindLiveServerAsync(BarDiscovery? discovery, CancellationToken cancellationToken = default)
     {
         if (discovery?.ResolvedUri is { } discovered && await IsLiveAsync(discovered, cancellationToken)) return discovered;
-        var candidates = FallbackPorts.Where(port => port != discovery?.Port).SelectMany(port => new[] { new Uri($"http://127.0.0.1:{port}"), new Uri($"http://[::1]:{port}") }).ToArray();
+        var candidates = FallbackPorts.Where(port => port != discovery?.Port).Select(port => new Uri($"http://127.0.0.1:{port}")).ToArray();
         using var found = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); using var gate = new SemaphoreSlim(4);
         var tasks = candidates.Select(async uri => { await gate.WaitAsync(found.Token); try { return await IsLiveAsync(uri, found.Token) ? uri : null; } catch (OperationCanceledException) when (found.IsCancellationRequested && !cancellationToken.IsCancellationRequested) { return null; } finally { gate.Release(); } }).ToArray();
         while (tasks.Length > 0) { var complete = await Task.WhenAny(tasks); tasks = tasks.Where(task => task != complete).ToArray(); if (await complete is { } live) { found.Cancel(); return live; } }

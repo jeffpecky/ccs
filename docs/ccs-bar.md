@@ -60,10 +60,10 @@ Or right-click the app and choose Open.
 ccs bar          # alias: ccs bar launch
 ```
 
-This checks whether a CCS web-server is already running (probing port 3000, 3001, 3002, 8000, and 8080, with the port from the previous `bar.json` checked first). If a live server is found it is reused; otherwise a new one is started. Either way the discovery file `~/.ccs/bar.json` is written and the app is opened. The discovery file looks like this:
+This checks whether a CCS web-server is already running (probing port 8080 first, then 8181, 3000, 3001, 3002, and 8000, with the port from the previous `bar.json` checked before all defaults). If a live server is found it is reused; otherwise a new one is started. Either way the discovery file `~/.ccs/bar.json` is written and the app is opened. The discovery file looks like this:
 
 ```json
-{ "baseUrl": "http://127.0.0.1:3000", "port": 3000, "authMode": "loopback" }
+{ "baseUrl": "http://127.0.0.1:8080", "port": 8080, "authMode": "loopback" }
 ```
 
 The Swift app reads `~/.ccs/bar.json` to find the server.

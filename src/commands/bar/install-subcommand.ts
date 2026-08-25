@@ -351,7 +351,7 @@ export function validateArchiveListing(listing: string | null): void {
  * Any other status or network error → soft-warn (unreachable).
  *
  * The route is loopback-gated server-side; install-time baseUrl is always
- * loopback (bar.json baseUrl or http://127.0.0.1:3000), so the gate passes.
+ * loopback (bar.json baseUrl or http://127.0.0.1:8080), so the gate passes.
  */
 async function defaultVerifyCompat(baseUrl: string): Promise<CompatResult> {
   try {
@@ -726,7 +726,7 @@ export async function handleBarInstall(
   //    This server-side check is unrelated to Gatekeeper.
   //    Read bar.json for baseUrl if present; otherwise fall back to localhost:3000.
   const barJsonPath = path.join(ccsDir, 'bar.json');
-  let baseUrl = 'http://127.0.0.1:3000';
+  let baseUrl = 'http://127.0.0.1:8080';
   try {
     const raw = fs.readFileSync(barJsonPath, 'utf8');
     const parsed = JSON.parse(raw) as { baseUrl?: string };

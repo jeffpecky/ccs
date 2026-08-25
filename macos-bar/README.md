@@ -31,7 +31,7 @@ swift run ccs-bar-check     # run the logic tests (exits non-zero on failure)
 The app reads `~/.ccs/bar.json` (written by `ccs bar launch`):
 
 ```json
-{ "baseUrl": "http://127.0.0.1:3000", "port": 3000, "authMode": "loopback" }
+{ "baseUrl": "http://127.0.0.1:8080", "port": 8080, "authMode": "loopback" }
 ```
 
 v1 supports `authMode: "loopback"` only (dashboard auth disabled, localhost).

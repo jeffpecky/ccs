@@ -1958,7 +1958,7 @@ describe('defaultFindRunningServer (GH-1500)', () => {
     }
   });
 
-  it('detects a real HTTP server responding 200 on /api/bar/summary bound to ::1 only', async () => {
+  it('ignores a real HTTP server bound to ::1 only', async () => {
     const http = await import('http');
     const net = await import('net');
 
@@ -2049,11 +2049,7 @@ describe('defaultFindRunningServer (GH-1500)', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 
-    expect(result).not.toBeNull();
-    expect(result?.port).toBe(livePort);
-    // baseUrl must use bracketed IPv6 literal — valid in URLs per RFC 2732;
-    // the Swift app reads this verbatim and URLSession handles bracketed IPv6 hosts.
-    expect(result?.baseUrl).toBe(`http://[::1]:${livePort}`);
+    expect(result).toBeNull();
   });
 });
 

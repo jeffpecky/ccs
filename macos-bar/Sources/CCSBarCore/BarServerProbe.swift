@@ -47,15 +47,15 @@ public struct BarLaunchDescriptor: Codable, Sendable {
 
 /// Async port-probe that mirrors the TS `defaultFindRunningServer` order:
 ///   1. bar.json port (if available)
-///   2. 3000, 3001, 3002, 8000, 8080
-///   Each port is tried on 127.0.0.1 then ::1.
+///   2. 8080, 8181, 3000, 3001, 3002, 8000
+///   Each port is tried on IPv4 loopback.
 ///   Liveness check: GET /api/bar/summary -> 200 with authenticated nonce proof.
 ///
 /// The transport is injectable so the check harness can test ordering without
 /// a live server.
 public struct BarServerProbe: Sendable {
   /// Fallback probe ports in order (after bar.json port).
-  static let fallbackPorts = [3000, 3001, 3002, 8000, 8080]
+  static let fallbackPorts = [8080, 8181, 3000, 3001, 3002, 8000]
 
   private let transport: HTTPTransport
   private let authToken: String?
@@ -100,10 +100,10 @@ public struct BarServerProbe: Sendable {
     return ports
   }
 
-  /// Try 127.0.0.1 then ::1 for the given port.
+  /// Try IPv4 loopback for the given port.
   /// Returns the first base URL that responds 200 to /api/bar/summary, or nil.
   private func probePort(_ port: Int) async -> URL? {
-    let hosts = ["127.0.0.1", "::1"]
+    let hosts = ["127.0.0.1"]
     for host in hosts {
       // IPv6 addresses must be bracketed in URLs.
       let hostStr = host.contains(":") ? "[\(host)]" : host

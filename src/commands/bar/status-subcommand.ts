@@ -153,7 +153,7 @@ export async function handleBarStatus(
   }
 
   // 3. Probe HTTP reachability.
-  const baseUrl = readBarJsonBaseUrl(barJsonPath) ?? 'http://127.0.0.1:3000';
+  const baseUrl = readBarJsonBaseUrl(barJsonPath) ?? 'http://127.0.0.1:8080';
   const reachable = await probeServer(baseUrl);
 
   if (reachable) {

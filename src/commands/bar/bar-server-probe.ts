@@ -26,6 +26,8 @@ export interface DashboardInfo {
   authRequired?: boolean;
 }
 
+export const BAR_PORT_CANDIDATES: number[] = [8080, 8181, 3000, 3001, 3002, 8000];
+
 function isValidPort(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 1 && (value as number) <= 65535;
 }
@@ -70,8 +72,8 @@ export function resolveBarPort(ccsDir: string): number | null {
 /**
  * Probe candidate ports for a running CCS server.
  *
- * Both IPv4 (127.0.0.1) and IPv6 (::1) loopback addresses are probed for each
- * port. All probes are fired concurrently so worst-case latency is ~1.5 s
+ * IPv4 loopback is used consistently so Windows cannot run separate IPv4 and
+ * IPv6 CCS servers on the same numeric port. All probes are fired concurrently so worst-case latency is ~1.5 s
  * (one timeout) rather than N × 1.5 s sequentially. Results are awaited in
  * priority order so a lower-priority slow or streaming response cannot block
  * returning an already-known higher-priority hit.
@@ -165,14 +167,15 @@ export async function defaultFindRunningServer(ccsDir: string): Promise<Dashboar
   }
 
   const barJsonPort = resolveBarPort(ccsDir);
-  const base = [3000, 3001, 3002, 8000, 8080];
+  const base = BAR_PORT_CANDIDATES;
   const candidates: number[] =
     barJsonPort !== null ? [barJsonPort, ...base.filter((p) => p !== barJsonPort)] : base;
 
-  const probeTargets = candidates.flatMap((port) => [
-    { port, baseUrl: `http://127.0.0.1:${port}`, url: `http://127.0.0.1:${port}/api/bar/summary` },
-    { port, baseUrl: `http://[::1]:${port}`, url: `http://[::1]:${port}/api/bar/summary` },
-  ]);
+  const probeTargets = candidates.map((port) => ({
+    port,
+    baseUrl: `http://127.0.0.1:${port}`,
+    url: `http://127.0.0.1:${port}/api/bar/summary`,
+  }));
 
   const probes = probeTargets.map((t) => probe(t.url));
 

@@ -1,4 +1,5 @@
 import { startServer } from './web-server';
+import { DEFAULT_LOCAL_DASHBOARD_HOST, DEFAULT_LOCAL_DASHBOARD_PORT } from './web-server/server-defaults';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -7,8 +8,8 @@ async function main(): Promise<void> {
     if (await tryHandleRootCommand(args)) return;
   }
 
-  const port = parseInt(process.env.PORT || '8080', 10);
-  const host = process.env.HOST || 'localhost';
+  const port = parseInt(process.env.PORT || String(DEFAULT_LOCAL_DASHBOARD_PORT), 10);
+  const host = process.env.HOST || DEFAULT_LOCAL_DASHBOARD_HOST;
 
   await startServer({ port, host });
   console.log(`Dashboard running at http://${host}:${port}`);

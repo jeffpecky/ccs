@@ -15,6 +15,12 @@ public sealed class CoreTests
     const string AnalyticsJson = "{\"today\":{\"cost\":1,\"requests\":2},\"last7d\":{\"cost\":3,\"requests\":4},\"last30d\":{\"cost\":5,\"requests\":6},\"allTime\":{\"cost\":7,\"requests\":8},\"byDay\":[],\"topModels\":[],\"topModelsWindow\":\"30d\",\"lastActivityAt\":null,\"daysSinceLastActivity\":null,\"hasRecentData\":true,\"generatedAt\":\"now\"}";
 
     [TestMethod]
+    public void Probe_PrefersDashboardPortsBeforeLegacyBarPorts()
+    {
+        CollectionAssert.AreEqual(new[] { 8080, 8181, 3000, 3001, 3002, 8000 }, BarServerProbe.FallbackPorts);
+    }
+
+    [TestMethod]
     public void Auth_ProofsAreDirectionMethodAndPathBound()
     {
         var proof = BarAuth.Proof(Token, "request", "GET", "/api/bar/summary?b=2&a=1", "ab".PadRight(32, '0'));
@@ -83,7 +89,7 @@ public sealed class CoreTests
         File.WriteAllText(BarDiscovery.DefaultPath(temp.Path), "{\"baseUrl\":\"http://127.0.0.1:3000\",\"port\":0,\"authMode\":\"none\"}");
         Assert.AreEqual(BarDiscoveryState.Unsafe, BarDiscovery.Load(temp.Path).State);
         File.WriteAllText(BarDiscovery.DefaultPath(temp.Path), "{\"baseUrl\":\"http://[::1]:4321\",\"port\":4321,\"authMode\":\"loopback\"}");
-        Assert.AreEqual(BarDiscoveryState.Ready, BarDiscovery.Load(temp.Path).State);
+        Assert.AreEqual(BarDiscoveryState.Unsafe, BarDiscovery.Load(temp.Path).State);
     }
 
     [TestMethod]

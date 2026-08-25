@@ -45,7 +45,7 @@ export async function showHelp(): Promise<void> {
       'Examples:',
       [
         ['ccs bar', 'Start the server detached and open CCS Bar'],
-        ['ccs bar --port 3999', 'Start (or move) the server on port 3999 instead of 3000'],
+        ['ccs bar --port 3999', 'Start (or move) the server on port 3999 instead of 8080'],
         ['ccs bar stop', 'Stop the detached CCS Bar server'],
         ['ccs bar status', 'Show server running state and PID'],
         ['ccs bar install', 'Download and install CCS Bar, then prompt to launch'],

@@ -38,6 +38,7 @@ import type { LaunchJson } from './bar-paths';
 import { createBarLaunchDescriptor } from './launch-descriptor';
 import { parsePortFlag, validatePortArgs } from './port-arg';
 import {
+  BAR_PORT_CANDIDATES,
   defaultFindRunningServer as _defaultFindRunningServer,
   resolveBarPort as _resolveBarPort,
 } from './bar-server-probe';
@@ -411,7 +412,7 @@ export async function handleBarLaunch(
       port = requestedPort;
     } else {
       const stickyPort = _resolveBarPort(ccsDir);
-      const base = [3000, 3001, 3002, 8000, 8080];
+      const base = BAR_PORT_CANDIDATES;
       const candidates =
         stickyPort !== null ? [stickyPort, ...base.filter((p) => p !== stickyPort)] : base;
       port = await getPortFn({ port: candidates, host: '127.0.0.1' });

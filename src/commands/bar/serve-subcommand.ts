@@ -16,7 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getCcsDir } from '../../config/config-loader-facade';
 import { getBarJsonPath, getServerPidPath } from './bar-paths';
-import { defaultFindRunningServer, resolveBarPort } from './bar-server-probe';
+import { BAR_PORT_CANDIDATES, defaultFindRunningServer, resolveBarPort } from './bar-server-probe';
 import { parsePortFlag, validatePortArgs } from './port-arg';
 import type { DashboardInfo } from './bar-server-probe';
 import type { BarDiscoveryJson } from './launch-subcommand';
@@ -163,7 +163,7 @@ export async function handleBarServe(args: string[], deps: Partial<ServeDeps> = 
     port = requestedPort;
   } else {
     const stickyPort = resolveBarPort(ccsDir);
-    const base = [3000, 3001, 3002, 8000, 8080];
+    const base = BAR_PORT_CANDIDATES;
     const candidates =
       stickyPort !== null ? [stickyPort, ...base.filter((p) => p !== stickyPort)] : base;
     port = await getPortFn({ port: candidates, host: '127.0.0.1' });
