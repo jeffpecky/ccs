@@ -379,11 +379,10 @@ public sealed class VisualContractTests
         Assert.AreNotEqual("1.0.0", expected);
     }
 
-    static MainWindow CreateMainWindow(BarViewModel vm, IBarClock? clock = null)
+    static MainWindow CreateMainWindow(BarViewModel vm, IBarClock? clock = null, IBarSettings? settings = null, Action? installUpdate = null)
     {
-        var settingsType = typeof(MainWindow).Assembly.GetType("CCSBar.App.JsonBarSettings")!;
-        var settings = Activator.CreateInstance(settingsType, nonPublic: true)!;
-        return (MainWindow)Activator.CreateInstance(typeof(MainWindow), BindingFlags.Instance | BindingFlags.NonPublic, null, [vm, settings, clock], null)!;
+        var appSettings = settings ?? Activator.CreateInstance(typeof(MainWindow).Assembly.GetType("CCSBar.App.JsonBarSettings")!, nonPublic: true)!;
+        return (MainWindow)Activator.CreateInstance(typeof(MainWindow), BindingFlags.Instance | BindingFlags.NonPublic, null, [vm, appSettings, clock, installUpdate], null)!;
     }
 
     const string CardTag = "subscription-card";
@@ -551,8 +550,9 @@ public sealed class VisualContractTests
     static MainWindow CreateFixtureWindow(out BarViewModel vm, BarSummaryRow[]? rows = null)
     {
         var clock = new FixtureClock();
-        vm = new BarViewModel(new FixtureConnector(new FixtureClient(rows ?? ScreenshotRows())), new TestSettings(), clock);
-        var window = CreateMainWindow(vm, clock);
+        var settings = new TestSettings();
+        vm = new BarViewModel(new FixtureConnector(new FixtureClient(rows ?? ScreenshotRows())), settings, clock);
+        var window = CreateMainWindow(vm, clock, settings);
         vm.ReconnectAndLoadAsync(false).GetAwaiter().GetResult();
         window.Render();
         return window;
@@ -593,9 +593,22 @@ public sealed class VisualContractTests
     }
 
     static IReadOnlyList<T> All<T>(DependencyObject root) => Descendants(root).OfType<T>().ToArray();
+    static IEnumerable<T> DescendantsOf<T>(DependencyObject root) where T : DependencyObject => Descendants(root).OfType<T>();
     static IReadOnlyList<T> Tagged<T>(DependencyObject root, object tag) where T : FrameworkElement => Descendants(root).OfType<T>().Where(x => Equals(x.Tag, tag)).ToArray();
     static T? Named<T>(DependencyObject root, string name) where T : DependencyObject => Descendants(root).OfType<T>().FirstOrDefault(x => AutomationProperties.GetName(x) == name);
     static TextBlock? Text(DependencyObject root, string text) => Descendants(root).OfType<TextBlock>().FirstOrDefault(t => t.Text == text);
+    static TextBlock? Text(DependencyObject root, Func<string, bool> match) => Descendants(root).OfType<TextBlock>().FirstOrDefault(t => match(t.Text));
+    static IReadOnlyList<string> LogicalTexts(DependencyObject root)
+    {
+        var texts = new List<string>();
+        void Walk(DependencyObject node)
+        {
+            if (node is TextBlock block) texts.Add(block.Text);
+            foreach (var child in LogicalTreeHelper.GetChildren(node)) if (child is DependencyObject dependency) Walk(dependency);
+        }
+        Walk(root);
+        return texts;
+    }
     static string[] ChipTexts(DependencyObject root) => [.. Descendants(root)
         .OfType<Border>()
         .Where(b => b.Child is TextBlock && b.CornerRadius.TopLeft == 100)
@@ -607,10 +620,10 @@ public sealed class VisualContractTests
 
     sealed class FixtureClock : IBarClock { public DateTimeOffset Now => FixtureNow; }
     sealed class FixtureConnector(IBarDataClient client) : IBarConnector { public Task<IBarDataClient?> ConnectAsync(bool launch, CancellationToken cancellationToken) => Task.FromResult<IBarDataClient?>(client); }
-    sealed class FixtureClient(IReadOnlyList<BarSummaryRow> rows) : IBarDataClient
+    sealed class FixtureClient(IReadOnlyList<BarSummaryRow> rows, BarAnalytics? analytics = null) : IBarDataClient
     {
         public Task<IReadOnlyList<BarSummaryRow>> SummaryAsync(bool force, CancellationToken ct) => Task.FromResult(rows);
-        public Task<BarAnalytics?> AnalyticsAsync(CancellationToken ct) => Task.FromResult<BarAnalytics?>(null);
+        public Task<BarAnalytics?> AnalyticsAsync(CancellationToken ct) => Task.FromResult(analytics);
         public Task PauseAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
         public Task ResumeAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
         public Task SoloAsync(BarSummaryRow row, CancellationToken ct) => Task.CompletedTask;
@@ -787,6 +800,426 @@ public sealed class VisualContractTests
         var track = (SolidColorBrush)resources["TrackBrush"];
         Assert.AreEqual(Color.FromRgb(0x1D, 0x1D, 0x1F), track.Color);
         Assert.AreEqual(.12, track.Opacity);
+    }
+
+    // ---- Task 8: analytics, alerts, and update UI contracts ----
+
+    [TestMethod]
+    public void SpendAxis_Formatters_MatchMacOSLabels()
+    {
+        Assert.AreEqual("12a", BarCardFormatting.HourShort("2026-08-22 00:00"));
+        Assert.AreEqual("6a", BarCardFormatting.HourShort("2026-08-22 06:00"));
+        Assert.AreEqual("12p", BarCardFormatting.HourShort("2026-08-22 12:00"));
+        Assert.AreEqual("6p", BarCardFormatting.HourShort("2026-08-22 18:00"));
+        Assert.AreEqual("11p", BarCardFormatting.HourShort("2026-08-22 23:00"));
+        Assert.IsNull(BarCardFormatting.HourShort("garbage"));
+        Assert.IsNull(BarCardFormatting.HourShort("2026-08-22T11:00"));
+        Assert.AreEqual("Sun", BarCardFormatting.WeekdayShort("2026-08-16"));
+        Assert.AreEqual("Sat", BarCardFormatting.WeekdayShort("2026-08-22"));
+        Assert.IsNull(BarCardFormatting.WeekdayShort("22-08-2026"));
+        Assert.AreEqual("Jul 24", BarCardFormatting.MonthDayShort("2026-07-24"));
+        Assert.IsNull(BarCardFormatting.MonthDayShort(null));
+    }
+
+    [TestMethod]
+    public void SpendAxis_Ticks_MatchMacOSPlacement()
+    {
+        var analytics = ScreenshotAnalytics();
+
+        var today = SpendAxis.Ticks(SpendPeriod.Today, analytics.ByHour, analytics.ByDay);
+        CollectionAssert.AreEqual(new[] { "12a", "6a", "12p", "6p", "11p" }, today.Select(t => t.Label).ToArray());
+        double[] todayFractions = [0.5 / 24, 6.5 / 24, 12.5 / 24, 18.5 / 24, 23.5 / 24];
+        for (var i = 0; i < todayFractions.Length; i++) Assert.AreEqual(todayFractions[i], today[i].Fraction, 1e-9);
+
+        var week = SpendAxis.Ticks(SpendPeriod.Last7d, analytics.ByHour, analytics.ByDay);
+        CollectionAssert.AreEqual(new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }, week.Select(t => t.Label).ToArray());
+        for (var i = 0; i < 7; i++) Assert.AreEqual((i + 0.5) / 7, week[i].Fraction, 1e-9);
+
+        var month = SpendAxis.Ticks(SpendPeriod.Last30d, analytics.ByHour, analytics.ByDay);
+        CollectionAssert.AreEqual(new[] { "Jul 24", "Jul 31", "Aug 7", "Aug 14", "Aug 22" }, month.Select(t => t.Label).ToArray());
+        Assert.AreEqual(5, month.Count);
+
+        Assert.AreEqual(0, SpendAxis.Ticks(SpendPeriod.Last30d, analytics.ByHour, analytics.ByDay.Take(1).ToArray()).Count);
+        Assert.AreEqual(0, SpendAxis.Ticks(SpendPeriod.Today, [], analytics.ByDay).Count);
+    }
+
+    [TestMethod]
+    public void Sparkline_Geometry_MatchesSwiftBarsContract()
+    {
+        var rects = Sparkline.BarGeometry([0, 1, 2], 100, 56);
+        Assert.AreEqual(3, rects.Count);
+        var barWidth = (100 - 2 * Sparkline.BarGap) / 3;
+        for (var i = 0; i < 3; i++) Assert.AreEqual(i * (barWidth + Sparkline.BarGap), rects[i].X, 1e-9);
+        CollectionAssert.AreEqual(new[] { Sparkline.MinBarHeight, 28d, 56d }, rects.Select(r => r.Height).ToArray());
+        CollectionAssert.AreEqual(new[] { true, false, false }, rects.Select(r => r.Placeholder).ToArray());
+        Assert.AreEqual(2, Sparkline.Corner);
+        Assert.AreEqual(3, Sparkline.BarGap);
+    }
+
+    [TestMethod]
+    public void Sparkline_LineAndBaseline_MatchSwiftContract()
+    {
+        var points = Sparkline.LineGeometry([0, 3], 90, 56);
+        Assert.AreEqual(0, points[0].X, 1e-9);
+        Assert.AreEqual(56, points[0].Y, 1e-9);
+        Assert.AreEqual(90, points[1].X, 1e-9);
+        Assert.AreEqual(0, points[1].Y, 1e-9);
+        Assert.IsTrue(Sparkline.IsBaseline([]));
+        Assert.IsTrue(Sparkline.IsBaseline([0, 0]));
+        Assert.IsTrue(Sparkline.IsBaseline([4]));
+        Assert.IsFalse(Sparkline.IsBaseline([0, 1]));
+        Assert.AreEqual(1.5, Sparkline.StrokeWidth);
+        Assert.AreEqual(0.15, Sparkline.AreaFillOpacity);
+        Assert.AreEqual(0.20, Sparkline.BaselineOpacity);
+    }
+
+    [TestMethod]
+    public void Alerts_GroupingDedupesAndRanksBySeverity()
+    {
+        var groups = AlertDisplay.Group(
+        [
+            new BarNotification("a", "Account paused", "Mirror is paused", BarAlertKind.AccountCooldownOrPaused),
+            new BarNotification("b", "Quota low", "x has 15% remaining", BarAlertKind.QuotaRemainingBelow),
+            new BarNotification("c", "Re-authentication needed", "m needs sign-in", BarAlertKind.ReauthNeeded),
+            new BarNotification("d", "Account paused", "Mirror is paused", BarAlertKind.AccountCooldownOrPaused),
+            new BarNotification("e", "Daily spend cap", "over cap", BarAlertKind.DailySpendAbove),
+            new BarNotification("f", "Account paused", "other is paused", BarAlertKind.AccountCooldownOrPaused),
+        ]);
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                BarAlertKind.ReauthNeeded, BarAlertKind.DailySpendAbove, BarAlertKind.QuotaRemainingBelow,
+                BarAlertKind.AccountCooldownOrPaused, BarAlertKind.AccountCooldownOrPaused,
+            },
+            groups.Select(g => g.Alert.Kind).ToArray());
+        Assert.AreEqual(2, groups.Single(g => g.Alert.Body == "Mirror is paused").Count);
+    }
+
+    [TestMethod]
+    public void TextFit_MiddleEllipsis_TrimsCenterNotTail()
+    {
+        Assert.AreEqual("abcdefghij", TextFit.MiddleEllipsis("abcdefghij", 10));
+        Assert.AreEqual("ab…ij", TextFit.MiddleEllipsis("abcdefghij", 5));
+        Assert.AreEqual("…x", TextFit.MiddleEllipsis("abcdefx", 2));
+    }
+
+    [STATestMethod]
+    public void MainWindow_SpendStrip_MatchesMacOSContract()
+    {
+        var window = CreateAnalyticsFixtureWindow(out var vm, ScreenshotAnalytics());
+        try
+        {
+            NormalizeSpendUi(vm, window);
+            var panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "SPEND"));
+            Assert.IsNotNull(Text(panel, "7d $18.40"), "Caption must sit above the chart and sum the charted series");
+            var chart = Tagged<Sparkline>(panel, "spend-chart").Single();
+            Assert.AreEqual(56d, chart.Height);
+            Assert.AreEqual(SpendChartStyle.Bars, chart.ChartStyle);
+            Assert.AreEqual(7, chart.Values.Length);
+            var axis = Tagged<Canvas>(panel, "spend-axis").Single();
+            Assert.AreEqual(12d, axis.Height);
+            var labels = axis.Children.OfType<TextBlock>().ToArray();
+            CollectionAssert.AreEqual(new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }, labels.Select(l => l.Text).ToArray());
+            Assert.IsTrue(labels.All(l => l.FontSize == 9 && Equals(l.FontFamily, s_resources!["FontFamily.Mono"])), "Axis labels are 9pt monospaced");
+            var lefts = labels.Select(Canvas.GetLeft).ToArray();
+            Assert.IsTrue(lefts.Zip(lefts.Skip(1), (a, b) => a < b).All(ok => ok), "Weekday labels progress left to right");
+
+            var today = Named<Button>(panel, "Spend period Today")!;
+            var seven = Named<Button>(panel, "Spend period 7d")!;
+            var thirty = Named<Button>(panel, "Spend period 30d")!;
+            Assert.AreEqual(FontWeights.SemiBold, seven.FontWeight);
+            Assert.AreEqual(FontWeights.Normal, today.FontWeight);
+            Assert.AreEqual(((SolidColorBrush)s_resources!["AccentBrush"]).Color, ((SolidColorBrush)seven.Foreground).Color);
+            Assert.AreNotEqual(((SolidColorBrush)s_resources!["AccentBrush"]).Color, ((SolidColorBrush)today.Foreground).Color);
+            var toggle = Named<Button>(panel, "Switch spend chart style")!;
+            Assert.AreEqual("Spend graph: switch to line", toggle.ToolTip?.ToString());
+
+            Invoke(thirty);
+            NormalizeSpendUi(vm, window, keepSelection: true);
+            panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "30d $61.20"));
+            Assert.AreEqual(SpendPeriod.Last30d, vm.Ui.SpendPeriod);
+            Assert.AreEqual(5, Tagged<Canvas>(panel, "spend-axis").Single().Children.OfType<TextBlock>().Count());
+
+            Invoke(Named<Button>(panel, "Spend period Today")!);
+            NormalizeSpendUi(vm, window, keepSelection: true);
+            panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "today $11.85"), "Today caption sums hourly series");
+            Assert.IsNull(Text(panel, "$9.99"), "Caption must not fall back to the daily aggregate when hours exist");
+            var hourLabels = Tagged<Canvas>(panel, "spend-axis").Single().Children.OfType<TextBlock>().Select(l => l.Text).ToArray();
+            CollectionAssert.AreEqual(new[] { "12a", "6a", "12p", "6p", "11p" }, hourLabels);
+
+            Invoke(Named<Button>(panel, "Switch spend chart style")!);
+            NormalizeSpendUi(vm, window, keepSelection: true);
+            panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.AreEqual(SpendChartStyle.Line, Tagged<Sparkline>(panel, "spend-chart").Single().ChartStyle);
+            Assert.AreEqual(SpendChartStyle.Line, vm.Ui.ChartStyle);
+            Assert.AreEqual("Spend graph: switch to bars", Named<Button>(panel, "Switch spend chart style")!.ToolTip?.ToString());
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [STATestMethod]
+    public void MainWindow_SpendIdle_ShowsHonestCopyAndHidesControls()
+    {
+        var window = CreateAnalyticsFixtureWindow(out _, IdleAnalytics());
+        try
+        {
+            var panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "No usage in 12 days · last active aug 10"), "Honest idle line replaces dead cells");
+            Assert.IsNull(Named<Button>(panel, "Spend period Today"), "Period selector hidden without recent data");
+            Assert.IsNull(Named<Button>(panel, "Spend period 30d"));
+            Assert.IsNull(Named<Button>(panel, "Switch spend chart style"), "Toggle hidden without recent data");
+            Assert.AreEqual(0, Tagged<Sparkline>(panel, "spend-chart").Count());
+            Assert.AreEqual(0, Tagged<Canvas>(panel, "spend-axis").Count());
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [STATestMethod]
+    public void MainWindow_SpendAllZero_SuppressesToggleKeepsFrame()
+    {
+        var window = CreateAnalyticsFixtureWindow(out var vm, EmptyRecentAnalytics());
+        try
+        {
+            NormalizeSpendUi(vm, window);
+            var panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "7d $0.00"));
+            Assert.IsNull(Named<Button>(panel, "Switch spend chart style"), "Toggle hidden while the charted series is all zero");
+            Assert.IsNotNull(Named<Button>(panel, "Spend period 7d"), "Selector stays while recent data exists");
+            Assert.AreEqual(1, Tagged<Sparkline>(panel, "spend-chart").Count, "Chart frame stays visible");
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [STATestMethod]
+    public void MainWindow_Breakdown_MatchesMacOSRowContract()
+    {
+        var window = CreateAnalyticsFixtureWindow(out _, ScreenshotAnalytics());
+        try
+        {
+            Layout(window);
+            var panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "BY SURFACE"));
+            Assert.IsNotNull(Text(panel, "TOP MODELS · 30D"));
+
+            var rows = Tagged<Grid>(panel, "breakdown-row").ToArray();
+            Assert.AreEqual(9, rows.Length, "Max 5 surfaces + max 4 models");
+            foreach (var row in rows)
+            {
+                Assert.AreEqual(26d, row.Height);
+                var fill = Tagged<Border>(row, "breakdown-fill").Single();
+                Assert.AreEqual(new CornerRadius(5), fill.CornerRadius);
+                Assert.AreEqual(0.16, fill.Opacity, 1e-6);
+            }
+
+            var surfaceRow = rows.First(r => Text(r, "claude-code") is not null);
+            Assert.AreEqual(((SolidColorBrush)s_resources!["SubscriptionBrush"]).Color, ((SolidColorBrush)Tagged<Border>(surfaceRow, "breakdown-fill").Single().Background).Color, "Surface rows tint with subscription color");
+            Assert.IsNotNull(Text(surfaceRow, "120"), "Request count shown for surfaces");
+            Assert.IsNotNull(Text(surfaceRow, "$20.40"));
+            var cursorRow = rows.First(r => Text(r, "cursor") is not null);
+            var cursorFill = Tagged<Border>(cursorRow, "breakdown-fill").Single();
+            Assert.AreEqual(Math.Max(8, cursorRow.ActualWidth * (0.80 / 20.40)), cursorFill.Width, 0.01, "Proportional fill with 8 DIP floor");
+            Assert.AreEqual(surfaceRow.ActualWidth, Tagged<Border>(surfaceRow, "breakdown-fill").Single().Width, 0.01, "Peak row spans full width");
+
+            var modelRow = rows.First(r => Text(r, "$12.40") is not null);
+            Assert.AreEqual(((SolidColorBrush)s_resources!["AccentBrush"]).Color, ((SolidColorBrush)Tagged<Border>(modelRow, "breakdown-fill").Single().Background).Color, "Model rows tint with accent color");
+            var trimmed = Text(modelRow, t => t.StartsWith("claude-opus-4-1"))!;
+            Assert.IsTrue(trimmed.Text.Contains('…'), "Long model names truncate");
+            Assert.IsTrue(trimmed.Text.IndexOf('…') < trimmed.Text.Length - 1, "Truncation is middle, not tail");
+            Assert.IsTrue(trimmed.Text.EndsWith("suffix"), "Middle truncation keeps the tail of the name");
+            Assert.IsNotNull(rows.SelectMany(DescendantsOf<TextBlock>).FirstOrDefault(t => t.Text == "gpt-5-codex"), "Short model names stay intact");
+            var money = DescendantsOf<TextBlock>(modelRow).Single(t => t.Text == "$12.40");
+            Assert.AreEqual(s_resources["FontFamily.Mono"], money.FontFamily, "Costs render monospaced");
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [STATestMethod]
+    public void MainWindow_Alerts_GroupDedupeRankCollapseAndTint()
+    {
+        var window = CreateFixtureWindow(out var vm, ExtendedAlertRows());
+        try
+        {
+            vm.Ui = vm.Ui with { AlertsExpanded = false };
+            window.Render();
+            var panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "ALERTS"));
+            var badge = Tagged<Border>(panel, "alert-count-badge").Single();
+            Assert.AreEqual("6", ((TextBlock)badge.Child!).Text, "Badge shows grouped total");
+
+            var collapsed = Tagged<Border>(panel, "alert-row").ToArray();
+            Assert.AreEqual(3, collapsed.Length, "Only the most-severe three render collapsed");
+            var accent = ((SolidColorBrush)s_resources!["AccentBrush"]).Color;
+            var muted = ((SolidColorBrush)s_resources!["MutedBrush"]).Color;
+            Assert.AreEqual(Color.FromArgb(20, accent.R, accent.G, accent.B), ((SolidColorBrush)collapsed[0].Background).Color, "Quota rows tint accent at 8%");
+            Assert.AreEqual("claude-code has 8% remaining", DescendantsOf<TextBlock>(collapsed[0]).First(t => t.Tag as string != "alert-icon").Text);
+            Assert.AreEqual(Color.FromArgb(20, muted.R, muted.G, muted.B), ((SolidColorBrush)collapsed[2].Background).Color, "Paused rows tint muted at 8%");
+            Assert.IsTrue(collapsed.All(r => DescendantsOf<TextBlock>(r).Any(t => (t.Tag as string) == "alert-icon")), "Every row carries an icon");
+
+            var more = Named<Button>(panel, "Show all alerts")!;
+            StringAssert.Contains(LogicalTexts(more).First(t => t.Contains("more")), "3 more");
+            Invoke(more);
+            vm.Ui = vm.Ui with { AlertsExpanded = true };
+            window.Render();
+            panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.AreEqual(6, Tagged<Border>(panel, "alert-row").Count(), "Expand reveals every group");
+            Assert.AreEqual(1, Tagged<Border>(panel, "alert-row").Count(r => DescendantsOf<TextBlock>(r).Any(t => t.Text == "×2")), "Duplicate conditions merge with ×2");
+            Assert.IsNotNull(Text(panel, "Mirror is paused"));
+            Assert.IsNotNull(Named<Button>(panel, "Show fewer alerts"));
+            Assert.IsTrue(vm.Ui.AlertsExpanded);
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [STATestMethod]
+    public async Task MainWindow_UpdateBanner_MatchesMacOSStates()
+    {
+        var clock = new FixtureClock();
+        var settings = new TestSettings();
+        var vm = new BarViewModel(
+            new FixtureConnector(new FixtureClient(ScreenshotRows(), ScreenshotAnalytics())), settings, clock,
+            _ => Task.FromResult<string?>("9.9.9"), currentVersion: "0.0.0");
+        await vm.ReconnectAndLoadAsync(false);
+        await vm.CheckForUpdatesAsync();
+        var installed = 0;
+        var failNext = false;
+        var window = CreateMainWindow(vm, clock, settings, () => { installed++; if (failNext) throw new InvalidOperationException("boom"); });
+        try
+        {
+            window.Render();
+            var panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "UPDATE"));
+            Assert.IsNotNull(Text(panel, "Update available"));
+            Assert.IsNotNull(Text(panel, "CCS Bar 9.9.9"), "Version label present");
+            var card = Tagged<Border>(panel, "update-banner").Single();
+            var accent = ((SolidColorBrush)s_resources!["AccentBrush"]).Color;
+            Assert.AreEqual(Color.FromArgb(26, accent.R, accent.G, accent.B), ((SolidColorBrush)card.Background).Color, "Banner tinted accent at 10%");
+            var now = Named<Button>(panel, "Install CCS Bar update")!;
+            StringAssert.Contains(now.Content!.ToString()!, "Update Now");
+
+            Invoke(now);
+            Assert.AreEqual(1, installed);
+            Assert.IsTrue(vm.IsInstallingUpdate);
+            panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Text(panel, "Updating..."), "Progress state replaces the button");
+            Assert.IsTrue(Tagged<ProgressBar>(panel, "update-progress").Single().IsIndeterminate);
+            Assert.IsNull(Named<Button>(panel, "Install CCS Bar update"));
+
+            vm.IsInstallingUpdate = false;
+            window.Render();
+            panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.IsNotNull(Named<Button>(panel, "Install CCS Bar update"), "Button restores after install hands off");
+
+            failNext = true;
+            Invoke(Named<Button>(panel, "Install CCS Bar update")!);
+            Assert.AreEqual(2, installed);
+            Assert.IsFalse(vm.IsInstallingUpdate);
+            panel = (StackPanel)window.FindName("ContentPanel")!;
+            Assert.AreEqual("boom", Tagged<TextBlock>(panel, "update-error").Single().Text, "Install failures surface inline");
+            Assert.IsNotNull(Named<Button>(panel, "Install CCS Bar update"));
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    static void NormalizeSpendUi(BarViewModel? vm = null, MainWindow? window = null, bool keepSelection = false)
+    {
+        if (vm is null) return;
+        var period = keepSelection ? vm.Ui.SpendPeriod : SpendPeriod.Last7d;
+        vm.Ui = vm.Ui with { SpendPeriod = period, ChartStyle = vm.Ui.ChartStyle };
+        if (window is null) return;
+        window.Render();
+        Layout(window);
+    }
+
+    /// <summary>Unshown windows are Collapsed and fail to measure; lay out the content subtree instead.</summary>
+    static void Layout(MainWindow window)
+    {
+        var content = (UIElement)window.Content;
+        content.Measure(new Size(360, 900));
+        content.Arrange(new Rect(0, 0, 360, content.DesiredSize.Height));
+        content.UpdateLayout();
+    }
+
+    internal static BarAnalytics ScreenshotAnalytics()
+    {
+        double[] last7 = [2.00, 2.50, 3.00, 0.00, 4.20, 3.50, 3.20];
+        var byDay = Enumerable.Range(0, 30).Select(i =>
+        {
+            var cost = i >= 23 ? last7[i - 23] : i % 4 == 0 ? 0 : Math.Round(0.80 + 0.10 * i, 2);
+            return new BarAnalyticsDay(DateTimeOffset.Parse("2026-07-24T00:00:00+00:00").AddDays(i).ToString("yyyy-MM-dd"), cost, (int)(cost * 10));
+        }).ToArray();
+        double[] hourCosts = [0, 0, 0.20, 0, 0.35, 0, 0.60, 0.90, 1.20, 0.75, 1.10, 0.85, 0.40, 0.95, 0, 0.55, 1.05, 0.65, 0, 0.50, 0.80, 0.45, 0.30, 0.25];
+        var byHour = hourCosts.Select((c, h) => new BarAnalyticsHour($"2026-08-22 {h:00}:00", c, h)).ToArray();
+        return new BarAnalytics
+        {
+            Today = new(9.99, 999),
+            Last7d = new(18.40, 210),
+            Last30d = new(61.20, 900),
+            MonthToDate = new(40.00, 600),
+            AllTime = new(500.00, 4000),
+            ByDay = byDay,
+            ByHour = byHour,
+            TopModels =
+            [
+                new BarAnalyticsModel("claude-opus-4-1-20250805-thinking-ultra-preview-extended-long-suffix", 12.40, 40),
+                new BarAnalyticsModel("claude-sonnet-4-20250514", 8.10, 33),
+                new BarAnalyticsModel("gemini-2.5-pro", 4.20, 21),
+                new BarAnalyticsModel("gpt-5-codex", 2.80, 12),
+                new BarAnalyticsModel("deepseek-chat-v3", 0.90, 6),
+            ],
+            TopModelsWindow = "30d",
+            BySurface =
+            [
+                new BarAnalyticsSurface("claude-code", "claude-code", 20.40, 120),
+                new BarAnalyticsSurface("codex", "codex", 9.50, 60),
+                new BarAnalyticsSurface("kiro", "kiro", 3.25, 18),
+                new BarAnalyticsSurface("opencode", "opencode", 1.75, 9),
+                new BarAnalyticsSurface("cursor", "cursor", 0.80, 5),
+                new BarAnalyticsSurface("warp", "warp", 0.20, 2),
+            ],
+            LastActivityAt = "2026-08-22T11:48:00+00:00",
+            DaysSinceLastActivity = null,
+            HasRecentData = true,
+            GeneratedAt = "2026-08-22T12:00:00+00:00",
+        };
+    }
+
+    internal static BarAnalytics IdleAnalytics() => new()
+    {
+        Today = new(0, 0), Last7d = new(0, 0), Last30d = new(0, 0), MonthToDate = new(0, 0), AllTime = new(0, 0),
+        ByDay = Enumerable.Range(0, 30).Select(i => new BarAnalyticsDay(DateTimeOffset.Parse("2026-07-24T00:00:00+00:00").AddDays(i).ToString("yyyy-MM-dd"), 0, 0)).ToArray(),
+        ByHour = [],
+        TopModels = [],
+        TopModelsWindow = "all-time",
+        BySurface = [],
+        LastActivityAt = "2026-08-10T09:00:00+00:00",
+        DaysSinceLastActivity = 12,
+        HasRecentData = false,
+        GeneratedAt = "2026-08-22T12:00:00+00:00",
+    };
+
+    internal static BarAnalytics EmptyRecentAnalytics() => IdleAnalytics() with { HasRecentData = true };
+
+    static BarSummaryRow[] ExtendedAlertRows() =>
+    [
+        .. ScreenshotRows(),
+        PoolRow("x-pool", "cliproxy", "X pool", false, false, null, 15, "ok", "2026-08-22T16:00:00+00:00", "2026-08-22T10:00:00+00:00", 0, "ok"),
+        PoolRow("mirror-a", "cliproxy", "Mirror", false, true, null, null, "unsupported", null, null, null, "ok"),
+        PoolRow("mirror-b", "cliproxy", "Mirror", false, true, null, null, "unsupported", null, null, null, "ok"),
+        PoolRow("kiro-eu", "kiro", "Kiro EU", false, true, null, null, "unsupported", null, null, null, "warning"),
+    ];
+
+    static MainWindow CreateAnalyticsFixtureWindow(out BarViewModel vm, BarAnalytics analytics)
+    {
+        var clock = new FixtureClock();
+        var settings = new TestSettings();
+        vm = new BarViewModel(new FixtureConnector(new FixtureClient(ScreenshotRows(), analytics)), settings, clock);
+        var window = CreateMainWindow(vm, clock, settings);
+        vm.ReconnectAndLoadAsync(false).GetAwaiter().GetResult();
+        window.Render();
+        return window;
     }
 }
 

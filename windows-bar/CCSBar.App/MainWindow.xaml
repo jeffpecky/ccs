@@ -47,7 +47,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <ScrollViewer x:Name="ContentScroll" MaxHeight="780" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="ContentScroll" MaxHeight="780" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled">
                     <Grid>
                         <StackPanel x:Name="ContentPanel" Margin="14,12"/>
                         <StackPanel x:Name="EmptyState" Margin="14" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed">

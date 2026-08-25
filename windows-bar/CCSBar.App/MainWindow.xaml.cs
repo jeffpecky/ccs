@@ -12,6 +12,9 @@ using Application = System.Windows.Application;
 using Brush = System.Windows.Media.Brush;
 using Brushes = System.Windows.Media.Brushes;
 using Button = System.Windows.Controls.Button;
+using Control = System.Windows.Controls.Control;
+using FlowDirection = System.Windows.FlowDirection;
+using ProgressBar = System.Windows.Controls.ProgressBar;
 using Color = System.Windows.Media.Color;
 using FontFamily = System.Windows.Media.FontFamily;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
@@ -23,10 +26,16 @@ namespace CCSBar.App;
 public partial class MainWindow : Window
 {
     const int WMMouseHWheel = 0x020E;
-    readonly BarViewModel vm; readonly JsonBarSettings settings; readonly IBarClock clock; bool quitArmed; SettingsWindow? settingsWindow; bool firstShow = true;
+    readonly BarViewModel vm; readonly IBarSettings settings; readonly IBarClock clock; bool quitArmed; SettingsWindow? settingsWindow; bool firstShow = true; string? updateError;
+    readonly Action installUpdate;
     readonly List<(StackPanel Host, ProfileCarousel Carousel, Action Paint)> carousels = [];
-    internal MainWindow(BarViewModel vm, JsonBarSettings settings, IBarClock? clock = null)
-    { InitializeComponent(); this.vm = vm; this.settings = settings; this.clock = clock ?? new SystemBarClock(); VersionText.Text = $"v{CCSBar.App.VersionText.Value}"; vm.PropertyChanged += ViewModelChanged; Loaded += (_, _) => Render(); }
+    internal MainWindow(BarViewModel vm, IBarSettings settings, IBarClock? clock = null, Action? installUpdate = null)
+    {
+        InitializeComponent(); this.vm = vm; this.settings = settings; this.clock = clock ?? new SystemBarClock();
+        this.installUpdate = installUpdate ?? DefaultInstallUpdate;
+        VersionText.Text = $"v{CCSBar.App.VersionText.Value}"; vm.PropertyChanged += ViewModelChanged; Loaded += (_, _) => Render();
+    }
+    static void DefaultInstallUpdate() => new WindowsBarUpdater(WindowsProcess.Start).Install();
     DateTimeOffset Now => clock.Now;
     void ViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => Dispatcher.BeginInvoke(Render);
     public void Detach() => vm.PropertyChanged -= ViewModelChanged;
@@ -59,7 +68,8 @@ public partial class MainWindow : Window
         if (!IsInitialized) return; OfflinePanel.Visibility = vm.Offline || vm.IsStarting ? Visibility.Visible : Visibility.Collapsed; ContentScroll.Visibility = OfflinePanel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
         OfflineTitle.Text = vm.IsStarting ? "Starting CCS…" : "CCS is not running"; OfflineBody.Text = "Start CCS, then the menu will connect automatically."; OfflineBody.Visibility = OfflineActions.Visibility = vm.IsStarting ? Visibility.Collapsed : Visibility.Visible; StartingProgress.Visibility = vm.IsStarting ? Visibility.Visible : Visibility.Collapsed; StartButton.IsEnabled = RetryButton.IsEnabled = !vm.IsStarting; HeaderRefresh.Visibility = vm.IsRefreshing ? Visibility.Visible : Visibility.Collapsed; AutomationProperties.SetLiveSetting(StatusText, AutomationLiveSetting.Polite); StatusText.Text = vm.StatusTitle;
         ContentPanel.Children.Clear(); carousels.Clear(); EmptyState.Visibility = Visibility.Collapsed; if (vm.Offline || vm.IsStarting) return;
-        if (vm.UpdateAvailable) ContentPanel.Children.Add(Banner("Update available", $"CCS Bar {vm.LatestVersion}", "AccentBrush")); if (vm.SummaryStale) ContentPanel.Children.Add(Banner("Accounts stale", "Showing last successful account refresh.", "AmberBrush"));
+        updateError = vm.UpdateAvailable ? updateError : null;
+        if (vm.UpdateAvailable) ContentPanel.Children.Add(UpdateBanner()); if (vm.SummaryStale) ContentPanel.Children.Add(Banner("Accounts stale", "Showing last successful account refresh.", "AmberBrush"));
         AddAlerts(); var (subscriptions, pool) = BarRows.Partition(vm.Rows); AddSubscriptions(subscriptions); AddSpend(); AddPool(subscriptions, pool); AddBreakdown(); EmptyState.Visibility = ContentPanel.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         if (!string.IsNullOrEmpty(focusName)) FindNamedControl(ContentPanel, focusName)?.Focus();
         if (vm.LastError is not null) ContentPanel.Children.Add(Banner("Last refresh failed", vm.LastError, "RedBrush"));
@@ -70,9 +80,64 @@ public partial class MainWindow : Window
     }
     void AddAlerts()
     {
-        if (vm.ActiveAlerts.Count == 0) return; ContentPanel.Children.Add(Section("ALERTS")); var expanded = settings.Ui.AlertsExpanded; var shown = expanded ? vm.ActiveAlerts : vm.ActiveAlerts.Take(3);
-        foreach (var alert in shown) ContentPanel.Children.Add(Banner(alert.Title, alert.Body, alert.Kind is BarAlertKind.ReauthNeeded ? "RedBrush" : "AmberBrush"));
-        if (!expanded && vm.ActiveAlerts.Count > 3) { var more = new Button { Content = $"+{vm.ActiveAlerts.Count - 3} more", HorizontalAlignment = HorizontalAlignment.Left }; AutomationProperties.SetName(more, "Show all alerts"); more.Click += (_, _) => { settings.Ui = settings.Ui with { AlertsExpanded = true }; settings.Save(); Render(); }; ContentPanel.Children.Add(more); }
+        if (vm.ActiveAlerts.Count == 0) return;
+        var groups = AlertDisplay.Group(vm.ActiveAlerts);
+        var header = new StackPanel { Orientation = Orientation.Horizontal };
+        header.Children.Add(Section("ALERTS"));
+        var badge = new Border { CornerRadius = new(100), Padding = new(5, 1, 5, 1), VerticalAlignment = VerticalAlignment.Center, Margin = new(6, 0, 0, 0), Tag = "alert-count-badge", Background = Tinted("MutedBrush", 0.18) };
+        var badgeText = new TextBlock { Text = groups.Count.ToString(), FontSize = 10, FontWeight = FontWeights.SemiBold };
+        badgeText.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        badge.Child = badgeText;
+        header.Children.Add(badge);
+        ContentPanel.Children.Add(header);
+        var expanded = settings.Ui.AlertsExpanded;
+        var overflow = groups.Count - 3;
+        foreach (var group in groups.Take(expanded ? groups.Count : 3)) ContentPanel.Children.Add(AlertRow(group));
+        if (overflow > 0)
+        {
+            var more = new Button { Background = Brushes.Transparent, Padding = new(2, 1, 2, 1), Margin = new(0, 2, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, HorizontalContentAlignment = HorizontalAlignment.Left };
+            more.SetResourceReference(Control.ForegroundProperty, "MutedBrush");
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            var chevron = new TextBlock { Text = expanded ? "\uE70E" : "\uE70D", FontSize = 9, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center };
+            chevron.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+            row.Children.Add(chevron);
+            var label = new TextBlock { Text = expanded ? "Show less" : $"{overflow} more", FontSize = 11, Margin = new(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            label.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+            row.Children.Add(label);
+            more.Content = row;
+            AutomationProperties.SetName(more, expanded ? "Show fewer alerts" : "Show all alerts");
+            more.Click += (_, _) => { settings.Ui = settings.Ui with { AlertsExpanded = !settings.Ui.AlertsExpanded }; settings.Save(); Render(); };
+            ContentPanel.Children.Add(more);
+        }
+    }
+    FrameworkElement AlertRow(AlertGroup group)
+    {
+        var alert = group.Alert;
+        var (glyph, mono, tintKey) = alert.Kind switch
+        {
+            BarAlertKind.ReauthNeeded => ("\uE72E", true, "RedBrush"),
+            BarAlertKind.DailySpendAbove or BarAlertKind.MonthSpendAbove => ("$", false, "AccentBrush"),
+            BarAlertKind.QuotaRemainingBelow => ("\uE7BA", true, "AccentBrush"),
+            _ => ("\uE769", true, "MutedBrush"),
+        };
+        var row = new Border { CornerRadius = new(6), Padding = new(8, 4, 8, 4), Margin = new(0, 1, 0, 1), Tag = "alert-row", Background = Tinted(tintKey, 0.08) };
+        AutomationProperties.SetName(row, $"{alert.Title}: {alert.Body}");
+        var line = new StackPanel { Orientation = Orientation.Horizontal };
+        var icon = new TextBlock { Text = glyph, FontSize = 11, Width = 12, Tag = "alert-icon", VerticalAlignment = VerticalAlignment.Center };
+        if (mono) icon.FontFamily = new FontFamily("Segoe MDL2 Assets");
+        icon.SetResourceReference(TextBlock.ForegroundProperty, tintKey);
+        line.Children.Add(icon);
+        var body = new TextBlock { Text = alert.Body, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new(6, 0, 0, 0) };
+        body.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        line.Children.Add(body);
+        if (group.Count > 1)
+        {
+            var count = new TextBlock { Text = $"×{group.Count}", FontSize = 9, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new(6, 0, 0, 0) };
+            count.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+            line.Children.Add(count);
+        }
+        row.Child = line;
+        return row;
     }
     void AddSubscriptions(IReadOnlyList<BarSummaryRow> subscriptions)
     {
@@ -237,10 +302,116 @@ public partial class MainWindow : Window
     };
     void AddSpend()
     {
-        if (vm.Analytics is not { } a) return; ContentPanel.Children.Add(Section("SPEND")); if (vm.AnalyticsStale) ContentPanel.Children.Add(Muted("Spend data stale · showing last successful refresh")); var stack = new StackPanel(); var period = settings.Ui.SpendPeriod; var current = period switch { SpendPeriod.Today => a.Today, SpendPeriod.Last30d => a.Last30d, _ => a.Last7d };
-        var top = new DockPanel(); top.Children.Add(new TextBlock { Text = $"today {BarFormatting.Money(a.Today.Cost)} · 7d {BarFormatting.Money(a.Last7d.Cost)}", Foreground = (Brush)FindResource("MutedBrush") }); var toggle = SmallButton(settings.Ui.ChartStyle == SpendChartStyle.Bars ? "Line" : "Bars"); DockPanel.SetDock(toggle, Dock.Right); toggle.Click += (_, _) => { settings.Ui = settings.Ui with { ChartStyle = settings.Ui.ChartStyle == SpendChartStyle.Bars ? SpendChartStyle.Line : SpendChartStyle.Bars }; settings.Save(); Render(); }; top.Children.Add(toggle); stack.Children.Add(top);
-        var periods = new StackPanel { Orientation = Orientation.Horizontal }; foreach (var item in Enum.GetValues<SpendPeriod>()) { var button = SmallButton(item switch { SpendPeriod.Today => "Today", SpendPeriod.Last7d => "7d", _ => "30d" }); button.IsEnabled = item != period; button.Click += (_, _) => { settings.Ui = settings.Ui with { SpendPeriod = item }; settings.Save(); Render(); }; periods.Children.Add(button); } stack.Children.Add(periods);
-        var values = period == SpendPeriod.Today ? a.ByHour.Select(x => x.Cost) : a.ByDay.TakeLast(period == SpendPeriod.Last7d ? 7 : 30).Select(x => x.Cost); stack.Children.Add(new SpendChart { Values = values.ToArray(), ChartStyle = settings.Ui.ChartStyle, Height = 42, Margin = new(0, 4, 0, 2) }); stack.Children.Add(Muted($"{BarFormatting.Money(current.Cost)} · {BarFormatting.Count(current.Requests)} requests")); ContentPanel.Children.Add(Card(stack));
+        if (vm.Analytics is not { } a) return;
+        var period = settings.Ui.SpendPeriod;
+        var series = SpendSeries(a, period);
+        var allZero = Sparkline.IsBaseline(series) && series.Length > 0;
+        ContentPanel.Children.Add(new Separator { Margin = new(0, 2, 0, 6) });
+        var strip = new StackPanel { Margin = new(0, 0, 0, 7) };
+        var header = new DockPanel();
+        var controls = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        if (a.HasRecentData) controls.Children.Add(PeriodSelector(period));
+        if (a.HasRecentData && !allZero) controls.Children.Add(StyleToggle());
+        DockPanel.SetDock(controls, Dock.Right);
+        header.Children.Add(controls);
+        header.Children.Add(Section("SPEND"));
+        strip.Children.Add(header);
+        if (!a.HasRecentData)
+        {
+            strip.Children.Add(Muted(IdleCaption(a)));
+            ContentPanel.Children.Add(strip);
+            return;
+        }
+        var caption = new TextBlock { Text = SpendCaption(a, period), FontSize = 11, Margin = new(0, 2, 0, 0) };
+        caption.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        strip.Children.Add(caption);
+        strip.Children.Add(new Sparkline { Values = series, ChartStyle = settings.Ui.ChartStyle, Height = 56, Margin = new(0, 4, 0, 2), Tag = "spend-chart" });
+        strip.Children.Add(SpendAxisCanvas(period, a));
+        ContentPanel.Children.Add(strip);
+    }
+    static double[] SpendSeries(BarAnalytics analytics, SpendPeriod period) => period switch
+    {
+        SpendPeriod.Today => [.. analytics.ByHour.Select(x => x.Cost)],
+        SpendPeriod.Last7d => [.. analytics.ByDay.TakeLast(7).Select(x => x.Cost)],
+        _ => [.. analytics.ByDay.Select(x => x.Cost)],
+    };
+    string SpendCaption(BarAnalytics analytics, SpendPeriod period) => period switch
+    {
+        // Each period sums the SAME series it charts so the caption always matches the visible bars.
+        SpendPeriod.Today => $"today {BarFormatting.Money(analytics.ByHour.Count == 0 ? analytics.Today.Cost : analytics.ByHour.Sum(x => x.Cost))}",
+        SpendPeriod.Last7d => $"7d {BarFormatting.Money(analytics.ByDay.TakeLast(7).Sum(x => x.Cost))}",
+        _ => $"30d {BarFormatting.Money(analytics.Last30d.Cost)}",
+    };
+    string IdleCaption(BarAnalytics analytics)
+    {
+        var headline = analytics.DaysSinceLastActivity is { } days ? $"No usage in {days} days" : "No usage in 30 days";
+        if (BarFormatting.LastActiveLabel(analytics.LastActivityAt, analytics.DaysSinceLastActivity, Now) is { } lastActive) headline += $" · {lastActive.ToLowerInvariant()}";
+        return headline;
+    }
+    FrameworkElement PeriodSelector(SpendPeriod current)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        foreach (var item in Enum.GetValues<SpendPeriod>())
+        {
+            var value = item;
+            var selected = item == current;
+            var label = item switch { SpendPeriod.Today => "Today", SpendPeriod.Last7d => "7d", _ => "30d" };
+            var button = new Button
+            {
+                Content = label, FontSize = 10, FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal,
+                Background = Brushes.Transparent, Padding = new(4, 0, 4, 0), Margin = new(2, 0, 0, 0),
+            };
+            AutomationProperties.SetName(button, $"Spend period {label}");
+            button.SetResourceReference(Control.ForegroundProperty, selected ? "AccentBrush" : "MutedBrush");
+            button.Click += (_, _) => { settings.Ui = settings.Ui with { SpendPeriod = value }; settings.Save(); Render(); };
+            row.Children.Add(button);
+        }
+        return row;
+    }
+    Button StyleToggle()
+    {
+        var toLine = settings.Ui.ChartStyle == SpendChartStyle.Bars;
+        var toggle = new Button
+        {
+            Content = toLine ? "Line" : "Bars", FontSize = 10, Background = Brushes.Transparent,
+            Padding = new(4, 0, 4, 0), Margin = new(6, 0, 0, 0), ToolTip = $"Spend graph: switch to {(toLine ? "line" : "bars")}",
+        };
+        AutomationProperties.SetName(toggle, "Switch spend chart style");
+        toggle.SetResourceReference(Control.ForegroundProperty, "MutedBrush");
+        toggle.Click += (_, _) =>
+        {
+            settings.Ui = settings.Ui with { ChartStyle = settings.Ui.ChartStyle == SpendChartStyle.Bars ? SpendChartStyle.Line : SpendChartStyle.Bars };
+            settings.Save(); Render();
+        };
+        return toggle;
+    }
+    FrameworkElement SpendAxisCanvas(SpendPeriod period, BarAnalytics analytics)
+    {
+        var canvas = new Canvas { Height = 12, Tag = "spend-axis" };
+        var ticks = SpendAxis.Ticks(period, analytics.ByHour, analytics.ByDay);
+        foreach (var (labelText, fraction) in ticks)
+        {
+            var label = new TextBlock { Text = labelText, FontSize = 9, FontFamily = (FontFamily)FindResource("FontFamily.Mono"), Tag = "axis-label" };
+            label.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+            canvas.Children.Add(label);
+        }
+        void Layout()
+        {
+            if (canvas.ActualWidth <= 0 || canvas.Children.Count == 0) return;
+            for (var i = 0; i < canvas.Children.Count; i++)
+            {
+                var label = (TextBlock)canvas.Children[i];
+                // ~2.75 DIP per char at 9pt monospaced is half a glyph; clamp keeps first/last labels on-screen.
+                var halfWidth = Math.Max(8, ticks[i].Label.Length * 2.75);
+                var width = canvas.ActualWidth;
+                var center = Math.Min(Math.Max(ticks[i].Fraction * width, halfWidth), Math.Max(halfWidth, width - halfWidth));
+                Canvas.SetLeft(label, center - label.ActualWidth / 2);
+                Canvas.SetTop(label, 1);
+            }
+        }
+        canvas.SizeChanged += (_, _) => Layout();
+        canvas.Loaded += (_, _) => Layout();
+        return canvas;
     }
     void AddPool(IReadOnlyList<BarSummaryRow> subscriptions, IReadOnlyList<BarSummaryRow> pool)
     {
@@ -340,9 +511,54 @@ public partial class MainWindow : Window
     }
     void AddBreakdown()
     {
-        if (vm.Analytics is not { } a) return; if (a.BySurface.Count > 0) { ContentPanel.Children.Add(Section("BY SURFACE")); foreach (var item in a.BySurface.Take(5)) ContentPanel.Children.Add(BarRow(item.Surface, item.Cost, a.BySurface.Max(x => x.Cost), "SubscriptionBrush")); } if (a.TopModels.Count > 0) { ContentPanel.Children.Add(Section($"TOP MODELS · {(a.TopModelsWindow == "30d" ? "30D" : "ALL-TIME")}")); foreach (var item in a.TopModels.Take(4)) ContentPanel.Children.Add(BarRow(item.Model, item.Cost, a.TopModels.Max(x => x.Cost), "AccentBrush")); }
+        if (vm.Analytics is not { } a) return;
+        if (a.BySurface.Count > 0)
+        {
+            ContentPanel.Children.Add(Section("BY SURFACE"));
+            var peak = a.BySurface.Max(x => x.Cost);
+            foreach (var item in a.BySurface.Take(5)) ContentPanel.Children.Add(BreakdownRow(item.Surface, item.Cost, item.Requests, peak, "SubscriptionBrush"));
+        }
+        if (a.TopModels.Count > 0)
+        {
+            ContentPanel.Children.Add(Section($"TOP MODELS · {(a.TopModelsWindow == "30d" ? "30D" : "ALL-TIME")}"));
+            var peak = a.TopModels.Max(x => x.Cost);
+            foreach (var item in a.TopModels.Take(4)) ContentPanel.Children.Add(BreakdownRow(item.Model, item.Cost, null, peak, "AccentBrush"));
+        }
     }
-    UIElement BarRow(string label, double cost, double peak, string brush) { var grid = new Grid { Height = 27, Margin = new(0, 2, 0, 2), Background = (Brush)FindResource("CardBrush") }; var fill = new Border { Background = (Brush)FindResource(brush), Opacity = .18, HorizontalAlignment = HorizontalAlignment.Left, Width = Math.Max(8, 310 * (peak > 0 ? cost / peak : 0)), CornerRadius = new(5) }; grid.Children.Add(fill); var dock = new DockPanel { Margin = new(9, 4, 9, 3) }; var money = new TextBlock { Text = BarFormatting.Money(cost), FontFamily = (FontFamily)FindResource("FontFamily.Mono"), Foreground = (Brush)FindResource("MutedBrush") }; DockPanel.SetDock(money, Dock.Right); dock.Children.Add(money); dock.Children.Add(new TextBlock { Text = label, TextTrimming = TextTrimming.CharacterEllipsis }); grid.Children.Add(dock); return grid; }
+    FrameworkElement BreakdownRow(string label, double cost, int? requests, double peak, string tintKey)
+    {
+        var grid = new Grid { Height = 26, Margin = new(0, 1, 0, 1), Tag = "breakdown-row" };
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var fraction = peak > 0 ? cost / peak : 0;
+        var fill = new Border { CornerRadius = new(5), HorizontalAlignment = HorizontalAlignment.Left, Tag = "breakdown-fill", Opacity = 0.16 };
+        fill.SetResourceReference(Border.BackgroundProperty, tintKey);
+        Grid.SetColumnSpan(fill, 2);
+        grid.Children.Add(fill);
+        var name = new TextBlock { Text = label, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new(10, 0, 10, 0) };
+        Grid.SetColumn(name, 0);
+        grid.Children.Add(name);
+        var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 10, 0) };
+        if (requests is { } count)
+        {
+            var requestsText = new TextBlock { Text = BarFormatting.Count(count), FontFamily = (FontFamily)FindResource("FontFamily.Mono"), FontSize = 11, Opacity = 0.75, VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 6, 0) };
+            requestsText.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+            right.Children.Add(requestsText);
+        }
+        var money = new TextBlock { Text = BarFormatting.Money(cost), FontFamily = (FontFamily)FindResource("FontFamily.Mono"), FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+        money.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        right.Children.Add(money);
+        Grid.SetColumn(right, 1);
+        grid.Children.Add(right);
+        grid.SizeChanged += (_, _) =>
+        {
+            fill.Width = Math.Max(8, grid.ActualWidth * fraction);
+            // Middle truncation budget: full row minus padding plus whatever the right cluster needs.
+            var reserved = 20 + right.DesiredSize.Width;
+            name.Text = TextFit.Fit(label, Math.Max(24, grid.ActualWidth - reserved), name.FontFamily, name.FontSize);
+        };
+        return grid;
+    }
     FrameworkElement HealthDot(BarSummaryRow row)
     {
         var key = row.Health == "error" ? "RedBrush" : row.Health == "warning" ? "AmberBrush" : "GreenBrush";
@@ -395,16 +611,134 @@ public partial class MainWindow : Window
     TextBlock Muted(string text) => new() { Text = text, FontSize = 11, Foreground = (Brush)FindResource("MutedBrush"), TextWrapping = TextWrapping.Wrap, Margin = new(0, 3, 0, 2) };
     Border Banner(string title, string body, string brush) { var stack = new StackPanel(); var heading = new TextBlock { Text = title, FontWeight = FontWeights.SemiBold }; heading.SetResourceReference(TextBlock.ForegroundProperty, brush); stack.Children.Add(heading); stack.Children.Add(Muted(body)); return Card(stack); }
     System.Windows.Controls.Button SmallButton(string text) { var button = new Button { Content = text, Padding = new(6, 2, 6, 2), Margin = new(2), FontSize = 11 }; AutomationProperties.SetName(button, text); return button; }
+    FrameworkElement UpdateBanner()
+    {
+        var wrap = new StackPanel { Margin = new(0, 0, 0, 7) };
+        wrap.Children.Add(Section("UPDATE"));
+        var card = new Border { CornerRadius = new(8), Padding = new(10, 6, 10, 6), Tag = "update-banner", Background = Tinted("AccentBrush", 0.10) };
+        var dock = new DockPanel();
+        var icon = new TextBlock { Text = "\uE896", FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 16, VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 10, 0) };
+        icon.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+        DockPanel.SetDock(icon, Dock.Left);
+        dock.Children.Add(icon);
+        var action = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        DockPanel.SetDock(action, Dock.Right);
+        if (vm.IsInstallingUpdate)
+        {
+            var progress = new ProgressBar { Width = 14, Height = 14, IsIndeterminate = true, Tag = "update-progress", VerticalAlignment = VerticalAlignment.Center };
+            action.Children.Add(progress);
+            var updating = new TextBlock { Text = "Updating...", FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new(6, 0, 0, 0) };
+            updating.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+            action.Children.Add(updating);
+        }
+        else
+        {
+            var now = new Button { Content = "Update Now", Background = Brushes.Transparent, Padding = new(6, 2, 6, 2), FontWeight = FontWeights.Medium };
+            AutomationProperties.SetName(now, "Install CCS Bar update");
+            now.SetResourceReference(Control.ForegroundProperty, "AccentBrush");
+            now.Click += InstallUpdate_Click;
+            action.Children.Add(now);
+        }
+        dock.Children.Add(action);
+        var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        texts.Children.Add(new TextBlock { Text = "Update available", FontSize = 12, FontWeight = FontWeights.SemiBold });
+        if (vm.LatestVersion is { } version)
+        {
+            var label = new TextBlock { Text = $"CCS Bar {version}", FontSize = 11, Margin = new(0, 1, 0, 0) };
+            label.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+            texts.Children.Add(label);
+        }
+        dock.Children.Add(texts);
+        card.Child = dock;
+        wrap.Children.Add(card);
+        if (updateError is { } error)
+        {
+            var inline = new TextBlock { Text = error, FontSize = 11, Tag = "update-error", TextWrapping = TextWrapping.Wrap, Margin = new(2, 4, 2, 0) };
+            inline.SetResourceReference(TextBlock.ForegroundProperty, "RedBrush");
+            wrap.Children.Add(inline);
+        }
+        return wrap;
+    }
+    void InstallUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (vm.IsInstallingUpdate) return;
+        updateError = null;
+        vm.IsInstallingUpdate = true;
+        Render();
+        try { installUpdate(); }
+        catch (Exception exception)
+        {
+            // A failed launch restores the action; a successful hand-off keeps the
+            // progress state until the installer swaps and relaunches the app.
+            updateError = exception.Message;
+            vm.IsInstallingUpdate = false;
+        }
+        Render();
+    }
     async void Refresh_Click(object sender, RoutedEventArgs e) => await vm.ForceRefreshAsync(); async void Retry_Click(object sender, RoutedEventArgs e) => await vm.RetryAsync(); async void Start_Click(object sender, RoutedEventArgs e) => await vm.StartAsync();
     void Icon_Click(object sender, RoutedEventArgs e) { settings.Ui = settings.Ui with { IconStyle = settings.Ui.IconStyle == BarIconStyle.Color ? BarIconStyle.Template : BarIconStyle.Color }; settings.Save(); ((App)Application.Current).SettingsChanged(); }
     void Dashboard_Click(object sender, RoutedEventArgs e) { if (vm.ActiveBaseUrl is not null) try { new DashboardLauncher(WindowsProcess.Start).Open(vm.ActiveBaseUrl); } catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "CCS Bar", MessageBoxButton.OK, MessageBoxImage.Error); } Hide(); }
-    void Settings_Click(object sender, RoutedEventArgs e) { settingsWindow ??= new SettingsWindow(vm, settings) { Owner = null }; settingsWindow.Closed += (_, _) => settingsWindow = null; settingsWindow.Show(); settingsWindow.Activate(); }
+    void Settings_Click(object sender, RoutedEventArgs e) { settingsWindow ??= new SettingsWindow(vm, (JsonBarSettings)settings) { Owner = null }; settingsWindow.Closed += (_, _) => settingsWindow = null; settingsWindow.Show(); settingsWindow.Activate(); }
     void Quit_Click(object sender, RoutedEventArgs e) { if (!quitArmed) { quitArmed = true; QuitButton.Content = "Confirm quit"; QuitButton.Foreground = (Brush)FindResource("RedBrush"); return; } ((App)Application.Current).Exit(); }
     void Window_Deactivated(object sender, EventArgs e) { if (firstShow) { firstShow = false; return; } if (settingsWindow?.IsActive != true) Hide(); } void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { if (e.Key == Key.Escape) Hide(); }
 }
 
-sealed class SpendChart : FrameworkElement
+/// <summary>
+/// Alert presentation helpers mirroring BarMenuView: de-duplicate alerts by their
+/// visible text and rank by severity so the most actionable condition leads.
+/// </summary>
+public static class AlertDisplay
 {
-    public double[] Values { get; set; } = []; public SpendChartStyle ChartStyle { get; set; }
-    protected override void OnRender(DrawingContext dc) { base.OnRender(dc); if (Values.Length == 0) return; var peak = Values.Max(); if (peak <= 0) return; var brush = (Brush)FindResource("AccentBrush"); var step = ActualWidth / Values.Length; if (ChartStyle == SpendChartStyle.Bars) { for (var i = 0; i < Values.Length; i++) { var h = (ActualHeight - 2) * Values[i] / peak; dc.DrawRoundedRectangle(brush, null, new System.Windows.Rect(i * step + 1, ActualHeight - h, Math.Max(2, step - 2), h), 2, 2); } } else { var geometry = new StreamGeometry(); using (var c = geometry.Open()) { c.BeginFigure(new(0, ActualHeight - Values[0] / peak * ActualHeight), false, false); for (var i = 1; i < Values.Length; i++) c.LineTo(new(i * step, ActualHeight - Values[i] / peak * ActualHeight), true, false); } dc.DrawGeometry(null, new Pen(brush, 2), geometry); } }
+    public static int SeverityRank(BarAlertKind kind) => kind switch
+    {
+        BarAlertKind.ReauthNeeded => 0,
+        BarAlertKind.DailySpendAbove or BarAlertKind.MonthSpendAbove => 1,
+        BarAlertKind.QuotaRemainingBelow => 2,
+        _ => 3,
+    };
+
+    public static IReadOnlyList<AlertGroup> Group(IEnumerable<BarNotification> alerts)
+    {
+        var order = new List<string>();
+        var byKey = new Dictionary<string, (BarNotification Alert, int Count)>();
+        foreach (var alert in alerts)
+        {
+            var key = alert.Title + "\u001F" + alert.Body;
+            if (byKey.TryGetValue(key, out var hit)) byKey[key] = (hit.Alert, hit.Count + 1);
+            else { byKey[key] = (alert, 1); order.Add(key); }
+        }
+        return [.. order.Select(key => new AlertGroup(byKey[key].Alert, byKey[key].Count)).OrderBy(group => SeverityRank(group.Alert.Kind))];
+    }
+}
+
+public sealed record AlertGroup(BarNotification Alert, int Count);
+
+/// <summary>Middle truncation for long surface/model labels (WPF lacks a middle-trim mode).</summary>
+public static class TextFit
+{
+    public static string MiddleEllipsis(string value, int maxChars)
+    {
+        if (maxChars < 1) maxChars = 1;
+        if (value.Length <= maxChars) return value;
+        var head = (maxChars - 1) / 2;
+        var tail = maxChars - 1 - head;
+        return tail > 0 ? value[..head] + "…" + value[^tail..] : value[..head] + "…";
+    }
+
+    public static string Fit(string value, double maxWidth, FontFamily family, double fontSize, double pixelsPerDip = 1.0)
+    {
+        if (Measure(value, family, fontSize, pixelsPerDip) <= maxWidth) return value;
+        int low = 1, high = value.Length, best = 1;
+        while (low <= high)
+        {
+            var mid = (low + high) / 2;
+            if (Measure(MiddleEllipsis(value, mid), family, fontSize, pixelsPerDip) <= maxWidth) { best = mid; low = mid + 1; }
+            else high = mid - 1;
+        }
+        return MiddleEllipsis(value, Math.Max(best, 3));
+    }
+
+    static double Measure(string text, FontFamily family, double fontSize, double pixelsPerDip) =>
+        new FormattedText(text, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+            new Typeface(family, FontStyles.Normal, FontWeights.Regular, FontStretches.Normal), fontSize, Brushes.Black, pixelsPerDip).Width;
 }

@@ -78,6 +78,30 @@ public static class BarCardFormatting
     public static string? ClockTime(string? iso) => DateTimeOffset.TryParse(iso, out var date)
         ? date.ToString("HH:mm", CultureInfo.InvariantCulture)
         : null;
+
+    // Axis label formatters for the spend chart, mirroring macOS BarCardFormatting.
+
+    /// <summary>Short hour label from a byHour key "YYYY-MM-DD HH:00", e.g. "12a", "6p".</summary>
+    public static string? HourShort(string? key)
+    {
+        if (key is null || key.Length < 13 || key[10] != ' ') return null;
+        if (!int.TryParse(key.AsSpan(11, 2), out var hour)) return null;
+        return hour switch
+        {
+            0 => "12a",
+            < 12 => $"{hour}a",
+            12 => "12p",
+            _ => $"{hour - 12}p",
+        };
+    }
+
+    /// <summary>Short weekday label from a byDay key "YYYY-MM-DD", e.g. "Mon".</summary>
+    public static string? WeekdayShort(string? key) => DayKey(key)?.ToString("ddd", CultureInfo.InvariantCulture);
+
+    /// <summary>Short month+day label from a byDay key "YYYY-MM-DD", e.g. "Jun 5".</summary>
+    public static string? MonthDayShort(string? key) => DayKey(key)?.ToString("MMM d", CultureInfo.InvariantCulture);
+
+    static DateTime? DayKey(string? key) => DateTime.TryParseExact(key, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
 }
 
 public static class BarRows
