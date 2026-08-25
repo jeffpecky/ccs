@@ -1,12 +1,240 @@
-<Window x:Class="CCSBar.App.SettingsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="CCS Bar Settings" Width="520" Height="690" MinWidth="440" MinHeight="540" WindowStartupLocation="CenterScreen">
-    <DockPanel Background="{DynamicResource WindowBrush}"><TextBlock DockPanel.Dock="Top" Text="CCS Bar Settings" FontSize="20" FontWeight="SemiBold" Margin="20,18,20,10" Foreground="{DynamicResource TextBrush}"/><Button DockPanel.Dock="Bottom" Content="Close" HorizontalAlignment="Right" Margin="12" Padding="18,6" Click="Close_Click"/>
-        <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="20,4">
-            <GroupBox Header="Appearance" Margin="0,5"><StackPanel Margin="10"><TextBlock Text="Theme"/><ComboBox x:Name="AppearanceBox" SelectionChanged="Save_Changed"><ComboBoxItem Content="System"/><ComboBoxItem Content="Light"/><ComboBoxItem Content="Dark"/></ComboBox><TextBlock Text="Tray icon" Margin="0,8,0,0"/><ComboBox x:Name="IconBox" SelectionChanged="Save_Changed"><ComboBoxItem Content="Template"/><ComboBoxItem Content="Color"/></ComboBox></StackPanel></GroupBox>
-            <GroupBox Header="Glance" Margin="0,5"><StackPanel Margin="10"><TextBlock Text="Tray glance"/><ComboBox x:Name="GlanceBox" SelectionChanged="Save_Changed"><ComboBoxItem Content="Auto (smart)"/><ComboBoxItem Content="Today's spend"/><ComboBoxItem Content="This month's spend"/><ComboBoxItem Content="Lowest quota"/><ComboBoxItem Content="Active account count"/></ComboBox><TextBlock Text="Spend period" Margin="0,8,0,0"/><ComboBox x:Name="PeriodBox" SelectionChanged="Save_Changed"><ComboBoxItem Content="Today"/><ComboBoxItem Content="Last 7 days"/><ComboBoxItem Content="Last 30 days"/></ComboBox><TextBlock Text="Chart style changes inline or from panel footer." FontSize="11" Margin="0,8,0,0"/></StackPanel></GroupBox>
-            <GroupBox Header="Updates" Margin="0,5"><CheckBox x:Name="AutoUpdates" Content="Automatically check for updates" Margin="10" Click="Save_Changed"/></GroupBox>
-            <GroupBox Header="Quota alerts" Margin="0,5"><StackPanel Margin="10"><CheckBox x:Name="QuotaEnabled" Content="Quota remaining alerts" Click="Save_Changed"/><TextBox x:Name="QuotaLevels" Margin="20,3,0,8" ToolTip="Comma-separated remaining percentages" LostFocus="Save_Changed"/></StackPanel></GroupBox>
-            <GroupBox Header="Spend alerts" Margin="0,5"><StackPanel Margin="10"><CheckBox x:Name="DailyEnabled" Content="Daily spend cap" Click="Save_Changed"/><TextBox x:Name="DailyCap" Margin="20,3,0,8" LostFocus="Save_Changed"/><CheckBox x:Name="MonthEnabled" Content="Monthly spend cap" Click="Save_Changed"/><TextBox x:Name="MonthCap" Margin="20,3,0,8" LostFocus="Save_Changed"/></StackPanel></GroupBox>
-            <GroupBox Header="Account alerts" Margin="0,5"><StackPanel Margin="10"><CheckBox x:Name="ReauthEnabled" Content="Re-authentication alerts" Click="Save_Changed"/><CheckBox x:Name="PausedEnabled" Content="Paused/cooldown alerts" Click="Save_Changed"/><CheckBox x:Name="AlertsExpanded" Content="Keep alerts expanded" Click="Save_Changed"/><TextBlock Text="Alerts show as Windows notifications and in panel Alerts section." FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/></StackPanel></GroupBox>
-        </StackPanel></ScrollViewer>
+<Window x:Class="CCSBar.App.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="CCS Bar Settings"
+        Width="520" Height="690"
+        MinWidth="440" MinHeight="540"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBrush}">
+
+    <DockPanel>
+        <!-- Header -->
+        <TextBlock DockPanel.Dock="Top"
+                   Text="CCS Bar Settings"
+                   FontSize="20"
+                   FontWeight="{DynamicResource FontWeight.Semibold}"
+                   Margin="20,18,20,10"
+                   Foreground="{DynamicResource TextBrush}"/>
+
+        <!-- Close Button -->
+        <Button DockPanel.Dock="Bottom"
+                Style="{StaticResource CcsButton.Secondary}"
+                Content="Close"
+                HorizontalAlignment="Right"
+                Margin="12"
+                Padding="18,6"
+                Click="Close_Click"/>
+
+        <!-- Content -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Style="{StaticResource CcsScrollViewerTemplate}">
+            <StackPanel Margin="20,4">
+
+                <!-- Appearance Section -->
+                <GroupBox Header="Appearance"
+                          Margin="0,5"
+                          BorderBrush="{DynamicResource BorderBrush}"
+                          Foreground="{DynamicResource TextBrush}">
+                    <GroupBox.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       FontWeight="{DynamicResource FontWeight.Semibold}"
+                                       FontSize="{DynamicResource FontSize.SectionLabel}"
+                                       Foreground="{DynamicResource MutedBrush}"/>
+                        </DataTemplate>
+                    </GroupBox.HeaderTemplate>
+                    <StackPanel Margin="10">
+                        <TextBlock Text="Theme"
+                                   FontWeight="{DynamicResource FontWeight.Medium}"
+                                   Margin="0,0,0,4"/>
+                        <ComboBox x:Name="AppearanceBox"
+                                  Style="{StaticResource CcsComboBoxTemplate}"
+                                  SelectionChanged="Save_Changed"
+                                  Margin="0,0,0,8">
+                            <ComboBoxItem Content="System"/>
+                            <ComboBoxItem Content="Light"/>
+                            <ComboBoxItem Content="Dark"/>
+                        </ComboBox>
+                        <TextBlock Text="Tray icon"
+                                   FontWeight="{DynamicResource FontWeight.Medium}"
+                                   Margin="0,8,0,4"/>
+                        <ComboBox x:Name="IconBox"
+                                  Style="{StaticResource CcsComboBoxTemplate}"
+                                  SelectionChanged="Save_Changed">
+                            <ComboBoxItem Content="Template"/>
+                            <ComboBoxItem Content="Color"/>
+                        </ComboBox>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Glance Section -->
+                <GroupBox Header="Glance"
+                          Margin="0,5"
+                          BorderBrush="{DynamicResource BorderBrush}"
+                          Foreground="{DynamicResource TextBrush}">
+                    <GroupBox.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       FontWeight="{DynamicResource FontWeight.Semibold}"
+                                       FontSize="{DynamicResource FontSize.SectionLabel}"
+                                       Foreground="{DynamicResource MutedBrush}"/>
+                        </DataTemplate>
+                    </GroupBox.HeaderTemplate>
+                    <StackPanel Margin="10">
+                        <TextBlock Text="Tray glance"
+                                   FontWeight="{DynamicResource FontWeight.Medium}"
+                                   Margin="0,0,0,4"/>
+                        <ComboBox x:Name="GlanceBox"
+                                  Style="{StaticResource CcsComboBoxTemplate}"
+                                  SelectionChanged="Save_Changed"
+                                  Margin="0,0,0,8">
+                            <ComboBoxItem Content="Auto (smart)"/>
+                            <ComboBoxItem Content="Today's spend"/>
+                            <ComboBoxItem Content="This month's spend"/>
+                            <ComboBoxItem Content="Lowest quota"/>
+                            <ComboBoxItem Content="Active account count"/>
+                        </ComboBox>
+                        <TextBlock Text="Spend period"
+                                   FontWeight="{DynamicResource FontWeight.Medium}"
+                                   Margin="0,8,0,4"/>
+                        <ComboBox x:Name="PeriodBox"
+                                  Style="{StaticResource CcsComboBoxTemplate}"
+                                  SelectionChanged="Save_Changed">
+                            <ComboBoxItem Content="Today"/>
+                            <ComboBoxItem Content="Last 7 days"/>
+                            <ComboBoxItem Content="Last 30 days"/>
+                        </ComboBox>
+                        <TextBlock Text="Chart style changes inline or from panel footer."
+                                   FontSize="{DynamicResource FontSize.Caption2}"
+                                   Foreground="{DynamicResource MutedBrush}"
+                                   Margin="0,8,0,0"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Updates Section -->
+                <GroupBox Header="Updates"
+                          Margin="0,5"
+                          BorderBrush="{DynamicResource BorderBrush}"
+                          Foreground="{DynamicResource TextBrush}">
+                    <GroupBox.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       FontWeight="{DynamicResource FontWeight.Semibold}"
+                                       FontSize="{DynamicResource FontSize.SectionLabel}"
+                                       Foreground="{DynamicResource MutedBrush}"/>
+                        </DataTemplate>
+                    </GroupBox.HeaderTemplate>
+                    <StackPanel Margin="10">
+                        <CheckBox x:Name="AutoUpdates"
+                                  Content="Automatically check for updates"
+                                  Style="{StaticResource CcsCheckBoxTemplate}"
+                                  Margin="0,0,0,0"
+                                  Click="Save_Changed"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Quota Alerts Section -->
+                <GroupBox Header="Quota alerts"
+                          Margin="0,5"
+                          BorderBrush="{DynamicResource BorderBrush}"
+                          Foreground="{DynamicResource TextBrush}">
+                    <GroupBox.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       FontWeight="{DynamicResource FontWeight.Semibold}"
+                                       FontSize="{DynamicResource FontSize.SectionLabel}"
+                                       Foreground="{DynamicResource MutedBrush}"/>
+                        </DataTemplate>
+                    </GroupBox.HeaderTemplate>
+                    <StackPanel Margin="10">
+                        <CheckBox x:Name="QuotaEnabled"
+                                  Content="Quota remaining alerts"
+                                  Style="{StaticResource CcsCheckBoxTemplate}"
+                                  Click="Save_Changed"/>
+                        <TextBox x:Name="QuotaLevels"
+                                 Margin="20,3,0,8"
+                                 ToolTip="Comma-separated remaining percentages"
+                                 LostFocus="Save_Changed"
+                                 FontFamily="{DynamicResource FontFamily.Mono}"
+                                 FontSize="{DynamicResource FontSize.Caption}"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Spend Alerts Section -->
+                <GroupBox Header="Spend alerts"
+                          Margin="0,5"
+                          BorderBrush="{DynamicResource BorderBrush}"
+                          Foreground="{DynamicResource TextBrush}">
+                    <GroupBox.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       FontWeight="{DynamicResource FontWeight.Semibold}"
+                                       FontSize="{DynamicResource FontSize.SectionLabel}"
+                                       Foreground="{DynamicResource MutedBrush}"/>
+                        </DataTemplate>
+                    </GroupBox.HeaderTemplate>
+                    <StackPanel Margin="10">
+                        <CheckBox x:Name="DailyEnabled"
+                                  Content="Daily spend cap"
+                                  Style="{StaticResource CcsCheckBoxTemplate}"
+                                  Click="Save_Changed"/>
+                        <TextBox x:Name="DailyCap"
+                                 Margin="20,3,0,8"
+                                 LostFocus="Save_Changed"
+                                 FontFamily="{DynamicResource FontFamily.Mono}"
+                                 FontSize="{DynamicResource FontSize.Caption}"/>
+                        <CheckBox x:Name="MonthEnabled"
+                                  Content="Monthly spend cap"
+                                  Style="{StaticResource CcsCheckBoxTemplate}"
+                                  Click="Save_Changed"
+                                  Margin="0,8,0,0"/>
+                        <TextBox x:Name="MonthCap"
+                                 Margin="20,3,0,8"
+                                 LostFocus="Save_Changed"
+                                 FontFamily="{DynamicResource FontFamily.Mono}"
+                                 FontSize="{DynamicResource FontSize.Caption}"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Account Alerts Section -->
+                <GroupBox Header="Account alerts"
+                          Margin="0,5"
+                          BorderBrush="{DynamicResource BorderBrush}"
+                          Foreground="{DynamicResource TextBrush}">
+                    <GroupBox.HeaderTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       FontWeight="{DynamicResource FontWeight.Semibold}"
+                                       FontSize="{DynamicResource FontSize.SectionLabel}"
+                                       Foreground="{DynamicResource MutedBrush}"/>
+                        </DataTemplate>
+                    </GroupBox.HeaderTemplate>
+                    <StackPanel Margin="10">
+                        <CheckBox x:Name="ReauthEnabled"
+                                  Content="Re-authentication alerts"
+                                  Style="{StaticResource CcsCheckBoxTemplate}"
+                                  Click="Save_Changed"/>
+                        <CheckBox x:Name="PausedEnabled"
+                                  Content="Paused/cooldown alerts"
+                                  Style="{StaticResource CcsCheckBoxTemplate}"
+                                  Click="Save_Changed"
+                                  Margin="0,4,0,0"/>
+                        <CheckBox x:Name="AlertsExpanded"
+                                  Content="Keep alerts expanded"
+                                  Style="{StaticResource CcsCheckBoxTemplate}"
+                                  Click="Save_Changed"
+                                  Margin="0,4,0,0"/>
+                        <TextBlock Text="Alerts show as Windows notifications and in panel Alerts section."
+                                   FontSize="{DynamicResource FontSize.Caption2}"
+                                   Foreground="{DynamicResource MutedBrush}"
+                                   Margin="0,8,0,0"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </GroupBox>
+
+            </StackPanel>
+        </ScrollViewer>
     </DockPanel>
 </Window>

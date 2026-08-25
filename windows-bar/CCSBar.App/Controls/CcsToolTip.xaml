@@ -1,0 +1,50 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- ============================================================
+         CCS TOOLTIP - Replaces stock ToolTip chrome
+         Matches macOS help tag / tooltip:
+         - Rounded corners (6)
+         - WindowBrush background
+         - BorderBrush border
+         - MutedBrush text
+         - Small padding
+         - PanelShadow effect
+         ============================================================ -->
+
+    <Style x:Key="CcsToolTipTemplate" TargetType="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource WindowBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+        <Setter Property="FontFamily" Value="{DynamicResource FontFamily.UI}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption2}"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="Placement" Value="Mouse"/>
+        <Setter Property="HorizontalOffset" Value="8"/>
+        <Setter Property="VerticalOffset" Value="8"/>
+        <Setter Property="HasDropShadow" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border x:Name="Border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}"
+                            Effect="{DynamicResource PanelShadow}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}"
+                                          TextBlock.FontFamily="{TemplateBinding FontFamily}"
+                                          TextBlock.FontSize="{TemplateBinding FontSize}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

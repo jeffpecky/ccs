@@ -1,3 +1,156 @@
-<Application x:Class="CCSBar.App.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" ShutdownMode="OnExplicitShutdown">
-    <Application.Resources><BooleanToVisibilityConverter x:Key="BoolToVisibility" /></Application.Resources>
+<Application x:Class="CCSBar.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="clr-namespace:System;assembly=mscorlib"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Merged dictionaries for custom controls -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Controls/CcsButton.xaml"/>
+                <ResourceDictionary Source="Controls/CcsChip.xaml"/>
+                <ResourceDictionary Source="Controls/CcsCheckBox.xaml"/>
+                <ResourceDictionary Source="Controls/CcsComboBox.xaml"/>
+                <ResourceDictionary Source="Controls/CcsProgressBar.xaml"/>
+                <ResourceDictionary Source="Controls/CcsMenuItem.xaml"/>
+                <ResourceDictionary Source="Controls/CcsScrollBar.xaml"/>
+                <ResourceDictionary Source="Controls/CcsSeparator.xaml"/>
+                <ResourceDictionary Source="Controls/CcsToolTip.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- ============================================================
+                 COLOR TOKENS - Exact port from BarTheme.swift
+                 Dark: lines 57-65, Light: lines 71-79
+                 Applied at runtime via App.ApplyTheme()
+                 ============================================================ -->
+            <SolidColorBrush x:Key="AccentBrush" Color="#E2732A"/>
+            <SolidColorBrush x:Key="SubscriptionBrush" Color="#5B63D9"/>
+            <SolidColorBrush x:Key="GreenBrush" Color="#5CBC8F"/>
+            <SolidColorBrush x:Key="AmberBrush" Color="#DBAB4F"/>
+            <SolidColorBrush x:Key="CoralBrush" Color="#E8755C"/>
+            <SolidColorBrush x:Key="RedBrush" Color="#D9564F"/>
+            <SolidColorBrush x:Key="WindowBrush" Color="#202124"/>
+            <SolidColorBrush x:Key="CardBrush" Color="#2B2C2F"/>
+            <SolidColorBrush x:Key="TrackBrush" Color="#45464A"/>
+            <SolidColorBrush x:Key="TextBrush" Color="#F2F2F2"/>
+            <SolidColorBrush x:Key="MutedBrush" Color="#A8A8AC"/>
+            <SolidColorBrush x:Key="BorderBrush" Color="#404044"/>
+
+            <!-- ============================================================
+                 TYPOGRAPHY TOKENS - Matching SwiftUI system fonts
+                 SwiftUI: .headline=17, .body=14, .caption=12, .caption2=11
+                 SectionLabel: 11 bold uppercase (BarAnalyticsView:336)
+                 Chip: 10 semibold (Chip:999)
+                 ============================================================ -->
+            <FontFamily x:Key="FontFamily.UI">Segoe UI Variable, Segoe UI, system-ui</FontFamily>
+            <FontFamily x:Key="FontFamily.Mono">Cascadia Mono, Consolas, monospace</FontFamily>
+
+            <sys:Double x:Key="FontSize.Headline">17</sys:Double>
+            <sys:Double x:Key="FontSize.Body">14</sys:Double>
+            <sys:Double x:Key="FontSize.Caption">12</sys:Double>
+            <sys:Double x:Key="FontSize.Caption2">11</sys:Double>
+            <sys:Double x:Key="FontSize.SectionLabel">11</sys:Double>
+
+            <FontWeight x:Key="FontWeight.Regular">Normal</FontWeight>
+            <FontWeight x:Key="FontWeight.Medium">Medium</FontWeight>
+            <FontWeight x:Key="FontWeight.Semibold">SemiBold</FontWeight>
+            <FontWeight x:Key="FontWeight.Bold">Bold</FontWeight>
+
+            <!-- ============================================================
+                 SPACING TOKENS - Matching SwiftUI spacing scale
+                 Used values: 4,5,6,7,8,10,11,12,14
+                 (from BarMenuView padding, VStack spacing, HStack spacing)
+                 ============================================================ -->
+            <Thickness x:Key="Spacing.4">4</Thickness>
+            <Thickness x:Key="Spacing.5">5</Thickness>
+            <Thickness x:Key="Spacing.6">6</Thickness>
+            <Thickness x:Key="Spacing.7">7</Thickness>
+            <Thickness x:Key="Spacing.8">8</Thickness>
+            <Thickness x:Key="Spacing.10">10</Thickness>
+            <Thickness x:Key="Spacing.11">11</Thickness>
+            <Thickness x:Key="Spacing.12">12</Thickness>
+            <Thickness x:Key="Spacing.14">14</Thickness>
+
+            <!-- ============================================================
+                 RADIUS TOKENS
+                 Window: 12 (BarMenuView:178 frame)
+                 Cards: 8-9 (BarSubscriptionCard:49 cornerRadius 9, BarRowView:82 cornerRadius 8)
+                 Small: 4-5 (Chip Capsule, bar track Capsule)
+                 ============================================================ -->
+            <CornerRadius x:Key="Radius.Small">5</CornerRadius>
+            <CornerRadius x:Key="Radius.Medium">8</CornerRadius>
+            <CornerRadius x:Key="Radius.Large">12</CornerRadius>
+
+            <!-- ============================================================
+                 SHADOW TOKENS
+                 SwiftUI uses native MenuBarExtra material; WPF needs explicit shadows
+                 Panel: elevated window shadow
+                 Card: subtle inner depth
+                 ============================================================ -->
+            <DropShadowEffect x:Key="PanelShadow"
+                              BlurRadius="24"
+                              ShadowDepth="4"
+                              Direction="270"
+                              Opacity="0.15"
+                              Color="Black"/>
+            <DropShadowEffect x:Key="CardShadow"
+                              BlurRadius="8"
+                              ShadowDepth="1"
+                              Direction="270"
+                              Opacity="0.08"
+                              Color="Black"/>
+
+            <!-- ============================================================
+                 BASE STYLES - Applied to all text elements
+                 ============================================================ -->
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                <Setter Property="FontFamily" Value="{DynamicResource FontFamily.UI}"/>
+                <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}"/>
+                <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Regular}"/>
+                <Setter Property="TextOptions.TextFormattingMode" Value="Ideal"/>
+                <Setter Property="TextOptions.TextRenderingMode" Value="ClearType"/>
+            </Style>
+
+            <Style TargetType="TextBox">
+                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                <Setter Property="FontFamily" Value="{DynamicResource FontFamily.UI}"/>
+                <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="8,6"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TextBox">
+                            <Border x:Name="Border"
+                                    Background="{DynamicResource CardBrush}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="6"
+                                    SnapsToDevicePixels="True">
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsFocused" Value="True">
+                                    <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource MutedBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- ============================================================
+                 COMMON CONVERTERS
+                 ============================================================ -->
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        </ResourceDictionary>
+    </Application.Resources>
 </Application>

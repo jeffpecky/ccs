@@ -1,0 +1,68 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- ============================================================
+         CCS CHIP - Replaces stock WPF chrome for pill labels
+         Matches macOS Chip (BarMenuView:978-1005):
+         - Capsule shape (infinite radius)
+         - 10pt semibold text
+         - Horizontal padding 5, vertical 1.5
+         - Background: tint.opacity(0.22)
+         - Text color: lifted toward opposite of surface
+         ============================================================ -->
+
+    <Style x:Key="CcsChipTemplate" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+        <Setter Property="Opacity" Value="0.22"/>
+        <Setter Property="CornerRadius" Value="100"/> <!-- Capsule -->
+        <Setter Property="Padding" Value="5,1.5"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <!-- Chip TextBlock style -->
+    <Style x:Key="CcsChipText" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource FontFamily.UI}"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="FontWeight" Value="{DynamicResource FontWeight.Semibold}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+    </Style>
+
+    <!-- Convenience: Chip with dynamic tint color -->
+    <!-- Usage: <Border Style="{StaticResource CcsChipTemplate}" Background="{DynamicResource GreenBrush}"> -->
+    
+    <!-- Specific chip variants for common tints -->
+    <Style x:Key="CcsChip.Accent" TargetType="Border" BasedOn="{StaticResource CcsChipTemplate}">
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+    </Style>
+
+    <Style x:Key="CcsChip.Subscription" TargetType="Border" BasedOn="{StaticResource CcsChipTemplate}">
+        <Setter Property="Background" Value="{DynamicResource SubscriptionBrush}"/>
+    </Style>
+
+    <Style x:Key="CcsChip.Green" TargetType="Border" BasedOn="{StaticResource CcsChipTemplate}">
+        <Setter Property="Background" Value="{DynamicResource GreenBrush}"/>
+    </Style>
+
+    <Style x:Key="CcsChip.Amber" TargetType="Border" BasedOn="{StaticResource CcsChipTemplate}">
+        <Setter Property="Background" Value="{DynamicResource AmberBrush}"/>
+    </Style>
+
+    <Style x:Key="CcsChip.Coral" TargetType="Border" BasedOn="{StaticResource CcsChipTemplate}">
+        <Setter Property="Background" Value="{DynamicResource CoralBrush}"/>
+    </Style>
+
+    <Style x:Key="CcsChip.Red" TargetType="Border" BasedOn="{StaticResource CcsChipTemplate}">
+        <Setter Property="Background" Value="{DynamicResource RedBrush}"/>
+    </Style>
+
+    <Style x:Key="CcsChip.Secondary" TargetType="Border" BasedOn="{StaticResource CcsChipTemplate}">
+        <Setter Property="Background" Value="{DynamicResource MutedBrush}"/>
+    </Style>
+
+    <Style x:Key="CcsChip.Parked" TargetType="Border" BasedOn="{StaticResource CcsChipTemplate}">
+        <Setter Property="Background" Value="{DynamicResource SubscriptionBrush}"/>
+        <Setter Property="Opacity" Value="0.11"/> <!-- Half of 0.22 for parked state -->
+    </Style>
+
+</ResourceDictionary>

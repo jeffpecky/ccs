@@ -1,0 +1,404 @@
+using System.IO;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using CCSBar.App;
+using CCSBar.Core;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace CCSBar.App.Tests;
+
+[TestClass]
+public sealed class VisualContractTests
+{
+    static readonly string ProjectRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+    static readonly string AppXamlPath = Path.Combine(ProjectRoot, "CCSBar.App", "App.xaml");
+    static readonly string MainWindowXamlPath = Path.Combine(ProjectRoot, "CCSBar.App", "MainWindow.xaml");
+    static readonly string SettingsWindowXamlPath = Path.Combine(ProjectRoot, "CCSBar.App", "SettingsWindow.xaml");
+    static readonly string ControlsDir = Path.Combine(ProjectRoot, "CCSBar.App", "Controls");
+
+    static App? s_app;
+    static ResourceDictionary? s_resources;
+
+    [ClassInitialize]
+    public static void ClassInit(TestContext context)
+    {
+        // Create a single Application instance for all tests
+        s_app = new App();
+        s_app.InitializeComponent();
+        s_resources = s_app.Resources;
+    }
+
+    [TestMethod]
+    public void BarThemePalette_Dark_MatchesSwiftSourceValues()
+    {
+        // BarTheme.swift dark palette (lines 57-65)
+        Assert.AreEqual("#E2732A", BarThemePalette.Dark.Accent, "Accent orange #E2732A");
+        Assert.AreEqual("#5B63D9", BarThemePalette.Dark.Subscription, "Subscription indigo #5B63D9");
+        Assert.AreEqual("#5CBC8F", BarThemePalette.Dark.Green, "Band green #5CBC8F");
+        Assert.AreEqual("#DBAB4F", BarThemePalette.Dark.Amber, "Band amber #DBAB4F");
+        Assert.AreEqual("#E8755C", BarThemePalette.Dark.Coral, "Band coral #E8755C");
+        Assert.AreEqual("#D9564F", BarThemePalette.Dark.Red, "Band red #D9564F");
+        Assert.AreEqual("#202124", BarThemePalette.Dark.WindowSurface, "Window surface #202124");
+    }
+
+    [TestMethod]
+    public void BarThemePalette_Light_MatchesSwiftSourceValues()
+    {
+        // BarTheme.swift light palette (lines 71-79)
+        Assert.AreEqual("#CF5B10", BarThemePalette.Light.Accent, "Accent orange #CF5B10");
+        Assert.AreEqual("#464DBE", BarThemePalette.Light.Subscription, "Subscription indigo #464DBE");
+        Assert.AreEqual("#1B945B", BarThemePalette.Light.Green, "Band green #1B945B");
+        Assert.AreEqual("#B87D0B", BarThemePalette.Light.Amber, "Band amber #B87D0B");
+        Assert.AreEqual("#D44D28", BarThemePalette.Light.Coral, "Band coral #D44D28");
+        Assert.AreEqual("#C62823", BarThemePalette.Light.Red, "Band red #C62823");
+        Assert.AreEqual("#F5F5F7", BarThemePalette.Light.WindowSurface, "Window surface #F5F5F7");
+    }
+
+    [TestMethod]
+    public void AppResources_DefineAllRequiredColorTokens()
+    {
+        var resources = s_resources!;
+
+        // Core palette tokens
+        Assert.IsNotNull(resources["AccentBrush"], "AccentBrush missing");
+        Assert.IsNotNull(resources["SubscriptionBrush"], "SubscriptionBrush missing");
+        Assert.IsNotNull(resources["GreenBrush"], "GreenBrush missing");
+        Assert.IsNotNull(resources["AmberBrush"], "AmberBrush missing");
+        Assert.IsNotNull(resources["CoralBrush"], "CoralBrush missing");
+        Assert.IsNotNull(resources["RedBrush"], "RedBrush missing");
+
+        // Surface tokens
+        Assert.IsNotNull(resources["WindowBrush"], "WindowBrush missing");
+        Assert.IsNotNull(resources["CardBrush"], "CardBrush missing");
+        Assert.IsNotNull(resources["TrackBrush"], "TrackBrush missing");
+
+        // Text tokens
+        Assert.IsNotNull(resources["TextBrush"], "TextBrush missing");
+        Assert.IsNotNull(resources["MutedBrush"], "MutedBrush missing");
+
+        // Border token
+        Assert.IsNotNull(resources["BorderBrush"], "BorderBrush missing");
+    }
+
+    [TestMethod]
+    public void AppResources_DefineTypographyTokens()
+    {
+        var resources = s_resources!;
+
+        // Font families
+        Assert.IsNotNull(resources["FontFamily.UI"], "FontFamily.UI missing");
+        Assert.IsNotNull(resources["FontFamily.Mono"], "FontFamily.Mono missing");
+
+        // Font sizes (matching SwiftUI: headline, body, caption, caption2, section label)
+        Assert.IsNotNull(resources["FontSize.Headline"], "FontSize.Headline missing");
+        Assert.IsNotNull(resources["FontSize.Body"], "FontSize.Body missing");
+        Assert.IsNotNull(resources["FontSize.Caption"], "FontSize.Caption missing");
+        Assert.IsNotNull(resources["FontSize.Caption2"], "FontSize.Caption2 missing");
+        Assert.IsNotNull(resources["FontSize.SectionLabel"], "FontSize.SectionLabel missing");
+
+        // Font weights
+        Assert.IsNotNull(resources["FontWeight.Regular"], "FontWeight.Regular missing");
+        Assert.IsNotNull(resources["FontWeight.Medium"], "FontWeight.Medium missing");
+        Assert.IsNotNull(resources["FontWeight.Semibold"], "FontWeight.Semibold missing");
+        Assert.IsNotNull(resources["FontWeight.Bold"], "FontWeight.Bold missing");
+    }
+
+    [TestMethod]
+    public void AppResources_DefineSpacingTokens()
+    {
+        var resources = s_resources!;
+
+        // Spacing scale matching SwiftUI: 4, 5, 6, 7, 8, 10, 11, 12, 14
+        Assert.IsNotNull(resources["Spacing.4"], "Spacing.4 missing");
+        Assert.IsNotNull(resources["Spacing.5"], "Spacing.5 missing");
+        Assert.IsNotNull(resources["Spacing.6"], "Spacing.6 missing");
+        Assert.IsNotNull(resources["Spacing.7"], "Spacing.7 missing");
+        Assert.IsNotNull(resources["Spacing.8"], "Spacing.8 missing");
+        Assert.IsNotNull(resources["Spacing.10"], "Spacing.10 missing");
+        Assert.IsNotNull(resources["Spacing.11"], "Spacing.11 missing");
+        Assert.IsNotNull(resources["Spacing.12"], "Spacing.12 missing");
+        Assert.IsNotNull(resources["Spacing.14"], "Spacing.14 missing");
+    }
+
+    [TestMethod]
+    public void AppResources_DefineRadiusTokens()
+    {
+        var resources = s_resources!;
+
+        Assert.IsNotNull(resources["Radius.Small"], "Radius.Small missing"); // 4-5
+        Assert.IsNotNull(resources["Radius.Medium"], "Radius.Medium missing"); // 8-9
+        Assert.IsNotNull(resources["Radius.Large"], "Radius.Large missing"); // 12
+    }
+
+    [TestMethod]
+    public void AppResources_DefineShadowTokens()
+    {
+        var resources = s_resources!;
+
+        // SwiftUI uses native MenuBarExtra material; WPF needs explicit shadow for the panel
+        Assert.IsNotNull(resources["PanelShadow"], "PanelShadow missing");
+        Assert.IsNotNull(resources["CardShadow"], "CardShadow missing");
+    }
+
+    [TestMethod]
+    public void AppResources_DefineCustomControlTemplates()
+    {
+        var resources = s_resources!;
+
+        // All custom control templates replacing stock WPF chrome
+        var keys = new[]
+        {
+            "CcsButtonTemplate", "CcsChipTemplate", "CcsCheckBoxTemplate",
+            "CcsComboBoxTemplate", "CcsProgressBarTemplate", "CcsMenuItemTemplate",
+            "CcsScrollBarTemplate", "CcsSeparatorTemplate", "CcsToolTipTemplate"
+        };
+
+        foreach (var key in keys)
+        {
+            try
+            {
+                var value = resources[key];
+                Assert.IsNotNull(value, $"{key} missing");
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail($"{key} threw: {ex.Message}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void ProductXaml_RejectsBareStockControls()
+    {
+        // Scan all product XAML files for bare stock controls
+        var xamlFiles = new[] { MainWindowXamlPath, SettingsWindowXamlPath };
+        if (Directory.Exists(ControlsDir))
+        {
+            xamlFiles = xamlFiles.Concat(Directory.GetFiles(ControlsDir, "*.xaml")).ToArray();
+        }
+
+        var stockControlPatterns = new[]
+        {
+            @"<Button\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsButton)",
+            @"<CheckBox\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsCheckBox)",
+            @"<ComboBox\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsComboBox)",
+            @"<ProgressBar\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsProgressBar)",
+            @"<MenuItem\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsMenuItem)",
+            @"<ScrollBar\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsScrollBar)",
+            @"<Separator\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsSeparator)",
+            @"<ToolTip\b(?![^>]*Style\s*=\s*[""']\{(?:Static|Dynamic)Resource\s+CcsToolTip)",
+        };
+
+        foreach (var file in xamlFiles)
+        {
+            var content = File.ReadAllText(file);
+            foreach (var pattern in stockControlPatterns)
+            {
+                var matches = Regex.Matches(content, pattern, RegexOptions.IgnoreCase);
+                Assert.AreEqual(0, matches.Count,
+                    $"File {Path.GetFileName(file)} contains bare stock control matching pattern: {pattern}. All controls must use Ccs* custom templates.");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void ProductXaml_UsesOnlyDynamicResourceForThemeTokens()
+    {
+        var xamlFiles = new[] { MainWindowXamlPath, SettingsWindowXamlPath };
+        if (Directory.Exists(ControlsDir))
+        {
+            xamlFiles = xamlFiles.Concat(Directory.GetFiles(ControlsDir, "*.xaml")).ToArray();
+        }
+
+        var tokenKeys = new[]
+        {
+            "AccentBrush", "SubscriptionBrush", "GreenBrush", "AmberBrush", "CoralBrush", "RedBrush",
+            "WindowBrush", "CardBrush", "TrackBrush", "TextBrush", "MutedBrush", "BorderBrush"
+        };
+
+        foreach (var file in xamlFiles)
+        {
+            var content = File.ReadAllText(file);
+            foreach (var key in tokenKeys)
+            {
+                // Find all references to this token
+                var staticPattern = $@"\{{\s*StaticResource\s+{key}\s*}}";
+                var matches = Regex.Matches(content, staticPattern, RegexOptions.IgnoreCase);
+                Assert.AreEqual(0, matches.Count,
+                    $"File {Path.GetFileName(file)} uses StaticResource for {key}. Theme tokens must use DynamicResource to support runtime theme switching.");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void CustomControls_ExistInControlsDirectory()
+    {
+        // Controls reused at least twice should exist in Controls/
+        var expectedControls = new[]
+        {
+            "CcsButton.xaml",
+            "CcsChip.xaml",
+            "CcsCheckBox.xaml",
+            "CcsComboBox.xaml",
+            "CcsProgressBar.xaml",
+            "CcsMenuItem.xaml",
+            "CcsScrollBar.xaml",
+            "CcsSeparator.xaml",
+            "CcsToolTip.xaml",
+        };
+
+        foreach (var control in expectedControls)
+        {
+            var path = Path.Combine(ControlsDir, control);
+            Assert.IsTrue(File.Exists(path), $"Required control {control} missing from Controls/ directory");
+        }
+    }
+
+    [TestMethod]
+    public void WindowDimensions_MatchMacOSReference()
+    {
+        // macOS BarMenuView uses 360 width (line 178)
+        var content = File.ReadAllText(MainWindowXamlPath);
+        Assert.IsTrue(content.Contains("Width=\"360\"") || content.Contains("Width=360"),
+            "MainWindow width must be 360 to match macOS reference");
+    }
+
+    [TestMethod]
+    public void PanelCornerRadius_MatchesMacOSReference()
+    {
+        // macOS uses 12 for window, 8-9 for cards (BarSubscriptionCard line 49)
+        var resources = s_resources!;
+
+        var windowRadius = (CornerRadius)resources["Radius.Large"];
+        Assert.AreEqual(12, windowRadius.TopLeft, "Window corner radius must be 12");
+
+        var cardRadius = (CornerRadius)resources["Radius.Medium"];
+        Assert.AreEqual(8, cardRadius.TopLeft, "Card corner radius must be 8 (matching macOS 8-9)");
+    }
+
+    [TestMethod]
+    public void SpacingTokens_MatchSwiftUIValues()
+    {
+        var resources = s_resources!;
+
+        // Verify spacing values match SwiftUI usage
+        Assert.AreEqual(4.0, ((Thickness)resources["Spacing.4"]).Left, "Spacing.4 = 4");
+        Assert.AreEqual(5.0, ((Thickness)resources["Spacing.5"]).Left, "Spacing.5 = 5");
+        Assert.AreEqual(6.0, ((Thickness)resources["Spacing.6"]).Left, "Spacing.6 = 6");
+        Assert.AreEqual(7.0, ((Thickness)resources["Spacing.7"]).Left, "Spacing.7 = 7");
+        Assert.AreEqual(8.0, ((Thickness)resources["Spacing.8"]).Left, "Spacing.8 = 8");
+        Assert.AreEqual(10.0, ((Thickness)resources["Spacing.10"]).Left, "Spacing.10 = 10");
+        Assert.AreEqual(11.0, ((Thickness)resources["Spacing.11"]).Left, "Spacing.11 = 11");
+        Assert.AreEqual(12.0, ((Thickness)resources["Spacing.12"]).Left, "Spacing.12 = 12");
+        Assert.AreEqual(14.0, ((Thickness)resources["Spacing.14"]).Left, "Spacing.14 = 14");
+    }
+
+    [TestMethod]
+    public void FontSizes_MatchSwiftUIValues()
+    {
+        var resources = s_resources!;
+
+        // SwiftUI font sizes from BarMenuView:
+        // - Headline: ~17 (system headline)
+        // - Body: ~14 (system body)
+        // - Caption: ~12 (system caption)
+        // - Caption2: ~11 (system caption2)
+        // - SectionLabel: 11 bold uppercase (BarAnalyticsView line 336)
+        // - Chip: 10 semibold (Chip line 999)
+        // - Window bar label: caption2 monospaced (BarSubscriptionCard line 136-139)
+        Assert.AreEqual(17.0, (double)resources["FontSize.Headline"], "Headline = 17");
+        Assert.AreEqual(14.0, (double)resources["FontSize.Body"], "Body = 14");
+        Assert.AreEqual(12.0, (double)resources["FontSize.Caption"], "Caption = 12");
+        Assert.AreEqual(11.0, (double)resources["FontSize.Caption2"], "Caption2 = 11");
+        Assert.AreEqual(11.0, (double)resources["FontSize.SectionLabel"], "SectionLabel = 11");
+    }
+
+    [TestMethod]
+    public void ColorTokens_DarkMode_MatchExactSwiftValues()
+    {
+        App.ApplyTheme(BarAppearance.Dark);
+        var resources = s_resources!;
+
+        var accent = ((SolidColorBrush)resources["AccentBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xE2, 0x73, 0x2A), accent, "Dark Accent = #E2732A");
+
+        var subscription = ((SolidColorBrush)resources["SubscriptionBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0x5B, 0x63, 0xD9), subscription, "Dark Subscription = #5B63D9");
+
+        var green = ((SolidColorBrush)resources["GreenBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0x5C, 0xBC, 0x8F), green, "Dark Green = #5CBC8F");
+
+        var amber = ((SolidColorBrush)resources["AmberBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xDB, 0xAB, 0x4F), amber, "Dark Amber = #DBAB4F");
+
+        var coral = ((SolidColorBrush)resources["CoralBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xE8, 0x75, 0x5C), coral, "Dark Coral = #E8755C");
+
+        var red = ((SolidColorBrush)resources["RedBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xD9, 0x56, 0x4F), red, "Dark Red = #D9564F");
+
+        var window = ((SolidColorBrush)resources["WindowBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0x20, 0x21, 0x24), window, "Dark Window = #202124");
+
+        var text = ((SolidColorBrush)resources["TextBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xF2, 0xF2, 0xF2), text, "Dark Text = #F2F2F2");
+
+        var muted = ((SolidColorBrush)resources["MutedBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xA8, 0xA8, 0xAC), muted, "Dark Muted = #A8A8AC");
+
+        var border = ((SolidColorBrush)resources["BorderBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0x40, 0x40, 0x44), border, "Dark Border = #404044");
+
+        var card = ((SolidColorBrush)resources["CardBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0x2B, 0x2C, 0x2F), card, "Dark Card = #2B2C2F");
+
+        var track = ((SolidColorBrush)resources["TrackBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0x45, 0x46, 0x4A), track, "Dark Track = #45464A");
+    }
+
+    [TestMethod]
+    public void ColorTokens_LightMode_MatchExactSwiftValues()
+    {
+        App.ApplyTheme(BarAppearance.Light);
+        var resources = s_resources!;
+
+        var accent = ((SolidColorBrush)resources["AccentBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xCF, 0x5B, 0x10), accent, "Light Accent = #CF5B10");
+
+        var subscription = ((SolidColorBrush)resources["SubscriptionBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0x46, 0x4D, 0xBE), subscription, "Light Subscription = #464DBE");
+
+        var green = ((SolidColorBrush)resources["GreenBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0x1B, 0x94, 0x5B), green, "Light Green = #1B945B");
+
+        var amber = ((SolidColorBrush)resources["AmberBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xB8, 0x7D, 0x0B), amber, "Light Amber = #B87D0B");
+
+        var coral = ((SolidColorBrush)resources["CoralBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xD4, 0x4D, 0x28), coral, "Light Coral = #D44D28");
+
+        var red = ((SolidColorBrush)resources["RedBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xC6, 0x28, 0x23), red, "Light Red = #C62823");
+
+        var window = ((SolidColorBrush)resources["WindowBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xF5, 0xF5, 0xF7), window, "Light Window = #F5F5F7");
+
+        var text = ((SolidColorBrush)resources["TextBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0x1D, 0x1D, 0x1F), text, "Light Text = #1D1D1F");
+
+        var muted = ((SolidColorBrush)resources["MutedBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0x68, 0x68, 0x6C), muted, "Light Muted = #68686C");
+
+        var border = ((SolidColorBrush)resources["BorderBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xD7, 0xD7, 0xDB), border, "Light Border = #D7D7DB");
+
+        var card = ((SolidColorBrush)resources["CardBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xEA, 0xEA, 0xED), card, "Light Card = #EAEAED");
+
+        var track = ((SolidColorBrush)resources["TrackBrush"]).Color;
+        Assert.AreEqual(Color.FromRgb(0xD6, 0xD6, 0xDA), track, "Light Track = #D6D6DA");
+    }
+}

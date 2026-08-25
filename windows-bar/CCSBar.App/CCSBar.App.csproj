@@ -12,6 +12,7 @@
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <AssemblyName>CCS Bar</AssemblyName>
     <ApplicationIcon>..\..\ui\public\favicon.ico</ApplicationIcon>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\CCSBar.Core\CCSBar.Core.csproj" />
@@ -21,5 +22,9 @@
     <Resource Include="..\..\macos-bar\Resources\Assets\MenuBarColor.png" Link="Assets\MenuBarColor.png" />
     <Resource Include="..\..\macos-bar\Resources\Assets\MenuBarTemplate.png" Link="Assets\MenuBarTemplate.png" />
     <Resource Include="..\..\macos-bar\Resources\AppIcon-source.png" Link="Assets\AppIcon-source.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="*.xaml" />
+    <Page Include="Controls\**\*.xaml" />
   </ItemGroup>
 </Project>
