@@ -58,6 +58,8 @@ public sealed record BarDiscovery(string BaseUrl, int Port, string AuthMode)
     }
 }
 
+public sealed record BarProbeResult(BarConnectionState State, Uri? BaseUri = null);
+
 public interface ILaunchTrustValidator
 {
     bool IsTrustedFile(string path);
@@ -101,17 +103,25 @@ public sealed class BarServerProbe
         catch (IOException) { return null; } catch (UnauthorizedAccessException) { return null; }
     }
     public async Task<Uri?> FindLiveServerAsync(BarDiscovery? discovery, CancellationToken cancellationToken = default)
+        => (await ProbeAsync(discovery, cancellationToken)).BaseUri;
+    public async Task<BarProbeResult> ProbeAsync(BarDiscovery? discovery, CancellationToken cancellationToken = default)
     {
-        if (discovery?.ResolvedUri is { } discovered && await IsLiveAsync(discovered, cancellationToken)) return discovered;
+        var failures = new List<BarConnectionState>();
+        if (discovery?.ResolvedUri is { } discovered)
+        {
+            var result = await ProbeOneAsync(discovered, cancellationToken);
+            if (result == BarConnectionState.Ready) return new(result, discovered);
+            failures.Add(result);
+        }
         var candidates = FallbackPorts.Where(port => port != discovery?.Port).Select(port => new Uri($"http://127.0.0.1:{port}")).ToArray();
         using var found = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); using var gate = new SemaphoreSlim(4);
-        var tasks = candidates.Select(async uri => { await gate.WaitAsync(found.Token); try { return await IsLiveAsync(uri, found.Token) ? uri : null; } catch (OperationCanceledException) when (found.IsCancellationRequested && !cancellationToken.IsCancellationRequested) { return null; } finally { gate.Release(); } }).ToArray();
-        while (tasks.Length > 0) { var complete = await Task.WhenAny(tasks); tasks = tasks.Where(task => task != complete).ToArray(); if (await complete is { } live) { found.Cancel(); return live; } }
-        return null;
+        var tasks = candidates.Select(async uri => { await gate.WaitAsync(found.Token); try { return (Uri: uri, State: await ProbeOneAsync(uri, found.Token)); } catch (OperationCanceledException) when (found.IsCancellationRequested && !cancellationToken.IsCancellationRequested) { return (Uri: uri, State: BarConnectionState.Unreachable); } finally { gate.Release(); } }).ToArray();
+        while (tasks.Length > 0) { var complete = await Task.WhenAny(tasks); tasks = tasks.Where(task => task != complete).ToArray(); var result = await complete; if (result.State == BarConnectionState.Ready) { found.Cancel(); return new(result.State, result.Uri); } failures.Add(result.State); }
+        return new(failures.Contains(BarConnectionState.AuthenticationFailure) ? BarConnectionState.AuthenticationFailure : failures.Contains(BarConnectionState.ApiFailure) ? BarConnectionState.ApiFailure : failures.Contains(BarConnectionState.Timeout) ? BarConnectionState.Timeout : BarConnectionState.Unreachable);
     }
-    async Task<bool> IsLiveAsync(Uri baseUri, CancellationToken cancellationToken)
+    async Task<BarConnectionState> ProbeOneAsync(Uri baseUri, CancellationToken cancellationToken)
     {
-        if (authToken is null) return false;
+        if (authToken is null) return BarConnectionState.AuthenticationFailure;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(probeTimeout);
         using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUri, "api/bar/health"));
@@ -120,9 +130,10 @@ public sealed class BarServerProbe
         try
         {
             using var response = await http.SendAsync(request, timeout.Token);
-            return response.StatusCode == HttpStatusCode.OK && BarAuth.VerifyResponse(request, response, authToken);
+            if (!BarAuth.VerifyResponse(request, response, authToken)) return BarConnectionState.AuthenticationFailure;
+            return response.StatusCode == HttpStatusCode.OK ? BarConnectionState.Ready : BarConnectionState.ApiFailure;
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return false; }
-        catch (HttpRequestException) { return false; }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return BarConnectionState.Timeout; }
+        catch (HttpRequestException) { return BarConnectionState.Unreachable; }
     }
 }

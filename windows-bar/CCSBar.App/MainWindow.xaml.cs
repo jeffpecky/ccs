@@ -66,7 +66,14 @@ public partial class MainWindow : Window
     {
         var focusName = Keyboard.FocusedElement is DependencyObject focused ? AutomationProperties.GetName(focused) : null;
         if (!IsInitialized) return; OfflinePanel.Visibility = vm.Offline || vm.IsStarting ? Visibility.Visible : Visibility.Collapsed; ContentScroll.Visibility = OfflinePanel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
-        OfflineTitle.Text = vm.IsStarting ? "Starting CCS…" : "CCS is not running"; OfflineBody.Text = "Start CCS, then the menu will connect automatically."; OfflineBody.Visibility = OfflineActions.Visibility = vm.IsStarting ? Visibility.Collapsed : Visibility.Visible; StartingProgress.Visibility = vm.IsStarting ? Visibility.Visible : Visibility.Collapsed; StartButton.IsEnabled = RetryButton.IsEnabled = !vm.IsStarting; HeaderRefresh.Visibility = vm.IsRefreshing ? Visibility.Visible : Visibility.Collapsed; AutomationProperties.SetLiveSetting(StatusText, AutomationLiveSetting.Polite); StatusText.Text = vm.StatusTitle;
+        var stateCopy = vm.ConnectionState switch
+        {
+            BarConnectionState.Timeout => ("CCS is not responding", "CCS is running but did not respond in time. Retry when startup or refresh work finishes."),
+            BarConnectionState.AuthenticationFailure => ("CCS authentication failed", "Run `ccs bar launch` to refresh the local Bar connection."),
+            BarConnectionState.ApiFailure => ("CCS data could not load", "CCS is running, but account data could not be read. Retry to load it again."),
+            _ => ("CCS is not running", "Start CCS, then the menu will connect automatically."),
+        };
+        OfflineTitle.Text = vm.IsStarting ? "Starting CCS…" : stateCopy.Item1; OfflineBody.Text = stateCopy.Item2; OfflineBody.Visibility = OfflineActions.Visibility = vm.IsStarting ? Visibility.Collapsed : Visibility.Visible; StartingProgress.Visibility = vm.IsStarting ? Visibility.Visible : Visibility.Collapsed; StartButton.Visibility = vm.ConnectionState == BarConnectionState.Unreachable ? Visibility.Visible : Visibility.Collapsed; StartButton.IsEnabled = RetryButton.IsEnabled = !vm.IsStarting; HeaderRefresh.Visibility = vm.IsRefreshing ? Visibility.Visible : Visibility.Collapsed; AutomationProperties.SetLiveSetting(StatusText, AutomationLiveSetting.Polite); StatusText.Text = vm.StatusTitle;
         ContentPanel.Children.Clear(); carousels.Clear(); EmptyState.Visibility = Visibility.Collapsed; if (vm.Offline || vm.IsStarting) return;
         updateError = vm.UpdateAvailable ? updateError : null;
         if (vm.UpdateAvailable) ContentPanel.Children.Add(UpdateBanner()); if (vm.SummaryStale) ContentPanel.Children.Add(Banner("Accounts stale", "Showing last successful account refresh.", "AmberBrush"));

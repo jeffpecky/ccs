@@ -337,6 +337,9 @@ public sealed class VisualContractTests
             var version = File.ReadAllText(Path.Combine(ProjectRoot, "..", "macos-bar", "VERSION")).Trim();
             Assert.AreEqual($"v{version}", ((TextBlock)window.FindName("VersionText")).Text);
             Assert.AreEqual(new Thickness(14, 11, 14, 11), ((Grid)window.FindName("Footer")).Margin);
+            var footerStyle = (Style)window.FindResource("CcsButton.FooterIcon");
+            Assert.AreEqual(12d, footerStyle.Setters.OfType<Setter>().Single(x => x.Property == Control.FontSizeProperty).Value);
+            Assert.AreEqual(new Thickness(0), footerStyle.Setters.OfType<Setter>().Single(x => x.Property == Control.PaddingProperty).Value);
             Assert.AreEqual(0, ((ScrollViewer)window.FindName("ContentScroll")).MinHeight);
             Assert.AreEqual(780, ((ScrollViewer)window.FindName("ContentScroll")).MaxHeight);
 
@@ -360,6 +363,38 @@ public sealed class VisualContractTests
             window.Render();
             Assert.AreEqual(Visibility.Visible, ((FrameworkElement)window.FindName("EmptyState")).Visibility);
             Assert.AreEqual("No accounts configured", ((TextBlock)window.FindName("EmptyStateText")).Text);
+        }
+        finally { window.Detach(); window.Close(); }
+    }
+
+    [STATestMethod]
+    public void MainWindow_ConnectionFailuresUseAccurateCopyAndValidEmptyUsesEmptyState()
+    {
+        var vm = new BarViewModel(new TestConnector(), new TestSettings());
+        var window = CreateMainWindow(vm);
+        try
+        {
+            var cases = new[]
+            {
+                (BarConnectionState.Unreachable, "CCS is not running", "Start CCS, then the menu will connect automatically."),
+                (BarConnectionState.Timeout, "CCS is not responding", "CCS is running but did not respond in time. Retry when startup or refresh work finishes."),
+                (BarConnectionState.AuthenticationFailure, "CCS authentication failed", "Run `ccs bar launch` to refresh the local Bar connection."),
+                (BarConnectionState.ApiFailure, "CCS data could not load", "CCS is running, but account data could not be read. Retry to load it again."),
+            };
+            foreach (var (state, title, body) in cases)
+            {
+                typeof(BarViewModel).GetProperty(nameof(BarViewModel.ConnectionState))!.SetValue(vm, state);
+                typeof(BarViewModel).GetProperty(nameof(BarViewModel.Offline))!.SetValue(vm, true);
+                window.Render();
+                Assert.AreEqual(title, ((TextBlock)window.FindName("OfflineTitle")).Text);
+                Assert.AreEqual(body, ((TextBlock)window.FindName("OfflineBody")).Text);
+            }
+
+            typeof(BarViewModel).GetProperty(nameof(BarViewModel.ConnectionState))!.SetValue(vm, BarConnectionState.Empty);
+            typeof(BarViewModel).GetProperty(nameof(BarViewModel.Offline))!.SetValue(vm, false);
+            window.Render();
+            Assert.AreEqual(Visibility.Collapsed, ((FrameworkElement)window.FindName("OfflinePanel")).Visibility);
+            Assert.AreEqual(Visibility.Visible, ((FrameworkElement)window.FindName("EmptyState")).Visibility);
         }
         finally { window.Detach(); window.Close(); }
     }

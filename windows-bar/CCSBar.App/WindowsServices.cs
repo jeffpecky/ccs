@@ -81,24 +81,26 @@ public sealed class WindowsLaunchTrust(IWindowsPathSecurity paths, string privat
     }
 }
 
-sealed class WindowsBarConnector : IBarConnector, IActiveBarConnection
+sealed class WindowsBarConnector : IBarConnector, IActiveBarConnection, IBarConnectionStatus
 {
-    readonly HttpClient http = new(); readonly SemaphoreSlim connectGate = new(1, 1); readonly Func<ProcessCommand, Process?> start; readonly string home; Uri? activeBaseUrl; string? diagnostics;
+    readonly HttpClient http = new(); readonly SemaphoreSlim connectGate = new(1, 1); readonly Func<ProcessCommand, Process?> start; readonly string home; Uri? activeBaseUrl; string? diagnostics; BarConnectionState connectionState = BarConnectionState.Unreachable;
     public WindowsBarConnector(Func<ProcessCommand, Process?>? start = null, string? home = null) { this.start = start ?? WindowsProcess.Start; this.home = home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile); }
     public Uri? ActiveBaseUrl => activeBaseUrl;
     public string? Diagnostics => diagnostics;
+    public BarConnectionState ConnectionState => connectionState;
     public async Task<IBarDataClient?> ConnectAsync(bool launch, CancellationToken ct)
     {
         await connectGate.WaitAsync(ct);
         try
         {
-            var token = BarServerProbe.LoadAuthToken(home); var uri = token is null ? null : await new BarServerProbe(http, token, home: home).FindLiveServerAsync(BarDiscovery.Load(home).Value, ct);
+            var token = BarServerProbe.LoadAuthToken(home); var result = token is null ? new BarProbeResult(BarConnectionState.AuthenticationFailure) : await new BarServerProbe(http, token, home: home).ProbeAsync(BarDiscovery.Load(home).Value, ct); var uri = result.BaseUri;
             if (uri is null && launch)
             {
                 StartServer();
-                for (var i = 0; i < 12 && uri is null; i++) { await Task.Delay(500, ct); token ??= BarServerProbe.LoadAuthToken(home); if (token is not null) uri = await new BarServerProbe(http, token, home: home).FindLiveServerAsync(BarDiscovery.Load(home).Value, ct); }
+                for (var i = 0; i < 12 && uri is null; i++) { await Task.Delay(500, ct); token ??= BarServerProbe.LoadAuthToken(home); if (token is not null) { result = await new BarServerProbe(http, token, home: home).ProbeAsync(BarDiscovery.Load(home).Value, ct); uri = result.BaseUri; } }
             }
             activeBaseUrl = uri;
+            connectionState = uri is null ? result.State : BarConnectionState.Ready;
             return uri is null || token is null ? null : new CCSBarClient(uri, http, token);
         }
         finally { connectGate.Release(); }

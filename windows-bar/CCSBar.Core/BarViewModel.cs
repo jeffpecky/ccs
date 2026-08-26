@@ -7,6 +7,7 @@ public enum BarAppearance { System, Light, Dark }
 public enum BarIconStyle { Template, Color }
 public enum SpendChartStyle { Bars, Line }
 public enum SpendPeriod { Today, Last7d, Last30d }
+public enum BarConnectionState { Starting, Unreachable, Timeout, AuthenticationFailure, ApiFailure, Empty, Ready }
 
 public sealed record BarUiSettings(
     BarAppearance Appearance = BarAppearance.Dark,
@@ -22,6 +23,7 @@ public sealed class SystemBarClock : IBarClock { public DateTimeOffset Now => Da
 public interface IBarSettings { BarUiSettings Ui { get; set; } BarPreferences Alerts { get; set; } IReadOnlySet<string> FiredKeys { get; set; } void Save(); }
 public interface IBarConnector { Task<IBarDataClient?> ConnectAsync(bool launch, CancellationToken cancellationToken); }
 public interface IActiveBarConnection { Uri? ActiveBaseUrl { get; } }
+public interface IBarConnectionStatus { BarConnectionState ConnectionState { get; } }
 public interface IBarNotifier { void Deliver(IReadOnlyList<BarNotification> notifications); }
 public sealed class NullBarNotifier : IBarNotifier { public void Deliver(IReadOnlyList<BarNotification> notifications) { } }
 public interface IBarDataClient
@@ -50,7 +52,7 @@ public sealed class BarViewModel : INotifyPropertyChanged, IDisposable, IAsyncDi
     readonly Func<CancellationToken, Task<string?>> updateChecker; readonly string currentVersion; readonly IBarNotifier notifier; readonly SemaphoreSlim refreshGate = new(1, 1); readonly CancellationTokenSource lifetime = new();
     IBarDataClient? client; DateTimeOffset? lastOpenRefresh; Task? pollingTask; int requestedGeneration; int appliedGeneration;
     IReadOnlyList<BarSummaryRow> rows = []; BarAnalytics? analytics; bool offline; bool starting; bool refreshing;
-    bool summaryStale; bool analyticsStale; string? lastError; IReadOnlyList<BarNotification> activeAlerts = [];
+    bool summaryStale; bool analyticsStale; string? lastError; IReadOnlyList<BarNotification> activeAlerts = []; BarConnectionState connectionState = BarConnectionState.Unreachable;
     bool updateAvailable; string? latestVersion; bool installingUpdate;
 
     public BarViewModel(IBarConnector connector, IBarSettings settings, IBarClock? clock = null,
@@ -69,6 +71,7 @@ public sealed class BarViewModel : INotifyPropertyChanged, IDisposable, IAsyncDi
     public bool UpdateAvailable { get => updateAvailable; private set => Set(ref updateAvailable, value); }
     public string? LatestVersion { get => latestVersion; private set => Set(ref latestVersion, value); }
     public bool IsInstallingUpdate { get => installingUpdate; set => Set(ref installingUpdate, value); }
+    public BarConnectionState ConnectionState { get => connectionState; private set => Set(ref connectionState, value); }
     public Uri? ActiveBaseUrl { get; private set; }
     public BarUiSettings Ui { get => settings.Ui; set { settings.Ui = value; settings.Save(); Changed(); Changed(nameof(StatusTitle)); } }
     public BarPreferences AlertPreferences { get => settings.Alerts; set { settings.Alerts = value; settings.Save(); EvaluateAlerts(); } }
@@ -85,14 +88,15 @@ public sealed class BarViewModel : INotifyPropertyChanged, IDisposable, IAsyncDi
         try
         {
             if (generation < Volatile.Read(ref requestedGeneration)) return;
-            IsStarting = client is null && launch; LastError = null;
+            IsStarting = client is null && launch; if (IsStarting) ConnectionState = BarConnectionState.Starting; LastError = null;
             try { client = await connector.ConnectAsync(launch, linked.Token); }
             catch (Exception e) when (e is not OperationCanceledException) { LastError = e.Message; client = null; }
             IsStarting = false;
             if (connector is IActiveBarConnection active) ActiveBaseUrl = active.ActiveBaseUrl;
+            if (client is null) ConnectionState = connector is IBarConnectionStatus status ? status.ConnectionState : BarConnectionState.Unreachable;
             await LoadGenerationAsync(force, generation, linked.Token);
         }
-        finally { refreshGate.Release(); }
+        finally { IsStarting = false; refreshGate.Release(); }
     }
     public async Task LoadAsync(bool force, CancellationToken ct = default)
     {
@@ -100,7 +104,7 @@ public sealed class BarViewModel : INotifyPropertyChanged, IDisposable, IAsyncDi
     }
     async Task LoadGenerationAsync(bool force, int generation, CancellationToken ct)
     {
-        if (client is null) { Offline = Rows.Count == 0; return; }
+        if (client is null) { Offline = Rows.Count == 0; SummaryStale = Rows.Count > 0; LastError = ConnectionState switch { BarConnectionState.Timeout => "CCS did not respond in time", BarConnectionState.AuthenticationFailure => "CCS Bar authentication failed", _ => LastError }; return; }
         IsRefreshing = force;
         var summary = Capture(() => client.SummaryAsync(force, ct));
         var analysis = Capture(() => client.AnalyticsAsync(ct));
@@ -109,7 +113,8 @@ public sealed class BarViewModel : INotifyPropertyChanged, IDisposable, IAsyncDi
         if (summary.Result.Value is { } loadedRows) { Rows = loadedRows; SummaryStale = false; } else SummaryStale = Rows.Count > 0;
         if (analysis.Result.Value is { } loadedAnalytics) { Analytics = loadedAnalytics; AnalyticsStale = false; } else AnalyticsStale = Analytics is not null;
         LastError = summary.Result.Error?.Message ?? analysis.Result.Error?.Message;
-        Offline = Rows.Count == 0 && summary.Result.Error is not null;
+        ConnectionState = summary.Result.Error is TimeoutException ? BarConnectionState.Timeout : summary.Result.Error is not null ? BarConnectionState.ApiFailure : Rows.Count == 0 ? BarConnectionState.Empty : BarConnectionState.Ready;
+        Offline = Rows.Count == 0 && ConnectionState is BarConnectionState.Unreachable or BarConnectionState.Timeout or BarConnectionState.AuthenticationFailure or BarConnectionState.ApiFailure;
         IsRefreshing = false; EvaluateAlerts(); Changed(nameof(StatusTitle));
     }
     public Task OnPanelOpenedAsync(CancellationToken ct = default)

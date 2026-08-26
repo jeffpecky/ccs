@@ -11,7 +11,7 @@ namespace CCSBar.Tests;
 public sealed class CoreTests
 {
     const string Token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-    const string SummaryJson = "[{\"account_id\":\"acct\",\"provider\":\"codex\",\"paused\":false,\"quota_percentage\":42.5,\"quota_status\":\"ok\",\"is_default\":true,\"health\":\"warning\",\"cached\":true,\"needs_reauth\":false}]";
+    const string SummaryJson = "[{\"account_id\":\"acct\",\"provider\":\"codex\",\"displayName\":\"Codex Plus\",\"tier\":\"plus\",\"paused\":false,\"quota_percentage\":42.5,\"quotaStatus\":\"ok\",\"next_reset\":\"2026-08-27T00:00:00Z\",\"is_default\":true,\"last_activity_at\":\"2026-08-26T00:00:00Z\",\"today_cost\":1.25,\"health\":\"warning\",\"cached\":true,\"fetchedAt\":\"2026-08-26T00:01:00Z\",\"needsReauth\":false,\"surface\":\"codex\",\"profile\":\"default\",\"is_subscription\":true,\"quota_windows\":[{\"key\":\"5h\",\"label\":\"5h\",\"usedPercent\":57.5,\"remainingPercent\":42.5,\"resetAt\":\"2026-08-27T00:00:00Z\",\"windowMinutes\":300}],\"stale_as_of\":\"2026-08-25T23:00:00Z\"}]";
     const string AnalyticsJson = "{\"today\":{\"cost\":1,\"requests\":2},\"last7d\":{\"cost\":3,\"requests\":4},\"last30d\":{\"cost\":5,\"requests\":6},\"allTime\":{\"cost\":7,\"requests\":8},\"byDay\":[],\"topModels\":[],\"topModelsWindow\":\"30d\",\"lastActivityAt\":null,\"daysSinceLastActivity\":null,\"hasRecentData\":true,\"generatedAt\":\"now\"}";
 
     [TestMethod]
@@ -56,6 +56,23 @@ public sealed class CoreTests
     }
 
     [TestMethod]
+    public async Task Client_DecodesLiveMixedCaseSummaryContract()
+    {
+        var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(request => AuthenticatedResponse(request, SummaryJson))), Token);
+
+        var row = (await client.SummaryAsync()).Single();
+
+        Assert.AreEqual("Codex Plus", row.DisplayName);
+        Assert.AreEqual("ok", row.QuotaStatus);
+        Assert.AreEqual("2026-08-26T00:01:00Z", row.FetchedAt);
+        Assert.IsFalse(row.NeedsReauth);
+        Assert.IsTrue(row.IsSubscription);
+        Assert.AreEqual(42.5, row.QuotaPercentage);
+        Assert.AreEqual(57.5, row.QuotaWindows!.Single().UsedPercent);
+        Assert.AreEqual("2026-08-25T23:00:00Z", row.StaleAsOf);
+    }
+
+    [TestMethod]
     public async Task Client_RejectsMissingInvalidAndDuplicateResponseProofsOnEveryApiResponse()
     {
         foreach (var proof in new[] { "missing", "invalid", "duplicate" })
@@ -73,18 +90,37 @@ public sealed class CoreTests
     }
 
     [TestMethod]
-    public async Task Client_MalformedOrNullModelJsonFailsClosedWithoutThrowing()
+    public async Task Client_MalformedOrNullSummaryJsonThrowsInsteadOfReturningEmptyRows()
     {
-        foreach (var json in new[] { "bad", "null", "[{\"account_id\":null}]" })
+        foreach (var json in new[] { "bad", "null", "[{\"account_id\":\"a\"}]" })
         {
             var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(request => AuthenticatedResponse(request, json))), Token);
-            Assert.AreEqual(0, (await client.SummaryAsync()).Count);
+            await Assert.ThrowsExceptionAsync<JsonException>(() => client.SummaryAsync());
         }
-        foreach (var json in new[] { "bad", "null", "{\"today\":null}" })
+    }
+
+    [TestMethod]
+    public async Task Client_MalformedAnalyticsJsonThrowsButNullRemainsOptional()
+    {
+        foreach (var json in new[] { "bad", "{\"today\":null}" })
         {
             var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(request => AuthenticatedResponse(request, json))), Token);
-            Assert.IsNull(await client.AnalyticsAsync());
+            await Assert.ThrowsExceptionAsync<JsonException>(() => client.AnalyticsAsync());
         }
+        var optional = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(request => AuthenticatedResponse(request, "null"))), Token);
+        Assert.IsNull(await optional.AnalyticsAsync());
+    }
+
+    [TestMethod]
+    public async Task Client_BoundsApiRequestsButPreservesCallerCancellation()
+    {
+        var handler = new RecordingHandler(async (_, ct) => { await Task.Delay(Timeout.InfiniteTimeSpan, ct); return new HttpResponseMessage(HttpStatusCode.OK); });
+        var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(handler), Token, requestTimeout: TimeSpan.FromMilliseconds(20));
+        await Assert.ThrowsExceptionAsync<TimeoutException>(() => client.SummaryAsync());
+
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        await Assert.ThrowsExceptionAsync<TaskCanceledException>(() => client.SummaryAsync(cancellationToken: cancelled.Token));
     }
 
     [TestMethod]
@@ -169,6 +205,27 @@ public sealed class CoreTests
             return response;
         })), Token, TimeSpan.FromMilliseconds(20));
         Assert.IsNull(await probe.FindLiveServerAsync(new("http://127.0.0.1:4321", 4321, "loopback")));
+    }
+
+    [TestMethod]
+    public async Task Probe_ClassifiesTimeoutAuthenticationAndUnreachableFailures()
+    {
+        var timeout = new BarServerProbe(new HttpClient(new RecordingHandler(async (_, ct) => { await Task.Delay(Timeout.InfiniteTimeSpan, ct); return new HttpResponseMessage(HttpStatusCode.OK); })), Token, TimeSpan.FromMilliseconds(20));
+        Assert.AreEqual(BarConnectionState.Timeout, (await timeout.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
+
+        var auth = new BarServerProbe(new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))), Token, TimeSpan.FromMilliseconds(20));
+        Assert.AreEqual(BarConnectionState.AuthenticationFailure, (await auth.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
+
+        var unreachable = new BarServerProbe(new HttpClient(new RecordingHandler((_, _) => Task.FromException<HttpResponseMessage>(new HttpRequestException("refused")))), Token, TimeSpan.FromMilliseconds(20));
+        Assert.AreEqual(BarConnectionState.Unreachable, (await unreachable.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
+
+        var api = new BarServerProbe(new HttpClient(new RecordingHandler(request =>
+        {
+            var response = AuthenticatedResponse(request, "{}");
+            response.StatusCode = HttpStatusCode.ServiceUnavailable;
+            return response;
+        })), Token, TimeSpan.FromMilliseconds(20));
+        Assert.AreEqual(BarConnectionState.ApiFailure, (await api.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
     }
 
     [TestMethod]
@@ -343,6 +400,88 @@ public sealed class ViewModelTests
     }
 
     [TestMethod]
+    public async Task ViewModel_DistinguishesValidEmptyFromConnectionAndApiFailures()
+    {
+        var empty = new BarViewModel(new FakeConnector(new FakeBarDataClient()), new MemoryBarSettings(), new FakeClock());
+        await empty.ReconnectAndLoadAsync(false);
+        Assert.AreEqual(BarConnectionState.Empty, empty.ConnectionState);
+        Assert.IsFalse(empty.Offline);
+
+        var timeoutConnector = new FakeConnector(null) { Failure = BarConnectionState.Timeout };
+        var timeout = new BarViewModel(timeoutConnector, new MemoryBarSettings(), new FakeClock());
+        await timeout.ReconnectAndLoadAsync(false);
+        Assert.AreEqual(BarConnectionState.Timeout, timeout.ConnectionState);
+        Assert.IsTrue(timeout.Offline);
+
+        var broken = new BarViewModel(new FakeConnector(new FakeBarDataClient { SummaryError = new JsonException("bad summary") }), new MemoryBarSettings(), new FakeClock());
+        await broken.ReconnectAndLoadAsync(false);
+        Assert.AreEqual(BarConnectionState.ApiFailure, broken.ConnectionState);
+        Assert.IsTrue(broken.Offline);
+    }
+
+    [TestMethod]
+    public async Task ViewModel_RecoversAfterInitialProbeTimeout()
+    {
+        var connector = new FakeConnector(null) { Failure = BarConnectionState.Timeout };
+        var vm = new BarViewModel(connector, new MemoryBarSettings(), new FakeClock());
+        await vm.ReconnectAndLoadAsync(false);
+        connector.Client = new FakeBarDataClient { Rows = [Row], Analytics = Analytics };
+        connector.Failure = BarConnectionState.Unreachable;
+
+        await vm.RetryAsync();
+
+        Assert.AreEqual(BarConnectionState.Ready, vm.ConnectionState);
+        Assert.IsFalse(vm.Offline);
+        Assert.AreEqual(1, vm.Rows.Count);
+    }
+
+    [TestMethod]
+    public async Task ViewModel_ClearsStartingWhenReconnectIsCancelled()
+    {
+        var connector = new BlockingConnector();
+        var vm = new BarViewModel(connector, new MemoryBarSettings(), new FakeClock());
+        using var cts = new CancellationTokenSource();
+        var reconnect = vm.ReconnectAndLoadAsync(false, cts.Token);
+        await connector.Started.Task;
+        cts.Cancel();
+        await Assert.ThrowsExceptionAsync<TaskCanceledException>(() => reconnect);
+        Assert.IsFalse(vm.IsStarting);
+    }
+
+    [TestMethod]
+    public async Task ViewModel_ApiTimeoutClearsRefreshAndMarksCachedRowsStale()
+    {
+        var client = new FakeBarDataClient { Rows = [Row], Analytics = Analytics };
+        var connector = new FakeConnector(client);
+        var vm = new BarViewModel(connector, new MemoryBarSettings(), new FakeClock());
+        await vm.ReconnectAndLoadAsync(false);
+        client.SummaryError = new TimeoutException("summary timed out");
+
+        await vm.LoadAsync(true);
+
+        Assert.IsFalse(vm.IsRefreshing);
+        Assert.IsFalse(vm.Offline);
+        Assert.IsTrue(vm.SummaryStale);
+        Assert.AreEqual(BarConnectionState.Timeout, vm.ConnectionState);
+    }
+
+    [TestMethod]
+    public async Task ViewModel_ReconnectTimeoutMarksCachedRowsStale()
+    {
+        var connector = new FakeConnector(new FakeBarDataClient { Rows = [Row], Analytics = Analytics });
+        var vm = new BarViewModel(connector, new MemoryBarSettings(), new FakeClock());
+        await vm.ReconnectAndLoadAsync(false);
+        connector.Client = null;
+        connector.Failure = BarConnectionState.Timeout;
+
+        await vm.RetryAsync();
+
+        Assert.IsFalse(vm.Offline);
+        Assert.IsTrue(vm.SummaryStale);
+        Assert.AreEqual(BarConnectionState.Timeout, vm.ConnectionState);
+    }
+
+    [TestMethod]
     public async Task ViewModel_SerializesRefreshAndLatestRequestWins()
     {
         var client = new ControlledBarDataClient(); var connector = new FakeConnector(client); var vm = new BarViewModel(connector, new MemoryBarSettings(), new FakeClock());
@@ -458,7 +597,8 @@ public sealed class ViewModelTests
 }
 
 sealed class FakeClock : IBarClock { public DateTimeOffset Now { get; set; } = DateTimeOffset.Parse("2026-08-24T00:00:00Z"); }
-sealed class FakeConnector(IBarDataClient? client) : IBarConnector { public IBarDataClient? Client { get; set; } = client; public List<bool> Launches { get; } = []; public Task<IBarDataClient?> ConnectAsync(bool launch, CancellationToken cancellationToken) { Launches.Add(launch); return Task.FromResult(Client); } }
+sealed class FakeConnector(IBarDataClient? client) : IBarConnector, IBarConnectionStatus { public IBarDataClient? Client { get; set; } = client; public BarConnectionState Failure { get; set; } = BarConnectionState.Unreachable; public BarConnectionState ConnectionState => Client is null ? Failure : BarConnectionState.Ready; public List<bool> Launches { get; } = []; public Task<IBarDataClient?> ConnectAsync(bool launch, CancellationToken cancellationToken) { Launches.Add(launch); return Task.FromResult(Client); } }
+sealed class BlockingConnector : IBarConnector { public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously); public async Task<IBarDataClient?> ConnectAsync(bool launch, CancellationToken cancellationToken) { Started.TrySetResult(); await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); return null; } }
 sealed class FakeBarDataClient : IBarDataClient
 {
     public IReadOnlyList<BarSummaryRow> Rows { get; set; } = []; public BarAnalytics? Analytics { get; set; } public Exception? SummaryError { get; set; } public int ForcedLoads { get; private set; }
