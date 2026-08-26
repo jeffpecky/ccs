@@ -625,7 +625,12 @@ describe('launch: detached-spawn model', () => {
       findRunningServer: async () => null,
       getPort: async () => 4242,
       createLaunchId: () => 'launch-descriptor-failure',
-      writeLatestLaunchPointer: (_pointerPath: string, pointer: { status: string }) => statuses.push(pointer.status),
+      writeLatestLaunchPointer: (pointerPath: string, pointer: { status: string; launchId: string; port: number; startedAt: string; logPath: string; schema: number }) => {
+        statuses.push(pointer.status);
+        fs.mkdirSync(path.dirname(pointerPath), { recursive: true });
+        fs.writeFileSync(pointerPath, JSON.stringify(pointer, null, 2));
+        return true;
+      },
       spawnDetachedServer: () => ({ kill: () => { killed = true; return true; } }),
       waitForDetachedChildExit: async () => true,
       waitForServerLive: async () => {},

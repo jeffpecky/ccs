@@ -650,18 +650,42 @@ export async function handleBarLaunch(
     }
   };
 
-  const priorLaunchJson = fs.existsSync(launchJsonPath) ? fs.readFileSync(launchJsonPath, 'utf8') : null;
-  const priorBarJson = fs.existsSync(barJsonPath) ? fs.readFileSync(barJsonPath, 'utf8') : null;
+const priorLaunchJson = (() => {
+    try {
+      if (fs.existsSync(launchJsonPath) && fs.statSync(launchJsonPath).isFile()) {
+        return fs.readFileSync(launchJsonPath, 'utf8');
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  })();
+  const priorBarJson = (() => {
+    try {
+      if (fs.existsSync(barJsonPath) && fs.statSync(barJsonPath).isFile()) {
+        return fs.readFileSync(barJsonPath, 'utf8');
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  })();
   const restoreLaunchJson = (): void => {
     withOwnership(() => {
-      if (priorLaunchJson === null) fs.rmSync(launchJsonPath, { force: true });
-      else writeFileAtomic(launchJsonPath, priorLaunchJson);
+      if (priorLaunchJson === null) {
+        try { fs.rmSync(launchJsonPath, { force: true }); } catch { /* already gone or directory */ }
+      } else {
+        writeFileAtomic(launchJsonPath, priorLaunchJson);
+      }
     });
   };
   const restoreBarJson = (): void => {
     withOwnership(() => {
-      if (priorBarJson === null) fs.rmSync(barJsonPath, { force: true });
-      else writeFileAtomic(barJsonPath, priorBarJson);
+      if (priorBarJson === null) {
+        try { fs.rmSync(barJsonPath, { force: true }); } catch { /* already gone or directory */ }
+      } else {
+        writeFileAtomic(barJsonPath, priorBarJson);
+      }
     });
   };
 
@@ -737,11 +761,11 @@ export async function handleBarLaunch(
       await killSpawnedChildAndAwaitExit();
       return;
     }
-  } catch (err) {
+} catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Could not write launch.json: ${msg}`);
     restoreLaunchJson();
-    publishPointer('failed');
+    try { publishPointer('failed'); } catch { /* ignore */ }
     await killSpawnedChildAndAwaitExit();
     await rollbackPriorServer();
     process.exitCode = 1;
