@@ -96,10 +96,7 @@ function printRemoteHint(provider: CLIProxyProvider): void {
   console.log('    To enable pool routing manually, add to your CLIProxy config.yaml:');
   console.log('      disable-cooling: false');
   console.log(`      max-retry-credentials: ${POOL_MAX_RETRY_CREDENTIALS}`);
-  console.log('      routing:');
-  console.log('        strategy: fill-first');
-  console.log('        session-affinity: true');
-  console.log('        session-affinity-ttl: "1h"');
+  console.log('      # Your existing routing strategy and session affinity are preserved.');
   console.log('');
 }
 
@@ -221,7 +218,7 @@ export async function maybeOfferPoolRouting(
   console.log('');
   console.log(warn('Pool routing: you now have 2+ accounts for ' + provider));
   console.log('');
-  console.log('    CCS can enable pool routing (fill-first + session affinity + 429 cooldown).');
+  console.log('    CCS can enable pool routing (cooling + max-retry-credentials).');
   console.log('    This is an INSTANCE-GLOBAL change: it affects account selection for ALL');
   console.log(`    CLIProxy providers on this machine: ${providerList}`);
   console.log('');
@@ -229,11 +226,10 @@ export async function maybeOfferPoolRouting(
   console.log('      - disable-cooling: false  (cooldown is required for retry-cap to work)');
   console.log('        A 429 suspends a credential briefly (1s -> 30m exp backoff).');
   console.log('        A 401/403 suspends it for 30 minutes (correct: broken auth = no traffic).');
-  console.log('      - routing: fill-first      (drain one account before switching)');
-  console.log('      - session-affinity: true   (TTL 1h, pinned per conversation)');
   console.log(
     `      - max-retry-credentials: ${POOL_MAX_RETRY_CREDENTIALS}  (stop after ${POOL_MAX_RETRY_CREDENTIALS} attempts per request)`
   );
+  console.log('      - Your existing routing strategy and session affinity are preserved.');
   console.log('');
   console.log('    You can roll back at any time: Disable pool routing from the dashboard control panel');
   console.log('    (Or re-enable later: Enable pool routing from the dashboard control panel)');

@@ -4,7 +4,7 @@
  * Covers:
  *   1. Schema keys: pool_routing.enabled, max_retry_credentials, prompt_dismissed
  *   2. Generator snapshot: non-pool config is content-identical (cooling=true, RR, no affinity)
- *   3. Generator snapshot: pool config block (cooling=false, fill-first, affinity, max-retry)
+ *   3. Generator snapshot: pool config block (cooling=false, max-retry, user's strategy/affinity)
  *   4. enablePoolRouting / disablePoolRouting lifecycle
  *   5. Explicit-setting detection (preserve user routing values)
  *   6. disablePoolRouting rollback restores cooling-true (prevent single-account blackout)
@@ -167,7 +167,7 @@ describe('Phase 3: Pool Routing — schema keys and generator snapshots', () => 
       expect(content).toContain('disable-cooling: false');
     });
 
-    it('emits fill-first strategy and session-affinity: true for pool users', async () => {
+    it('emits user strategy and session-affinity for pool users (pool only adds cooling + max-retry)', async () => {
       const { mutateConfig, invalidateConfigCache } = await import(
         `../../config/config-loader-facade?p3genp2=${Date.now()}`
       );
@@ -187,13 +187,14 @@ describe('Phase 3: Pool Routing — schema keys and generator snapshots', () => 
       regenerateConfig(8317, { configPath, authDir });
 
       const content = fs.readFileSync(configPath, 'utf-8');
-      expect(content).toContain('strategy: fill-first');
-      expect(content).toContain('session-affinity: true');
-      expect(content).toContain('session-affinity-ttl: "1h"');
+      // Pool routing only forces cooling + max-retry; strategy and affinity use defaults
+      expect(content).toContain('strategy: round-robin');
+      expect(content).toContain('session-affinity: false');
       expect(content).toContain('max-retry-credentials: 3');
+      expect(content).toContain('disable-cooling: false');
     });
 
-    it('pool config does NOT emit round-robin or disable-cooling: true', async () => {
+    it('pool config does NOT emit disable-cooling: true', async () => {
       const { mutateConfig, invalidateConfigCache } = await import(
         `../../config/config-loader-facade?p3genp3=${Date.now()}`
       );
@@ -214,7 +215,6 @@ describe('Phase 3: Pool Routing — schema keys and generator snapshots', () => 
 
       const content = fs.readFileSync(configPath, 'utf-8');
       expect(content).not.toContain('disable-cooling: true');
-      expect(content).not.toContain('strategy: round-robin');
     });
   });
 });
@@ -258,7 +258,6 @@ describe('Phase 3: enablePoolRouting and disablePoolRouting', () => {
     expect(result.changed).toBe(true);
     const content = fs.readFileSync(configPath, 'utf-8');
     expect(content).toContain('disable-cooling: false');
-    expect(content).toContain('strategy: fill-first');
     expect(content).toContain('max-retry-credentials: 3');
   });
 
@@ -965,9 +964,9 @@ describe('Phase 3: mixed-state — claude pool + agy multi-account implicit RR',
     // Pool routing is instance-global — written to the single shared config.yaml
     expect(result.changed).toBe(true);
     const content = fs.readFileSync(configPath, 'utf-8');
-    // Both agy and claude accounts go through the same config
-    expect(content).toContain('strategy: fill-first');
+    // Pool routing only forces cooling + max-retry; strategy uses user's choice
     expect(content).toContain('disable-cooling: false');
+    expect(content).toContain('max-retry-credentials: 3');
   });
 
   it('POOL_ROUTING_VERIFIED_PROVIDERS contains claude and agy but not codex or gemini', async () => {
@@ -1580,6 +1579,5 @@ describe('PR #1514: enablePoolRouting rollback on regenerate failure', () => {
     expect(fs.existsSync(configPath)).toBe(true);
     const content = fs.readFileSync(configPath, 'utf-8');
     expect(content).toContain('disable-cooling: false');
-    expect(content).toContain('strategy: fill-first');
   });
 });

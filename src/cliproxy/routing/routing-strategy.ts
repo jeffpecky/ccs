@@ -18,9 +18,9 @@ export const DEFAULT_CLIPROXY_SESSION_AFFINITY_ENABLED = false;
 export const DEFAULT_CLIPROXY_SESSION_AFFINITY_TTL = '1h';
 
 /**
- * Pool routing defaults written to config when pool routing is enabled.
- * fill-first + session affinity drains one account before using another,
- * maximising per-account context depth while honouring cooldown windows.
+ * Pool routing defaults used as initial values when pool routing is first enabled.
+ * These are NOT overrides — the user's strategy/affinity choices are respected.
+ * Pool routing only forces: cooling ON, max-retry-credentials.
  */
 export const POOL_ROUTING_STRATEGY: CliproxyRoutingStrategy = 'fill-first';
 export const POOL_SESSION_AFFINITY_ENABLED = true;
@@ -45,26 +45,6 @@ export const POOL_ROUTING_VERIFIED_PROVIDERS = new Set(['claude', 'agy']);
  * Current best estimate based on spec; adjust after spike Test D confirms.
  */
 export const POOL_ROUTING_MIN_VERSION = '6.9.45';
-
-/**
- * Pool-active override warning text.  When pool routing is enabled the generator
- * forces fill-first/affinity/cooling and ignores the stored strategy/affinity, so
- * an apply via API or dashboard will not take effect.  The CLI prints this same
- * text before applying; appending it to the apply result message lets dashboard
- * and API consumers surface the same caveat (the CLI warns, the dashboard did not).
- */
-function poolActiveOverrideNote(kind: 'strategy' | 'affinity'): string {
-  const what = kind === 'strategy' ? 'stored strategy' : 'stored affinity setting';
-  return (
-    `[!] Pool routing is active. The ${what} will not take effect\n` +
-    `    until pool routing is disabled: Disable pool routing from the dashboard control panel`
-  );
-}
-
-/** Whether pool routing is enabled in the local unified config. */
-function isLocalPoolRoutingEnabled(): boolean {
-  return loadOrCreateUnifiedConfig().cliproxy?.pool_routing?.enabled === true;
-}
 
 export interface EnablePoolRoutingResult {
   /** Whether the pool routing state actually changed */
@@ -218,10 +198,9 @@ export function enablePoolRouting(
   mutateConfig((cfg) => {
     if (!cfg.cliproxy) return;
     // Write only the pool flag and retry-cap.  User's routing values (strategy,
-    // session_affinity, session_affinity_ttl) are intentionally left untouched so
-    // disablePoolRouting can restore them without needing a separate backup.
-    // The generator uses pool constants (fill-first, affinity 1h) when pool is
-    // enabled, bypassing whatever is stored in cfg.cliproxy.routing.
+    // session_affinity, session_affinity_ttl) are intentionally left untouched.
+    // Pool routing only enables cooling and max-retry; strategy and affinity
+    // are the user's choice and not overridden.
     cfg.cliproxy.pool_routing = {
       ...cfg.cliproxy.pool_routing,
       enabled: true,
@@ -254,22 +233,21 @@ export function enablePoolRouting(
     changed: true,
     preservedExplicitSetting,
     message: preservedExplicitSetting
-      ? '[!] Pool routing enabled. Your existing routing setting is preserved in config.\n    The generator uses pool defaults (fill-first, affinity 1h) while pool is active.\n    To restore your setting, disable pool routing from the dashboard control panel.'
-      : '[OK] Pool routing enabled. CLIProxy config regenerated with cooling ON,\n    fill-first strategy, session affinity 1h, max-retry-credentials 3.\n    CLIProxy will hot-reload the change; live session pins will re-pin on\n    next request.',
+      ? '[OK] Pool routing enabled. Your existing routing settings are preserved.\n    Pool features (cooling, max-retry) are now active with your chosen strategy.'
+      : '[OK] Pool routing enabled. CLIProxy config regenerated with cooling ON\n    and max-retry-credentials 3. Your routing strategy and session affinity\n    settings are preserved. CLIProxy will hot-reload the change.',
   };
 }
 
 /**
  * Disable pool routing: clear pool_routing.enabled and restore the non-pool
- * config defaults (disable-cooling: true, round-robin, no affinity).
- * Regenerates the CLIProxy config.yaml.
+ * config defaults (disable-cooling: true). Regenerates the CLIProxy config.yaml.
  *
- * IMPORTANT: disablePoolRouting MUST explicitly restore routing to round-robin
- * and session_affinity to false.  Simply clearing pool_routing.enabled is not
- * sufficient because the upstream CLIProxy default for disable-cooling is false
- * (cooling ON) when the key is absent.  Leaving cooling ON for a user who has
- * disabled pool routing would reintroduce the single-account blackout that v5
- * (commit fb77d72a) fixed.
+ * User's routing strategy and session affinity are never touched by pool routing,
+ * so they remain as-is after disabling.
+ *
+ * IMPORTANT: The upstream CLIProxy default for disable-cooling is false (cooling ON)
+ * when the key is absent.  Leaving cooling ON for a user who has disabled pool
+ * routing would reintroduce the single-account blackout that v5 fixed.
  *
  * Idempotent: calling when already disabled is a no-op.
  */
@@ -291,8 +269,8 @@ export function disablePoolRouting(
   mutateConfig((cfg) => {
     if (!cfg.cliproxy) return;
     // Only clear the pool flag — user's routing values (strategy, session_affinity,
-    // session_affinity_ttl) were never overwritten on enable, so they are naturally
-    // restored here.  The generator emits disable-cooling: true when pool is off.
+    // session_affinity_ttl) were never overwritten on enable, so they remain unchanged.
+    // The generator emits disable-cooling: true when pool is off.
     cfg.cliproxy.pool_routing = {
       ...cfg.cliproxy.pool_routing,
       enabled: false,
@@ -316,9 +294,8 @@ export function disablePoolRouting(
   return {
     changed: true,
     message:
-      '[OK] Pool routing disabled. CLIProxy config regenerated with cooling disabled (stability mode).\n' +
-      '    Your original routing settings are restored.\n' +
-      '    If you have multiple accounts and want fair distribution, round-robin is active.\n' +
+      '[OK] Pool routing disabled. CLIProxy config regenerated with cooling disabled.\n' +
+      '    Your routing strategy and session affinity settings are preserved.\n' +
       '    To avoid cache-burn with large multi-account fleets, consider reducing to 1 account\n' +
       '    or re-enabling pool routing from the dashboard control panel.',
   };
@@ -596,11 +573,6 @@ export async function applyCliproxyRoutingStrategy(
     };
   }
 
-  // Pool routing overrides the stored strategy at config-generation time, so the
-  // apply will not take effect until pool routing is disabled.  Append the same
-  // note the CLI prints so dashboard/API consumers see the override too.
-  const poolNote = isLocalPoolRoutingEnabled() ? `\n\n${poolActiveOverrideNote('strategy')}` : '';
-
   mutateConfig((config) => {
     if (config.cliproxy) {
       config.cliproxy.routing = { ...config.cliproxy.routing, strategy };
@@ -616,7 +588,7 @@ export async function applyCliproxyRoutingStrategy(
       target: 'local',
       reachable: true,
       applied: 'live-and-config',
-      message: 'Updated the running proxy and saved the local startup default.' + poolNote,
+      message: 'Updated the running proxy and saved the local startup default.',
     };
   } catch {
     return {
@@ -625,8 +597,7 @@ export async function applyCliproxyRoutingStrategy(
       target: 'local',
       reachable: false,
       applied: 'config-only',
-      message:
-        'Saved the local startup default. It will apply the next time CLIProxy starts.' + poolNote,
+      message: 'Saved the local startup default. It will apply the next time CLIProxy starts.',
     };
   }
 }
@@ -657,10 +628,6 @@ export async function applyCliproxySessionAffinitySettings(
     current.ttl ??
     DEFAULT_CLIPROXY_SESSION_AFFINITY_TTL;
 
-  // Pool routing overrides the stored session-affinity at config-generation time;
-  // append the same override note the CLI prints so dashboard/API consumers see it.
-  const poolNote = isLocalPoolRoutingEnabled() ? `\n\n${poolActiveOverrideNote('affinity')}` : '';
-
   mutateConfig((config) => {
     if (config.cliproxy) {
       config.cliproxy.routing = {
@@ -681,11 +648,9 @@ export async function applyCliproxySessionAffinitySettings(
     reachable,
     manageable: true,
     applied: 'config-only',
-    message:
-      (reachable
-        ? 'Saved the local startup default. Running local CLIProxy may hot-reload the session-affinity setting, but CCS does not verify live selector state yet.'
-        : 'Saved the local startup default. It will apply the next time local CLIProxy starts.') +
-      poolNote,
+    message: reachable
+      ? 'Saved the local startup default. Running local CLIProxy may hot-reload the session-affinity setting, but CCS does not verify live selector state yet.'
+      : 'Saved the local startup default. It will apply the next time local CLIProxy starts.',
   };
 }
 

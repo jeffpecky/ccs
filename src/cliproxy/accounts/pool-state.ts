@@ -93,7 +93,7 @@ export interface PoolDrainOrderState {
 }
 
 export interface PoolRoutingSettings {
-  /** Whether pool routing (fill-first + affinity + cooling) is enabled. */
+  /** Whether pool routing (cooling + max-retry) is enabled. */
   poolEnabled: boolean;
   strategy: string;
   sessionAffinityEnabled: boolean;

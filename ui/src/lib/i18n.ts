@@ -1119,11 +1119,11 @@ const resources = {
         enablePoolRouting: 'Enable pool routing',
         disablePoolRouting: 'Disable pool routing',
         poolRoutingManaged:
-          'Pool routing is on: CCS manages strategy (fill-first), session affinity, and cooling for the whole proxy.',
+          'Pool routing is on: CCS manages cooling and max-retry for the whole proxy. Your strategy and session affinity settings are preserved.',
         poolRoutingOffHint:
-          'Pool routing is off. Enable it from the CLI (ccs cliproxy pool --enable) for fill-first drain with cooldown.',
+          'Pool routing is off. Enable it from the CLI (ccs cliproxy pool --enable) for cooldown and max-retry features.',
         poolRoutingApplyWarning:
-          'Pool routing is on. Strategy and session affinity changes will not take effect until you disable it: ccs cliproxy pool --disable',
+          'Pool routing is on. Your strategy and session affinity settings are preserved.',
         poolRoutingLocalOnly:
           'Pool routing is managed locally; this remote proxy may not reflect it.',
         poolMaxRetry: 'Max retry {{count}}',

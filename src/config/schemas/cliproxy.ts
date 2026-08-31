@@ -125,8 +125,9 @@ export interface CLIProxyRoutingConfig {
  * Pool routing configuration for multi-account CLIProxy rotation.
  *
  * Pool routing is opt-in at the 1->2 account-add transition.
- * When enabled: fill-first strategy, session affinity (1h TTL), cooling ON,
- * and max-retry-credentials: 3 are written to the generated CLIProxy config.
+ * When enabled: cooling ON and max-retry-credentials: 3 are written to the
+ * generated CLIProxy config. The user's routing strategy and session affinity
+ * settings are preserved.
  *
  * Cooling note: disable-cooling flips to false when pool routing is enabled.
  * This is intentional — cooling is required for retry-cap to function correctly.

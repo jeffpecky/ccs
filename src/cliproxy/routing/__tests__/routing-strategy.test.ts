@@ -321,9 +321,9 @@ describe('cliproxy routing strategy service', () => {
   });
 
   // PR #1514 fix index 14 (backend): when local pool routing is enabled, the apply
-  // result message must carry the pool-override note so API/dashboard consumers see
-  // the same caveat the CLI prints.
-  it('appends a pool-active override note to local strategy apply when pool routing is on', async () => {
+  // result message should NOT contain pool-override notes since pool routing
+  // no longer forces strategy/affinity.
+  it('does not append pool-override note to strategy apply when pool routing is on', async () => {
     await withScopedConfig(async () => {
       const { mutateUnifiedConfig } = await import('../../../config/unified-config-loader');
       mutateUnifiedConfig((config) => {
@@ -335,12 +335,11 @@ describe('cliproxy routing strategy service', () => {
       const mod = await loadRoutingModule();
       const result = await mod.applyCliproxyRoutingStrategy('round-robin');
 
-      expect(result.message).toContain('Pool routing is active');
-      expect(result.message).toContain('Disable pool routing from the dashboard control panel');
+      expect(result.message).not.toContain('Pool routing is active');
     });
   });
 
-  it('appends a pool-active override note to local affinity apply when pool routing is on', async () => {
+  it('does not append pool-override note to affinity apply when pool routing is on', async () => {
     await withScopedConfig(async () => {
       const { mutateUnifiedConfig } = await import('../../../config/unified-config-loader');
       mutateUnifiedConfig((config) => {
@@ -352,8 +351,7 @@ describe('cliproxy routing strategy service', () => {
       const mod = await loadRoutingModule();
       const result = await mod.applyCliproxySessionAffinitySettings({ enabled: true, ttl: '1h' });
 
-      expect(result.message).toContain('Pool routing is active');
-      expect(result.message).toContain('Disable pool routing from the dashboard control panel');
+      expect(result.message).not.toContain('Pool routing is active');
     });
   });
 
