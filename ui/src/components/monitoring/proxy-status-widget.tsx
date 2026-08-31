@@ -64,6 +64,7 @@ import {
   useCliproxySessionAffinity,
   useUpdateCliproxyRoutingStrategy,
   useUpdateCliproxySessionAffinity,
+  useUpdateCliproxyPoolRouting,
 } from '@/hooks/use-cliproxy';
 import { useSyncStatus, useExecuteSync } from '@/hooks/use-cliproxy-sync';
 import { cn } from '@/lib/utils';
@@ -167,7 +168,8 @@ export function ProxyStatusWidget() {
     error: sessionAffinityError,
   } = useCliproxySessionAffinity();
   const updateSessionAffinity = useUpdateCliproxySessionAffinity();
-  const isSavingRoutingConfig = updateRouting.isPending || updateSessionAffinity.isPending;
+  const updatePoolRouting = useUpdateCliproxyPoolRouting();
+  const isSavingRoutingConfig = updateRouting.isPending || updateSessionAffinity.isPending || updatePoolRouting.isPending;
   const routingConfigError = routingError instanceof Error ? routingError : null;
   const startProxy = useStartProxy();
   const stopProxy = useStopProxy();
@@ -348,6 +350,7 @@ export function ProxyStatusWidget() {
           error={routingConfigError}
           onApply={(strategy) => updateRouting.mutate(strategy)}
           onApplyAffinity={(data) => updateSessionAffinity.mutate(data)}
+          onApplyPoolRouting={(data) => updatePoolRouting.mutate(data)}
         />
       </div>
     );
@@ -509,6 +512,7 @@ export function ProxyStatusWidget() {
               error={routingConfigError}
               onApply={(strategy) => updateRouting.mutate(strategy)}
               onApplyAffinity={(data) => updateSessionAffinity.mutate(data)}
+              onApplyPoolRouting={(data) => updatePoolRouting.mutate(data)}
             />
 
             {/* Section header */}

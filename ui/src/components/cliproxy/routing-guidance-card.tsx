@@ -20,6 +20,7 @@ interface RoutingGuidanceCardProps {
   error?: Error | null;
   onApply: (strategy: RoutingStrategy) => void;
   onApplyAffinity: (data: { enabled: boolean; ttl?: string }) => void;
+  onApplyPoolRouting?: (data: { enabled: boolean }) => void;
 }
 
 const STRATEGY_COPY: Record<RoutingStrategy, { title: string; description: string }> = {
@@ -43,6 +44,7 @@ export function RoutingGuidanceCard({
   error,
   onApply,
   onApplyAffinity,
+  onApplyPoolRouting,
 }: RoutingGuidanceCardProps) {
   const { t } = useTranslation();
   const currentStrategy = state?.strategy ?? 'round-robin';
@@ -60,6 +62,7 @@ export function RoutingGuidanceCard({
   const [selected, setSelected] = useState<RoutingStrategy>(currentStrategy);
   const [selectedAffinityEnabled, setSelectedAffinityEnabled] = useState(currentAffinityEnabled);
   const [selectedAffinityTtl, setSelectedAffinityTtl] = useState(currentAffinityTtl);
+  const [selectedPoolEnabled, setSelectedPoolEnabled] = useState(poolEnabled);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const sourceLabel = state?.source === 'live' ? 'Live CLIProxy' : 'Saved startup default';
   const saveDisabled = isLoading || isSaving || !state || selected === currentStrategy;
@@ -70,8 +73,15 @@ export function RoutingGuidanceCard({
       ? t('routingGuidance.disableSessionAffinity')
       : t('routingGuidance.enableSessionAffinity')
     : t('routingGuidance.sessionAffinityUnavailable');
+  const poolControlDisabled = isLoading || isSaving || !!error || !poolManageable;
+  const poolActionLabel = poolManageable
+    ? selectedPoolEnabled
+      ? t('routingGuidance.disablePoolRouting')
+      : t('routingGuidance.enablePoolRouting')
+    : t('routingGuidance.poolRoutingLocalOnly');
   const pendingAffinityRef = useRef<{ enabled: boolean; ttl: string } | null>(null);
   const suppressNextAffinityBlurRef = useRef(false);
+  const pendingPoolRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     setSelected(currentStrategy);
@@ -81,6 +91,10 @@ export function RoutingGuidanceCard({
     setSelectedAffinityEnabled(currentAffinityEnabled);
     setSelectedAffinityTtl(currentAffinityTtl);
   }, [currentAffinityEnabled, currentAffinityTtl]);
+
+  useEffect(() => {
+    setSelectedPoolEnabled(poolEnabled);
+  }, [poolEnabled]);
 
   useEffect(() => {
     if (isSaving || !pendingAffinityRef.current) {
@@ -98,6 +112,21 @@ export function RoutingGuidanceCard({
 
     pendingAffinityRef.current = null;
   }, [isSaving, currentAffinityEnabled, currentAffinityTtl]);
+
+  useEffect(() => {
+    if (isSaving || pendingPoolRef.current === null) {
+      return;
+    }
+
+    const pending = pendingPoolRef.current;
+    const succeeded = pending === poolEnabled;
+
+    if (!succeeded) {
+      setSelectedPoolEnabled(poolEnabled);
+    }
+
+    pendingPoolRef.current = null;
+  }, [isSaving, poolEnabled]);
 
   const handleAffinityToggle = () => {
     if (!sessionAffinityManageable) return;
@@ -120,6 +149,14 @@ export function RoutingGuidanceCard({
     }
     pendingAffinityRef.current = { enabled: selectedAffinityEnabled, ttl: nextTtl };
     onApplyAffinity({ enabled: selectedAffinityEnabled, ttl: nextTtl });
+  };
+
+  const handlePoolRoutingToggle = () => {
+    if (!poolManageable || !onApplyPoolRouting) return;
+    const nextEnabled = !selectedPoolEnabled;
+    pendingPoolRef.current = nextEnabled;
+    setSelectedPoolEnabled(nextEnabled);
+    onApplyPoolRouting({ enabled: nextEnabled });
   };
 
   if (compact) {
@@ -197,29 +234,57 @@ export function RoutingGuidanceCard({
             <div className="text-[10px] text-muted-foreground">
               {poolLocalOnly
                 ? poolLocalOnlyMessage
-                : poolEnabled
+                : selectedPoolEnabled
                   ? t('routingGuidance.drainOrderHint')
                   : t('routingGuidance.poolRoutingOffHint')}
             </div>
           </div>
-          <Badge
-            variant={poolLocalOnly ? 'outline' : poolEnabled ? 'secondary' : 'outline'}
-            title={
-              poolLocalOnly
-                ? poolLocalOnlyMessage
-                : poolEnabled
-                  ? t('routingGuidance.poolRoutingManaged')
-                  : t('routingGuidance.poolRoutingOffHint')
-            }
-          >
-            {poolLocalOnly
-              ? t('routingGuidance.localOnly')
-              : poolEnabled
-                ? `${t('routingGuidance.poolRoutingOn')} · ${t('routingGuidance.poolMaxRetry', {
-                    count: poolMaxRetry ?? 0,
-                  })}`
-                : t('routingGuidance.poolRoutingOff')}
-          </Badge>
+          <div className="flex items-center gap-1">
+            {poolManageable && onApplyPoolRouting ? (
+              <button
+                type="button"
+                aria-label={poolActionLabel}
+                className={cn(
+                  'rounded border px-2 py-1 text-[10px] font-medium transition-colors',
+                  poolManageable
+                    ? 'border-border/70 bg-background text-foreground hover:border-primary/40 hover:text-primary'
+                    : 'border-border/60 bg-muted/40 text-muted-foreground'
+                )}
+                onClick={handlePoolRoutingToggle}
+                disabled={poolControlDisabled}
+                title={
+                  poolLocalOnly
+                    ? poolLocalOnlyMessage
+                    : selectedPoolEnabled
+                      ? t('routingGuidance.poolRoutingManaged')
+                      : t('routingGuidance.poolRoutingOffHint')
+                }
+              >
+                {selectedPoolEnabled
+                  ? `${t('routingGuidance.poolRoutingOn')}${poolMaxRetry !== undefined ? ` · ${t('routingGuidance.poolMaxRetry', { count: poolMaxRetry })}` : ''}`
+                  : t('routingGuidance.poolRoutingOff')}
+              </button>
+            ) : (
+              <Badge
+                variant={poolLocalOnly ? 'outline' : selectedPoolEnabled ? 'secondary' : 'outline'}
+                title={
+                  poolLocalOnly
+                    ? poolLocalOnlyMessage
+                    : selectedPoolEnabled
+                      ? t('routingGuidance.poolRoutingManaged')
+                      : t('routingGuidance.poolRoutingOffHint')
+                }
+              >
+                {poolLocalOnly
+                  ? t('routingGuidance.localOnly')
+                  : selectedPoolEnabled
+                    ? `${t('routingGuidance.poolRoutingOn')} · ${t('routingGuidance.poolMaxRetry', {
+                        count: poolMaxRetry ?? 0,
+                      })}`
+                    : t('routingGuidance.poolRoutingOff')}
+              </Badge>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
@@ -431,6 +496,43 @@ export function RoutingGuidanceCard({
               {sessionAffinityState.message}
             </div>
           ) : null}
+        </div>
+
+        <div className="grid gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3 xl:col-span-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-medium">{t('routingGuidance.poolRouting')}</div>
+            <Badge variant="secondary">
+              {selectedPoolEnabled
+                ? t('routingGuidance.poolRoutingOn')
+                : t('routingGuidance.poolRoutingOff')}
+            </Badge>
+            {selectedPoolEnabled && poolMaxRetry !== undefined ? (
+              <Badge variant="outline">
+                {t('routingGuidance.poolMaxRetry', { count: poolMaxRetry })}
+              </Badge>
+            ) : null}
+            {!poolManageable ? (
+              <Badge variant="outline">{t('routingGuidance.localOnly')}</Badge>
+            ) : null}
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {selectedPoolEnabled
+              ? t('routingGuidance.poolRoutingManaged')
+              : t('routingGuidance.poolRoutingOffHint')}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {poolManageable && onApplyPoolRouting ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handlePoolRoutingToggle}
+                disabled={poolControlDisabled}
+                aria-label={poolActionLabel}
+              >
+                {poolActionLabel}
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {error ? (

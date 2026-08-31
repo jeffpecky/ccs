@@ -106,6 +106,36 @@ export function useUpdateCliproxySessionAffinity() {
   });
 }
 
+export function useCliproxyPoolRouting() {
+  return useQuery({
+    queryKey: ['cliproxy-pool-routing'],
+    queryFn: () => api.cliproxy.getPoolRouting(),
+  });
+}
+
+export function useUpdateCliproxyPoolRouting() {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: (data: { enabled: boolean }) => api.cliproxy.updatePoolRouting(data),
+    onSuccess: (result) => {
+      queryClient.setQueryData(['cliproxy-pool-routing'], result);
+      queryClient.invalidateQueries({ queryKey: ['cliproxy-pool-routing'] });
+      queryClient.invalidateQueries({ queryKey: ['cliproxy-routing'] });
+      const stateLabel = result.enabled
+        ? t('routingGuidance.poolRoutingOn')
+        : t('routingGuidance.poolRoutingOff');
+      toast.success(
+        result.message || t('toasts.poolRoutingUpdated', { state: stateLabel.toLowerCase() })
+      );
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+}
+
 export function useCreateVariant() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
@@ -376,6 +406,15 @@ export function useCliproxyModels() {
   return useQuery({
     queryKey: ['cliproxy-models'],
     queryFn: () => api.cliproxy.models(),
+  });
+}
+
+export function useAiProviderModels(family: string | null) {
+  return useQuery({
+    queryKey: ['ai-provider-models', family],
+    queryFn: () => api.cliproxy.aiProviders.models(family as any),
+    enabled: Boolean(family),
+    staleTime: 60_000,
   });
 }
 

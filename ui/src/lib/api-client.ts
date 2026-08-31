@@ -357,6 +357,11 @@ export interface CliproxySessionAffinityApplyResult extends CliproxySessionAffin
   applied: 'config-and-live' | 'config-only' | 'unsupported';
 }
 
+export interface CliproxyPoolRoutingApplyResult extends CliproxyPoolRoutingState {
+  changed: boolean;
+  message?: string;
+}
+
 /** Auth file info for Config tab */
 export interface AuthFile {
   name: string;
@@ -1166,6 +1171,12 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
+    getPoolRouting: () => request<CliproxyPoolRoutingState>('/cliproxy/routing/pool'),
+    updatePoolRouting: (data: { enabled: boolean }) =>
+      request<CliproxyPoolRoutingApplyResult>('/cliproxy/routing/pool', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
     aiProviders: {
       list: () => request<ListAiProvidersResult>('/cliproxy/ai-providers'),
       create: (family: AiProviderFamilyId, data: UpsertAiProviderEntryInput) =>
@@ -1187,6 +1198,18 @@ export const api = {
           {
             method: 'DELETE',
           }
+        ),
+      test: (family: AiProviderFamilyId, data: UpsertAiProviderEntryInput) =>
+        request<{ success: boolean; message: string; statusCode?: number }>(
+          `/cliproxy/ai-providers/${encodeURIComponent(family)}/test`,
+          {
+            method: 'POST',
+            body: JSON.stringify(data),
+          }
+        ),
+      models: (family: AiProviderFamilyId) =>
+        request<{ models: Array<{ id: string; owned_by: string }>; provider: string }>(
+          `/cliproxy/ai-providers/${encodeURIComponent(family)}/models`
         ),
     },
 

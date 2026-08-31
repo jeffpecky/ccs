@@ -2,6 +2,9 @@ import { Router, Request, Response } from 'express';
 import {
   applyCliproxyRoutingStrategy,
   applyCliproxySessionAffinitySettings,
+  enablePoolRouting,
+  disablePoolRouting,
+  getCliproxyPoolRoutingState,
   normalizeCliproxyRoutingStrategy,
   normalizeCliproxySessionAffinityEnabled,
   normalizeCliproxySessionAffinityTtl,
@@ -9,6 +12,7 @@ import {
   readCliproxySessionAffinityState,
 } from '../../cliproxy/routing/routing-strategy';
 import { requireLocalAccessWhenAuthDisabled } from '../middleware/auth-middleware';
+import { CLIPROXY_DEFAULT_PORT } from '../../cliproxy/config/port-manager';
 
 const router = Router();
 
@@ -79,6 +83,34 @@ router.put('/routing/session-affinity', async (req: Request, res: Response): Pro
       return;
     }
     res.json(result);
+  } catch (error) {
+    res.status(502).json({ error: (error as Error).message });
+  }
+});
+
+router.get('/routing/pool', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    res.json(getCliproxyPoolRoutingState());
+  } catch (error) {
+    res.status(502).json({ error: (error as Error).message });
+  }
+});
+
+router.put('/routing/pool', async (req: Request, res: Response): Promise<void> => {
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') {
+    res.status(400).json({ error: 'Invalid pool routing payload. Use enabled=true|false.' });
+    return;
+  }
+
+  try {
+    const result = enabled ? enablePoolRouting(CLIPROXY_DEFAULT_PORT) : disablePoolRouting(CLIPROXY_DEFAULT_PORT);
+    const poolState = getCliproxyPoolRoutingState();
+    res.json({
+      ...poolState,
+      message: result.message,
+      changed: result.changed,
+    });
   } catch (error) {
     res.status(502).json({ error: (error as Error).message });
   }

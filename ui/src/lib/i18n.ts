@@ -1114,6 +1114,10 @@ const resources = {
         poolRouting: 'Pool routing',
         poolRoutingOn: 'On',
         poolRoutingOff: 'Off',
+        poolRoutingEnabled: 'Enabled',
+        poolRoutingDisabled: 'Disabled',
+        enablePoolRouting: 'Enable pool routing',
+        disablePoolRouting: 'Disable pool routing',
         poolRoutingManaged:
           'Pool routing is on: CCS manages strategy (fill-first), session affinity, and cooling for the whole proxy.',
         poolRoutingOffHint:
@@ -1284,6 +1288,7 @@ const resources = {
         noProfilesToSync: 'No profiles to sync',
         syncFailed: 'Sync failed: {{error}}',
         sessionAffinityUpdated: 'Session affinity {{state}}.',
+        poolRoutingUpdated: 'Pool routing {{state}}.',
         providerAuthSuccess: '{{provider}} authentication successful',
         providerDeviceCodeInCallback: 'Provider returned Device Code flow in callback mode',
         providerAuthTimeout: 'Authentication timed out. Please try again.',
