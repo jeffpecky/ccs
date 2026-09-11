@@ -5,9 +5,9 @@ namespace CCSBar.Core;
 
 public sealed class CCSBarClient : IBarDataClient
 {
-    readonly Uri baseUri; readonly HttpClient http; readonly string authToken; readonly TimeSpan requestTimeout;
-    public CCSBarClient(Uri baseUri, HttpClient http, string? authToken = null, string? home = null, IReadOnlyDictionary<string, string?>? environment = null, TimeSpan? requestTimeout = null)
-    { this.baseUri = baseUri; this.http = http; this.authToken = authToken ?? BarServerProbe.LoadAuthToken(home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), environment) ?? throw new InvalidOperationException("CCS Bar auth token unavailable"); this.requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(8); }
+    readonly Uri baseUri; readonly HttpClient http; readonly TimeSpan requestTimeout;
+    public CCSBarClient(Uri baseUri, HttpClient http, TimeSpan? requestTimeout = null)
+    { this.baseUri = baseUri; this.http = http; this.requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(8); }
     public async Task<IReadOnlyList<BarSummaryRow>> SummaryAsync(bool refresh = false, CancellationToken cancellationToken = default) =>
         await GetAsync<IReadOnlyList<BarSummaryRow>?>(refresh ? "api/bar/summary?refresh=true" : "api/bar/summary", cancellationToken) ?? throw new JsonException("CCS Bar summary response was null");
 
@@ -28,13 +28,12 @@ public sealed class CCSBarClient : IBarDataClient
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(requestTimeout);
-        using var request = Request(HttpMethod.Get, path);
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(baseUri, path));
         HttpResponseMessage response;
         try { response = await http.SendAsync(request, timeout.Token); }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { throw new TimeoutException("CCS Bar API request timed out"); }
         using (response)
         {
-        VerifyResponse(request, response);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(BarJson.Options, timeout.Token) ?? default!;
         }
@@ -42,21 +41,9 @@ public sealed class CCSBarClient : IBarDataClient
 
     private async Task PostAsync(string path, object body, CancellationToken cancellationToken)
     {
-        using var request = Request(HttpMethod.Post, path);
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(baseUri, path));
         request.Content = JsonContent.Create(body, options: BarJson.Options);
         using var response = await http.SendAsync(request, cancellationToken);
-        VerifyResponse(request, response);
         response.EnsureSuccessStatusCode();
-    }
-
-    private HttpRequestMessage Request(HttpMethod method, string path)
-    {
-        var request = new HttpRequestMessage(method, new Uri(baseUri, path));
-        BarAuth.Authenticate(request, authToken);
-        return request;
-    }
-    void VerifyResponse(HttpRequestMessage request, HttpResponseMessage response)
-    {
-        if (!BarAuth.VerifyResponse(request, response, authToken)) throw new HttpRequestException("Invalid CCS Bar response proof");
     }
 }

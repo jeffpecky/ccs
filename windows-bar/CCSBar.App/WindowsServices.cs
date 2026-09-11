@@ -93,15 +93,15 @@ sealed class WindowsBarConnector : IBarConnector, IActiveBarConnection, IBarConn
         await connectGate.WaitAsync(ct);
         try
         {
-            var token = BarServerProbe.LoadAuthToken(home); var result = token is null ? new BarProbeResult(BarConnectionState.AuthenticationFailure) : await new BarServerProbe(http, token, home: home).ProbeAsync(BarDiscovery.Load(home).Value, ct); var uri = result.BaseUri;
+            var result = await new BarServerProbe(http).ProbeAsync(BarDiscovery.Load(home).Value, ct); var uri = result.BaseUri;
             if (uri is null && launch)
             {
                 StartServer();
-                for (var i = 0; i < 12 && uri is null; i++) { await Task.Delay(500, ct); token ??= BarServerProbe.LoadAuthToken(home); if (token is not null) { result = await new BarServerProbe(http, token, home: home).ProbeAsync(BarDiscovery.Load(home).Value, ct); uri = result.BaseUri; } }
+                for (var i = 0; i < 12 && uri is null; i++) { await Task.Delay(500, ct); result = await new BarServerProbe(http).ProbeAsync(BarDiscovery.Load(home).Value, ct); uri = result.BaseUri; }
             }
             activeBaseUrl = uri;
             connectionState = uri is null ? result.State : BarConnectionState.Ready;
-            return uri is null || token is null ? null : new CCSBarClient(uri, http, token);
+            return uri is null ? null : new CCSBarClient(uri, http);
         }
         finally { connectGate.Release(); }
     }

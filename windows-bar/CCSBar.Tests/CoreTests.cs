@@ -10,55 +10,64 @@ namespace CCSBar.Tests;
 [TestClass]
 public sealed class CoreTests
 {
-    const string Token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     const string SummaryJson = "[{\"account_id\":\"acct\",\"provider\":\"codex\",\"displayName\":\"Codex Plus\",\"tier\":\"plus\",\"paused\":false,\"quota_percentage\":42.5,\"quotaStatus\":\"ok\",\"next_reset\":\"2026-08-27T00:00:00Z\",\"is_default\":true,\"last_activity_at\":\"2026-08-26T00:00:00Z\",\"today_cost\":1.25,\"health\":\"warning\",\"cached\":true,\"fetchedAt\":\"2026-08-26T00:01:00Z\",\"needsReauth\":false,\"surface\":\"codex\",\"profile\":\"default\",\"is_subscription\":true,\"quota_windows\":[{\"key\":\"5h\",\"label\":\"5h\",\"usedPercent\":57.5,\"remainingPercent\":42.5,\"resetAt\":\"2026-08-27T00:00:00Z\",\"windowMinutes\":300}],\"stale_as_of\":\"2026-08-25T23:00:00Z\"}]";
     const string AnalyticsJson = "{\"today\":{\"cost\":1,\"requests\":2},\"last7d\":{\"cost\":3,\"requests\":4},\"last30d\":{\"cost\":5,\"requests\":6},\"allTime\":{\"cost\":7,\"requests\":8},\"byDay\":[],\"topModels\":[],\"topModelsWindow\":\"30d\",\"lastActivityAt\":null,\"daysSinceLastActivity\":null,\"hasRecentData\":true,\"generatedAt\":\"now\"}";
 
     [TestMethod]
-    public void Probe_PrefersDashboardPortsBeforeLegacyBarPorts()
+    public void Probe_PortsAreInUpstreamOrder()
     {
-        CollectionAssert.AreEqual(new[] { 8080, 8181, 3000, 3001, 3002, 8000 }, BarServerProbe.FallbackPorts);
+        CollectionAssert.AreEqual(new[] { 3000, 3001, 3002, 8000, 8080 }, BarServerProbe.FallbackPorts);
     }
 
     [TestMethod]
-    public async Task Probe_UsesLightweightAuthenticatedHealthEndpoint()
+    public async Task Probe_UsesLightweightSummaryEndpoint()
     {
-        var handler = new RecordingHandler(request => AuthenticatedResponse(request, "{\"ok\":true}"));
-        var probe = new BarServerProbe(new HttpClient(handler), Token, TimeSpan.FromMilliseconds(100));
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(SummaryJson) });
+        var probe = new BarServerProbe(new HttpClient(handler), TimeSpan.FromMilliseconds(100));
 
         Assert.IsNotNull(await probe.FindLiveServerAsync(new("http://127.0.0.1:4321", 4321, "loopback")));
-        Assert.AreEqual("/api/bar/health", handler.Requests[0].RequestUri!.AbsolutePath);
+        Assert.AreEqual("/api/bar/summary", handler.Requests[0].RequestUri!.AbsolutePath);
         Assert.AreEqual("127.0.0.1", handler.Requests[0].RequestUri!.Host);
     }
 
     [TestMethod]
-    public void Auth_ProofsAreDirectionMethodAndPathBound()
+    public async Task Probe_TriesIPv6AfterIPv4ForSamePort()
     {
-        var proof = BarAuth.Proof(Token, "request", "GET", "/api/bar/summary?b=2&a=1", "ab".PadRight(32, '0'));
-        Assert.IsTrue(BarAuth.Verify(Token, "request", "GET", "/api/bar/summary?a=1&b=2", "ab".PadRight(32, '0'), proof));
-        Assert.IsFalse(BarAuth.Verify(Token, "response", "GET", "/api/bar/summary?a=1&b=2", "ab".PadRight(32, '0'), proof));
-        Assert.IsFalse(BarAuth.Verify(Token, "request", "POST", "/api/bar/summary?a=1&b=2", "ab".PadRight(32, '0'), proof));
-        Assert.IsFalse(BarAuth.Verify(Token, "request", "GET", "/api/bar/analytics?a=1&b=2", "ab".PadRight(32, '0'), proof));
+        var handler = new RecordingHandler(request =>
+        {
+            var response = request.RequestUri!.Host.Contains("[::1]")
+                ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(SummaryJson) }
+                : new HttpResponseMessage(HttpStatusCode.NotFound);
+            return response;
+        });
+        var probe = new BarServerProbe(new HttpClient(handler), TimeSpan.FromMilliseconds(100));
+
+        var result = await probe.FindLiveServerAsync(null);
+        Assert.IsNotNull(result);
+        Assert.IsTrue(result!.ToString().Contains("[::1]"));
+
+        var idx4 = handler.Requests.FindIndex(r => r.RequestUri!.Host == "127.0.0.1" && r.RequestUri!.Port == 3000);
+        var idx6 = handler.Requests.FindIndex(r => r.RequestUri!.Host.Contains("[::1]") && r.RequestUri!.Port == 3000);
+        if (idx4 >= 0 && idx6 >= 0) Assert.IsTrue(idx4 < idx6, "IPv4 should be tried before IPv6 for same port");
     }
 
     [TestMethod]
-    public async Task Client_UsesBackendContractsAndAuthenticatesEveryRequest()
+    public async Task Client_UsesBackendContracts()
     {
-        var handler = new RecordingHandler(request => AuthenticatedResponse(request, request.RequestUri!.AbsolutePath.EndsWith("analytics") ? AnalyticsJson : SummaryJson));
-        var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(handler), Token);
+        var handler = new RecordingHandler(request => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(request.RequestUri!.AbsolutePath.EndsWith("analytics") ? AnalyticsJson : SummaryJson) });
+        var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(handler));
         await client.SummaryAsync(); await client.AnalyticsAsync(); await client.PauseAsync("agy", "a"); await client.ResumeAsync("agy", "a"); await client.SetDefaultAsync("agy:a"); await client.SoloAsync("agy", "a"); await client.TierLockAsync("agy", null);
 
         CollectionAssert.AreEqual(new[] { "/api/bar/summary", "/api/bar/analytics", "/api/accounts/bulk-pause", "/api/accounts/bulk-resume", "/api/accounts/default", "/api/accounts/solo", "/api/accounts/tier-lock" }, handler.Requests.Select(x => x.RequestUri!.AbsolutePath).ToArray());
         StringAssert.Contains(handler.Bodies[2]!, "\"accountIds\":[\"a\"]");
         StringAssert.Contains(handler.Bodies[3]!, "\"accountIds\":[\"a\"]");
         StringAssert.Contains(handler.Bodies[4]!, "\"name\":\"agy:a\"");
-        Assert.IsTrue(handler.Requests.All(x => x.Headers.Contains(BarAuth.NonceHeader) && x.Headers.Contains(BarAuth.TokenHeader)));
     }
 
     [TestMethod]
     public async Task Client_DecodesLiveMixedCaseSummaryContract()
     {
-        var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(request => AuthenticatedResponse(request, SummaryJson))), Token);
+        var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(SummaryJson) })));
 
         var row = (await client.SummaryAsync()).Single();
 
@@ -73,28 +82,11 @@ public sealed class CoreTests
     }
 
     [TestMethod]
-    public async Task Client_RejectsMissingInvalidAndDuplicateResponseProofsOnEveryApiResponse()
-    {
-        foreach (var proof in new[] { "missing", "invalid", "duplicate" })
-        {
-            var handler = new RecordingHandler(request =>
-            {
-                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(request.Method == HttpMethod.Get ? SummaryJson : "") };
-                if (proof != "missing") response.Headers.TryAddWithoutValidation(BarAuth.TokenHeader, proof == "invalid" ? new[] { new string('0', 64) } : new[] { ResponseProof(request), ResponseProof(request) });
-                return response;
-            });
-            var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(handler), Token);
-            await Assert.ThrowsExceptionAsync<HttpRequestException>(() => client.SummaryAsync());
-            await Assert.ThrowsExceptionAsync<HttpRequestException>(() => client.PauseAsync("agy", "a"));
-        }
-    }
-
-    [TestMethod]
     public async Task Client_MalformedOrNullSummaryJsonThrowsInsteadOfReturningEmptyRows()
     {
         foreach (var json in new[] { "bad", "null", "[{\"account_id\":\"a\"}]" })
         {
-            var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(request => AuthenticatedResponse(request, json))), Token);
+            var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) })));
             await Assert.ThrowsExceptionAsync<JsonException>(() => client.SummaryAsync());
         }
     }
@@ -104,10 +96,10 @@ public sealed class CoreTests
     {
         foreach (var json in new[] { "bad", "{\"today\":null}" })
         {
-            var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(request => AuthenticatedResponse(request, json))), Token);
+            var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) })));
             await Assert.ThrowsExceptionAsync<JsonException>(() => client.AnalyticsAsync());
         }
-        var optional = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(request => AuthenticatedResponse(request, "null"))), Token);
+        var optional = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("null") })));
         Assert.IsNull(await optional.AnalyticsAsync());
     }
 
@@ -115,7 +107,7 @@ public sealed class CoreTests
     public async Task Client_BoundsApiRequestsButPreservesCallerCancellation()
     {
         var handler = new RecordingHandler(async (_, ct) => { await Task.Delay(Timeout.InfiniteTimeSpan, ct); return new HttpResponseMessage(HttpStatusCode.OK); });
-        var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(handler), Token, requestTimeout: TimeSpan.FromMilliseconds(20));
+        var client = new CCSBarClient(new Uri("http://127.0.0.1:3000"), new HttpClient(handler), TimeSpan.FromMilliseconds(20));
         await Assert.ThrowsExceptionAsync<TimeoutException>(() => client.SummaryAsync());
 
         using var cancelled = new CancellationTokenSource();
@@ -135,8 +127,17 @@ public sealed class CoreTests
         Assert.AreEqual(BarDiscoveryState.Unsafe, BarDiscovery.Load(temp.Path).State);
         File.WriteAllText(BarDiscovery.DefaultPath(temp.Path), "{\"baseUrl\":\"http://127.0.0.1:3000\",\"port\":0,\"authMode\":\"none\"}");
         Assert.AreEqual(BarDiscoveryState.Unsafe, BarDiscovery.Load(temp.Path).State);
-        File.WriteAllText(BarDiscovery.DefaultPath(temp.Path), "{\"baseUrl\":\"http://[::1]:4321\",\"port\":4321,\"authMode\":\"loopback\"}");
-        Assert.AreEqual(BarDiscoveryState.Unsafe, BarDiscovery.Load(temp.Path).State);
+    }
+
+    [TestMethod]
+    public void Discovery_AcceptsIPv6Loopback()
+    {
+        using var temp = new TempDirectory();
+        Directory.CreateDirectory(System.IO.Path.Combine(temp.Path, ".ccs"));
+        File.WriteAllText(BarDiscovery.DefaultPath(temp.Path), "{\"baseUrl\":\"http://[::1]:3000\",\"port\":3000,\"authMode\":\"loopback\"}");
+        var result = BarDiscovery.Load(temp.Path);
+        Assert.AreEqual(BarDiscoveryState.Ready, result.State);
+        Assert.IsNotNull(result.Value);
     }
 
     [TestMethod]
@@ -172,21 +173,10 @@ public sealed class CoreTests
     }
 
     [TestMethod]
-    public void TokenResolution_UsesCcsHomeAndValidatesToken()
-    {
-        using var home = new TempDirectory(); using var ccsHome = new TempDirectory();
-        Directory.CreateDirectory(System.IO.Path.Combine(ccsHome.Path, "bar"));
-        File.WriteAllText(System.IO.Path.Combine(ccsHome.Path, "bar", ".auth-token"), Token + "\n");
-        Assert.AreEqual(Token, BarServerProbe.LoadAuthToken(home.Path, new Dictionary<string, string?> { ["CCS_HOME"] = ccsHome.Path }));
-        File.WriteAllText(System.IO.Path.Combine(ccsHome.Path, "bar", ".auth-token"), "bad");
-        Assert.IsNull(BarServerProbe.LoadAuthToken(home.Path, new Dictionary<string, string?> { ["CCS_HOME"] = ccsHome.Path }));
-    }
-
-    [TestMethod]
     public async Task Probe_HasPerAttemptTimeoutAndPropagatesCallerCancellation()
     {
         var handler = new RecordingHandler(async (_, ct) => { await Task.Delay(Timeout.InfiniteTimeSpan, ct); return new HttpResponseMessage(HttpStatusCode.OK); });
-        var probe = new BarServerProbe(new HttpClient(handler), Token, TimeSpan.FromMilliseconds(40));
+        var probe = new BarServerProbe(new HttpClient(handler), TimeSpan.FromMilliseconds(40));
         var watch = Stopwatch.StartNew();
         Assert.IsNull(await probe.FindLiveServerAsync(null));
         Assert.IsTrue(watch.Elapsed < TimeSpan.FromSeconds(1));
@@ -196,47 +186,39 @@ public sealed class CoreTests
     }
 
     [TestMethod]
-    public async Task Probe_DuplicateProofHeadersFailClosedWithoutThrowing()
+    public async Task Probe_ClassifiesTimeoutAndUnreachableFailures()
     {
-        var probe = new BarServerProbe(new HttpClient(new RecordingHandler(request =>
-        {
-            var response = new HttpResponseMessage(HttpStatusCode.OK);
-            response.Headers.TryAddWithoutValidation(BarAuth.TokenHeader, new[] { ResponseProof(request), ResponseProof(request) });
-            return response;
-        })), Token, TimeSpan.FromMilliseconds(20));
-        Assert.IsNull(await probe.FindLiveServerAsync(new("http://127.0.0.1:4321", 4321, "loopback")));
+        var timeout = new BarServerProbe(new HttpClient(new RecordingHandler(async (_, ct) => { await Task.Delay(Timeout.InfiniteTimeSpan, ct); return new HttpResponseMessage(HttpStatusCode.OK); })), TimeSpan.FromMilliseconds(20));
+        Assert.AreEqual(BarConnectionState.Timeout, (await timeout.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
+
+        var unreachable = new BarServerProbe(new HttpClient(new RecordingHandler((_, _) => Task.FromException<HttpResponseMessage>(new HttpRequestException("refused")))), TimeSpan.FromMilliseconds(20));
+        Assert.AreEqual(BarConnectionState.Unreachable, (await unreachable.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
+
+        var api = new BarServerProbe(new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable))), TimeSpan.FromMilliseconds(20));
+        Assert.AreEqual(BarConnectionState.ApiFailure, (await api.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
     }
 
     [TestMethod]
-    public async Task Probe_ClassifiesTimeoutAuthenticationAndUnreachableFailures()
+    public async Task Probe_DeduplicatesPortsAcrossDiscoveryAndFallbacks()
     {
-        var timeout = new BarServerProbe(new HttpClient(new RecordingHandler(async (_, ct) => { await Task.Delay(Timeout.InfiniteTimeSpan, ct); return new HttpResponseMessage(HttpStatusCode.OK); })), Token, TimeSpan.FromMilliseconds(20));
-        Assert.AreEqual(BarConnectionState.Timeout, (await timeout.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(SummaryJson) });
+        var probe = new BarServerProbe(new HttpClient(handler), TimeSpan.FromMilliseconds(100));
+        var discovery = new BarDiscovery("http://127.0.0.1:3000", 3000, "loopback");
+        await probe.FindLiveServerAsync(discovery);
 
-        var auth = new BarServerProbe(new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))), Token, TimeSpan.FromMilliseconds(20));
-        Assert.AreEqual(BarConnectionState.AuthenticationFailure, (await auth.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
-
-        var unreachable = new BarServerProbe(new HttpClient(new RecordingHandler((_, _) => Task.FromException<HttpResponseMessage>(new HttpRequestException("refused")))), Token, TimeSpan.FromMilliseconds(20));
-        Assert.AreEqual(BarConnectionState.Unreachable, (await unreachable.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
-
-        var api = new BarServerProbe(new HttpClient(new RecordingHandler(request =>
-        {
-            var response = AuthenticatedResponse(request, "{}");
-            response.StatusCode = HttpStatusCode.ServiceUnavailable;
-            return response;
-        })), Token, TimeSpan.FromMilliseconds(20));
-        Assert.AreEqual(BarConnectionState.ApiFailure, (await api.ProbeAsync(new("http://127.0.0.1:4321", 4321, "loopback"))).State);
+        var port3000Count = handler.Requests.Count(r => r.RequestUri!.Port == 3000);
+        Assert.AreEqual(1, port3000Count, "bar.json port 3000 should be probed once, not twice");
     }
 
     [TestMethod]
     public void LaunchDescriptor_RequiresTrustedAbsoluteWindowsPaths()
     {
-        var d = new BarLaunchDescriptor(1, @"C:\Program Files\nodejs\node.exe", new[] { @"C:\Users\me\AppData\Local\CCS Bar\launcher\ccs.js", "bar", "serve", "--port", "3000" }, @"C:\Users\me", @"C:\Users\me\.ccs");
+        var d = new BarLaunchDescriptor(1, @"C:\Program Files\nodejs\node.exe", new[] { @"C:\Users\me\AppData\Local\CCS Bar\launcher\ccs.js", "bar", "serve" }, @"C:\Users\me", @"C:\Users\me\.ccs");
         var trust = new RecordingTrustValidator(true);
         Assert.IsTrue(d.IsSafe(@"C:\Users\me", trust));
         CollectionAssert.AreEquivalent(new[] { d.Runtime, d.Args[0], d.Home, d.CcsHome! }, trust.Paths.ToArray());
         Assert.IsFalse(d with { Runtime = "cmd.exe" } is var relative && relative.IsSafe(d.Home, trust));
-        Assert.IsFalse(d with { Args = new[] { d.Args[0], "bar", "serve", "& calc" } } is var injected && injected.IsSafe(d.Home, trust));
+        Assert.IsFalse(d with { Args = new[] { d.Args[0], "bar", "serve", "--port", "3000" } } is var extra && extra.IsSafe(d.Home, trust));
         Assert.IsFalse(d.IsSafe(d.Home, new RecordingTrustValidator(false)));
     }
 
@@ -366,13 +348,6 @@ public sealed class CoreTests
 
     static QuotaWindowDetail Window(string key, double remaining, int minutes) => new(key, key, 100 - remaining, remaining, null, minutes);
     static BarSummaryRow Row(string id, double? quota = null, IReadOnlyList<QuotaWindowDetail>? windows = null, string? display = null, string? reset = null, bool paused = false, bool reauth = false) => new(id, "agy", display, null, paused, quota, quota is null ? "unsupported" : "ok", reset, false, null, null, "ok", false, null, reauth, null, null, false, windows, null);
-    static string ResponseProof(HttpRequestMessage request) => BarAuth.Proof(Token, "response", request.Method.Method, request.RequestUri!.PathAndQuery, request.Headers.GetValues(BarAuth.NonceHeader).Single());
-    static HttpResponseMessage AuthenticatedResponse(HttpRequestMessage request, string content)
-    {
-        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) };
-        response.Headers.Add(BarAuth.TokenHeader, ResponseProof(request));
-        return response;
-    }
 }
 
 [TestClass]

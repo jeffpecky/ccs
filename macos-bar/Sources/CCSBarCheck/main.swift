@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 import SwiftUI  // for ColorScheme equality in the theme-token checks
 import CCSBarCore
 
@@ -27,10 +26,8 @@ struct RecordingTransport: HTTPTransport {
   let recorder: RequestRecorder
   func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
     recorder.lastRequest = request
-    let nonce = request.value(forHTTPHeaderField: "x-ccs-bar-nonce")!
-    let proof = CCSBarClient.proof(String(repeating: "a", count: 64), "response", request.httpMethod ?? "GET", request.url!, nonce)
     let http = HTTPURLResponse(
-      url: request.url!, statusCode: recorder.status, httpVersion: nil, headerFields: ["x-ccs-bar-token": proof])!
+      url: request.url!, statusCode: recorder.status, httpVersion: nil, headerFields: nil)!
     return (recorder.responseData, http)
   }
 }
@@ -259,19 +256,8 @@ let recorder = RequestRecorder()
 recorder.responseData = Data(summaryJSON.utf8)
 let client = CCSBarClient(
   baseURL: URL(string: "http://127.0.0.1:3210")!,
-  transport: RecordingTransport(recorder: recorder),
-  authToken: String(repeating: "a", count: 64)
+  transport: RecordingTransport(recorder: recorder)
 )
-
-func clientRequestIsSigned(_ request: URLRequest?) -> Bool {
-  guard
-    let nonce = request?.value(forHTTPHeaderField: "x-ccs-bar-nonce"),
-    let proof = request?.value(forHTTPHeaderField: "x-ccs-bar-token")
-  else { return false }
-  guard let url = request?.url else { return false }
-  let expected = CCSBarClient.proof(String(repeating: "a", count: 64), "request", request?.httpMethod ?? "GET", url, nonce)
-  return proof == expected
-}
 
 do {
   let rows = try await client.summary(refresh: true)
@@ -279,7 +265,6 @@ do {
   check(
     recorder.lastRequest?.url?.query?.contains("refresh=true") == true,
     "summary(refresh: true) adds ?refresh=true")
-  check(clientRequestIsSigned(recorder.lastRequest), "client auth: summary signed")
 } catch {
   check(false, "client.summary threw: \(error)")
 }
@@ -287,20 +272,11 @@ do {
 recorder.responseData = Data("{}".utf8)
 recorder.lastRequest = nil
 do {
-  _ = try await client.analytics()
-  check(clientRequestIsSigned(recorder.lastRequest), "client auth: analytics signed")
-} catch {
-  check(false, "client.analytics threw: \(error)")
-}
-
-recorder.lastRequest = nil
-do {
   try await client.pause(provider: "agy", accountId: "alice@example.com")
   check(recorder.lastRequest?.httpMethod == "POST", "pause is POST")
   check(
     recorder.lastRequest?.url?.path.hasSuffix("bulk-pause") == true,
     "pause hits bulk-pause endpoint")
-  check(clientRequestIsSigned(recorder.lastRequest), "client auth: mutation signed")
 } catch {
   check(false, "pause threw: \(error)")
 }
@@ -1552,39 +1528,6 @@ do {
   check(path.hasPrefix(home), "descriptor: defaultPath starts with home dir")
 }
 
-// (L3b) Descriptor command validation accepts optional --port and rejects other tails.
-do {
-  let base = BarLaunchDescriptor(
-    runtime: "/usr/bin/node",
-    args: ["/Users/kai/ccs.js", "bar", "serve"],
-    home: "/Users/kai",
-    ccsHome: nil)
-  let port = BarLaunchDescriptor(
-    runtime: "/usr/bin/node",
-    args: ["/Users/kai/ccs.js", "bar", "serve", "--port", "3999"],
-    home: "/Users/kai",
-    ccsHome: nil)
-  let bad = BarLaunchDescriptor(
-    runtime: "/usr/bin/node",
-    args: ["/Users/kai/ccs.js", "bar", "serve", "--evil"],
-    home: "/Users/kai",
-    ccsHome: nil)
-  let badPorts = ["0", "65536", "3999junk"].map { value in
-    BarLaunchDescriptor(
-      runtime: "/usr/bin/node",
-      args: ["/Users/kai/ccs.js", "bar", "serve", "--port", value],
-      home: "/Users/kai",
-      ccsHome: nil)
-  }
-
-  check(base.hasSafeServerArguments, "descriptor: base bar serve args accepted")
-  check(port.hasSafeServerArguments, "descriptor: --port bar serve args accepted")
-  check(!bad.hasSafeServerArguments, "descriptor: unknown trailing args rejected")
-  check(
-    badPorts.allSatisfy { !$0.hasSafeServerArguments },
-    "descriptor: invalid --port values rejected")
-}
-
 // (L4) Malformed JSON is non-decodable (no crash, just nil from try?).
 do {
   let bad = Data("{\"schema\": \"not-an-int\"}".utf8)
@@ -1593,12 +1536,6 @@ do {
 }
 
 // MARK: - BarServerProbe ordering and selection
-
-let probeAuthToken = String(repeating: "a", count: 64)
-
-func probeProof(_ nonce: String, direction: String = "response", url: URL = URL(string: "http://127.0.0.1:3000/api/bar/health")!) -> String {
-  CCSBarClient.proof(probeAuthToken, direction, "GET", url, nonce)
-}
 
 // Mock transport that returns 200 for exactly one (host, port) combination and
 // times out (throws) for everything else. Used to verify probe ordering.
@@ -1616,10 +1553,8 @@ final class SelectiveTransport: HTTPTransport, @unchecked Sendable {
     let urlStr = request.url?.absoluteString ?? ""
     probed.append(urlStr)
     if urlStr.hasPrefix(successPrefix) {
-      let nonce = request.value(forHTTPHeaderField: "x-ccs-bar-nonce") ?? ""
       let http = HTTPURLResponse(
-        url: request.url!, statusCode: 200, httpVersion: nil,
-        headerFields: ["x-ccs-bar-token": probeProof(nonce, url: request.url!)])!
+        url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
       return (Data(), http)
     }
     // Simulate connection refused — throw so the probe moves on.
@@ -1628,12 +1563,12 @@ final class SelectiveTransport: HTTPTransport, @unchecked Sendable {
 }
 
 // (P1) bar.json port is probed FIRST, then fallbacks in order.
-// With no live server the probe visits: bar.json port on 127.0.0.1,
-// then fallback ports until it finds one or exhausts all.
+// With no live server the probe visits: bar.json port (127.0.0.1 then ::1),
+// then 3000, 3001, ... until it finds one or exhausts all.
 do {
   // bar.json says port 9999 (unusual, not in fallbacks). We make 127.0.0.1:9999 succeed.
   let transport = SelectiveTransport(successPrefix: "http://127.0.0.1:9999")
-  let probe = BarServerProbe(transport: transport, authToken: probeAuthToken)
+  let probe = BarServerProbe(transport: transport)
   let discovery = BarDiscovery(baseUrl: "http://127.0.0.1:9999", port: 9999, authMode: "loopback")
   let result = await probe.findLiveServer(discovery: discovery)
 
@@ -1649,7 +1584,7 @@ do {
 // Make port 3001 on 127.0.0.1 the live one. bar.json points at dead port 9999.
 do {
   let transport = SelectiveTransport(successPrefix: "http://127.0.0.1:3001")
-  let probe = BarServerProbe(transport: transport, authToken: probeAuthToken)
+  let probe = BarServerProbe(transport: transport)
   let discovery = BarDiscovery(baseUrl: "http://127.0.0.1:9999", port: 9999, authMode: "loopback")
   let result = await probe.findLiveServer(discovery: discovery)
 
@@ -1666,15 +1601,25 @@ do {
   }
 }
 
-// (P3) IPv6-only servers are ignored.
+// (P3) IPv4 tried before IPv6 for each port.
+// Make only the IPv6 address of 3000 succeed so we can verify that 127.0.0.1
+// was tried before [::1] for the same port.
 do {
   let transport = SelectiveTransport(successPrefix: "http://[::1]:3000")
-  let probe = BarServerProbe(transport: transport, authToken: probeAuthToken)
+  let probe = BarServerProbe(transport: transport)
+  // No bar.json — nil discovery.
   let result = await probe.findLiveServer(discovery: nil)
 
-  check(result == nil, "probe: IPv6-only CCS server is ignored")
-  check(!transport.probed.contains(where: { $0.contains("[::1]") }),
-    "probe: IPv6 loopback is never probed")
+  check(result?.absoluteString.hasPrefix("http://[::1]:3000") == true,
+    "probe: IPv6 [::1]:3000 selected when 127.0.0.1:3000 is dead")
+
+  let idx4 = transport.probed.firstIndex(where: { $0.contains("127.0.0.1:3000") })
+  let idx6 = transport.probed.firstIndex(where: { $0.contains("[::1]:3000") })
+  if let i = idx4, let j = idx6 {
+    check(i < j, "probe: 127.0.0.1 tried before [::1] for same port")
+  } else {
+    check(false, "probe: expected probes for both 127.0.0.1:3000 and [::1]:3000")
+  }
 }
 
 // (P4) Returns nil when no server responds.
@@ -1685,7 +1630,7 @@ do {
       throw URLError(.cannotConnectToHost)
     }
   }
-  let probe = BarServerProbe(transport: DeadTransport(), authToken: probeAuthToken)
+  let probe = BarServerProbe(transport: DeadTransport())
   let result = await probe.findLiveServer(discovery: nil)
   check(result == nil, "probe: returns nil when no server responds")
 }
@@ -1699,7 +1644,7 @@ do {
       return (Data(), http)
     }
   }
-  let probe = BarServerProbe(transport: Status404Transport(), authToken: probeAuthToken)
+  let probe = BarServerProbe(transport: Status404Transport())
   let result = await probe.findLiveServer(discovery: nil)
   check(result == nil, "probe: 404 response treated as dead (not live)")
 }
@@ -1708,7 +1653,7 @@ do {
 //      (e.g. 3000), that port is not probed twice.
 do {
   let transport = SelectiveTransport(successPrefix: "http://127.0.0.1:3000")
-  let probe = BarServerProbe(transport: transport, authToken: probeAuthToken)
+  let probe = BarServerProbe(transport: transport)
   // bar.json port == 3000, which is also in the fallback list.
   let discovery = BarDiscovery(baseUrl: "http://127.0.0.1:3000", port: 3000, authMode: "loopback")
   _ = await probe.findLiveServer(discovery: discovery)
@@ -1719,52 +1664,10 @@ do {
   check(port3000Count == 1, "probe: bar.json port 3000 deduped — probed once, not twice")
 }
 
-do {
-  final class AuthTransport: HTTPTransport, @unchecked Sendable {
-    let proof: (String) -> String?
-    var nonce: String?
-    var requestProof: String?
-    var probedPath: String?
-
-    init(proof: @escaping (String) -> String?) { self.proof = proof }
-
-    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-      nonce = request.value(forHTTPHeaderField: "x-ccs-bar-nonce")
-      requestProof = request.value(forHTTPHeaderField: "x-ccs-bar-token")
-      probedPath = request.url?.path
-      let headers = nonce.flatMap { proof($0) }.map { ["x-ccs-bar-token": $0] }
-      let http = HTTPURLResponse(
-        url: request.url!, statusCode: 200, httpVersion: nil, headerFields: headers)!
-      return (Data(), http)
-    }
-  }
-
-  let valid = AuthTransport(proof: { probeProof($0) })
-  let accepted = await BarServerProbe(transport: valid, authToken: probeAuthToken)
-    .findLiveServer(discovery: BarDiscovery(baseUrl: "http://127.0.0.1:3000", port: 3000, authMode: "loopback"))
-  check(valid.nonce?.count == 32, "probe auth: nonce header sent")
-  check(valid.probedPath == "/api/bar/health", "probe: uses lightweight /api/bar/health")
-  check(valid.requestProof == valid.nonce.map { probeProof($0, direction: "request") }, "probe auth: request proof sent")
-  check(accepted != nil, "probe auth: valid proof accepted")
-
-  let missing = AuthTransport(proof: { _ in nil })
-  let missingResult = await BarServerProbe(transport: missing, authToken: probeAuthToken)
-    .findLiveServer(discovery: nil)
-  check(missingResult == nil, "probe auth: missing proof rejected")
-
-  let invalid = AuthTransport(proof: { _ in String(repeating: "0", count: 64) })
-  let invalidResult = await BarServerProbe(transport: invalid, authToken: probeAuthToken)
-    .findLiveServer(discovery: nil)
-  check(invalidResult == nil, "probe auth: invalid proof rejected")
-}
-
 // (BarUpdateChecker) Semver comparison drives the in-app "Update available"
 //   affordance, so ordering must be numeric (1.10.0 > 1.9.0), tolerate
 //   pre-release suffixes, and reject malformed input.
 do {
-  check(
-    BarUpdateChecker.releaseRepository == "jeffpecky/ccs",
-    "update checker: release repository matches fork")
   check(BarUpdateChecker.isNewer("1.8.0", than: "1.7.0"), "isNewer: newer minor (1.8.0 > 1.7.0)")
   check(BarUpdateChecker.isNewer("1.7.1", than: "1.7.0"), "isNewer: newer patch (1.7.1 > 1.7.0)")
   check(BarUpdateChecker.isNewer("2.0.0", than: "1.9.9"), "isNewer: newer major (2.0.0 > 1.9.9)")

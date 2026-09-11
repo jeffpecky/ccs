@@ -24,7 +24,7 @@ public struct BarDiscovery: Codable, Sendable, Equatable {
   /// Resolved base URL, falling back to a localhost URL built from `port`
   /// when `baseUrl` is empty or unparseable.
   public var resolvedURL: URL? {
-    if let url = URL(string: baseUrl), url.scheme == "http", url.host == "127.0.0.1" { return url }
+    if let url = URL(string: baseUrl), url.scheme != nil { return url }
     return URL(string: "http://127.0.0.1:\(port)")
   }
 

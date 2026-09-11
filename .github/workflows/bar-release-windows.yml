@@ -1,0 +1,107 @@
+name: Bar Release (Windows)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'windows-bar/**'
+      - 'macos-bar/VERSION'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bar-release-windows
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish CCS Bar (Windows)
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Read bar version
+        id: ver
+        shell: pwsh
+        run: |
+          $version = (Get-Content -LiteralPath 'macos-bar/VERSION' -Raw).Trim()
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            Write-Error "macos-bar/VERSION is empty"
+            exit 1
+          }
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "[i] CCS Bar version: $version"
+
+      - name: Build and package
+        shell: pwsh
+        working-directory: windows-bar
+        run: |
+          $version = "${{ steps.ver.outputs.version }}"
+          $arguments = @(
+            'publish', 'CCSBar.App\CCSBar.App.csproj',
+            '-c', 'Release', '-r', 'win-x64',
+            '--self-contained', 'true',
+            '-p:PublishSingleFile=true',
+            '-p:IncludeNativeLibrariesForSelfExtract=true',
+            "-p:Version=$version",
+            "-p:AssemblyVersion=$version.0",
+            "-p:FileVersion=$version.0",
+            "-p:InformationalVersion=$version",
+            '-o', 'dist\publish'
+          )
+          & dotnet @arguments
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
+
+          New-Item -ItemType Directory -Path 'dist\CCS Bar' -Force | Out-Null
+          Copy-Item -LiteralPath 'dist\publish\CCS Bar.exe' -Destination 'dist\CCS Bar'
+
+          $manifest = @{
+            name = 'CCS Bar'
+            version = $version
+            runtime = 'win-x64'
+            selfContained = $true
+            executable = 'CCS Bar.exe'
+          } | ConvertTo-Json
+          [IO.File]::WriteAllText('dist\CCS Bar\manifest.json', $manifest, [Text.UTF8Encoding]::new($false))
+
+          Compress-Archive -LiteralPath 'dist\CCS Bar' -DestinationPath 'dist\CCS-Bar-windows-x64.zip' -Force
+          $hash = (Get-FileHash -LiteralPath 'dist\CCS-Bar-windows-x64.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  CCS-Bar-windows-x64.zip" | Set-Content -LiteralPath 'dist\CCS-Bar-windows-x64.zip.sha256' -Encoding ascii
+          echo "[OK] Built CCS-Bar-windows-x64.zip"
+
+      - name: Publish to ccs-bar-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        shell: bash
+        run: |
+          gh release upload ccs-bar-latest windows-bar/dist/CCS-Bar-windows-x64.zip --clobber
+          gh release upload ccs-bar-latest windows-bar/dist/CCS-Bar-windows-x64.zip.sha256 --clobber
+          printf '%s\n' "${VERSION}" > version.txt
+          gh release upload ccs-bar-latest version.txt --clobber
+          echo "[OK] Published version.txt (${VERSION}) to ccs-bar-latest"
+          rm -f version.txt
+          notes="$(mktemp)"
+          cat > "$notes" <<NOTES
+          CCS Bar v${VERSION}
+
+          Install or update: ccs bar install
+          Windows x64 self-contained build.
+
+          Built automatically from main when windows-bar changes.
+          NOTES
+          gh release edit ccs-bar-latest --target "$GITHUB_SHA" --title "CCS Bar v${VERSION}" --notes-file "$notes"
+          rm -f "$notes"
+          echo "[OK] Published CCS Bar v${VERSION} to ccs-bar-latest"

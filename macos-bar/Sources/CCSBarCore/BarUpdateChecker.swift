@@ -6,13 +6,11 @@ import Foundation
 /// unit-test-friendly with no bundle or network dependency.
 public enum BarUpdateChecker {
 
-  public static let releaseRepository = "jeffpecky/ccs"
-
   /// Published-version artifact URL. Stable redirect target maintained by the
   /// bar-release workflow; always points to the latest released version.txt.
   private static let versionURL = URL(
     string:
-      "https://github.com/\(releaseRepository)/releases/download/ccs-bar-latest/version.txt"
+      "https://github.com/jeffpecky/ccs/releases/download/ccs-bar-latest/version.txt"
   )!
 
   /// Validates that a string looks like a semver (permissive: pre-release
