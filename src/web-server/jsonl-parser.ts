@@ -224,11 +224,11 @@ export function getDefaultProjectsDir(): string {
 /**
  * Find all project directories under ~/.claude/projects/
  */
-export function findProjectDirectories(projectsDir?: string): string[] {
+export async function findProjectDirectories(projectsDir?: string): Promise<string[]> {
   const dir = projectsDir || getDefaultProjectsDir();
 
   try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
     return entries
       .filter((entry) => entry.isDirectory())
       .map((entry) => path.join(dir, entry.name));
@@ -255,7 +255,7 @@ export async function scanProjectsDirectory(options: ParserOptions = {}): Promis
   const { projectsDir } = options;
   const allEntries: RawUsageEntry[] = [];
 
-  const projectDirs = findProjectDirectories(projectsDir);
+  const projectDirs = await findProjectDirectories(projectsDir);
 
   if (projectDirs.length === 0) {
     return allEntries;
@@ -286,13 +286,13 @@ export async function scanProjectsDirectory(options: ParserOptions = {}): Promis
 /**
  * Get count of JSONL files across all projects (for progress reporting)
  */
-export function countJsonlFiles(projectsDir?: string): number {
-  const projectDirs = findProjectDirectories(projectsDir);
+export async function countJsonlFiles(projectsDir?: string): Promise<number> {
+  const projectDirs = await findProjectDirectories(projectsDir);
   let count = 0;
 
   for (const dir of projectDirs) {
     try {
-      const files = fs.readdirSync(dir);
+      const files = await fs.promises.readdir(dir);
       count += files.filter((f) => f.endsWith('.jsonl')).length;
     } catch {
       // Skip inaccessible directories

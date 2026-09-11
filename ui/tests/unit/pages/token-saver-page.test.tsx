@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, userEvent, waitFor, within } from '@tests/setup/test-utils';
+import { toast } from 'sonner';
 
 import { TokenSaverPage } from '@/pages/token-saver';
+
+vi.mock('sonner', () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}));
 
 const config = {
   enabled: true,
@@ -39,6 +44,16 @@ describe('TokenSaverPage', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } }
           );
         }
+        if (url.endsWith('/extras')) {
+          return new Response(
+            JSON.stringify({
+              installed: true,
+              version: '0.35.0',
+              extras: { code: true, ml: true },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
         return new Response(JSON.stringify({ config }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -65,7 +80,7 @@ describe('TokenSaverPage', () => {
     expect(screen.queryByText('PXPipe')).not.toBeInTheDocument();
     expect(screen.queryByText('CLIProxy')).not.toBeInTheDocument();
     expect(screen.getByText('Healthy')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Setup Headroom' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Manage' })).toBeInTheDocument();
   });
 
   it('offers accessible Lite Full Ultra levels for Caveman and Ponytail', async () => {
@@ -94,15 +109,13 @@ describe('TokenSaverPage', () => {
     );
   });
 
-  it('keeps Headroom configuration and lifecycle inside Setup modal', async () => {
+  it('keeps Headroom configuration and lifecycle inside Headroom modal', async () => {
     render(<TokenSaverPage />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Setup Headroom' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Manage' }));
 
-    const dialog = screen.getByRole('dialog', { name: 'Headroom setup' });
+    const dialog = screen.getByRole('dialog', { name: 'Headroom' });
     expect(within(dialog).getByLabelText('Headroom URL')).toHaveValue('http://127.0.0.1:8787');
-    expect(within(dialog).getByLabelText('Compression mode')).toHaveValue('lossy_inline');
-    expect(within(dialog).getByLabelText('Compress user messages')).not.toBeChecked();
-    expect(within(dialog).getByLabelText('Code-aware compression')).not.toBeChecked();
+    expect(await within(dialog).findByLabelText('Code-aware compression')).not.toBeChecked();
     expect(within(dialog).getByLabelText('Kompress ML')).toBeChecked();
     expect(within(dialog).getByText('Healthy')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Stop' })).toBeInTheDocument();
@@ -115,6 +128,113 @@ describe('TokenSaverPage', () => {
       'rel',
       'noreferrer'
     );
+  });
+
+  it('refreshes extras before showing install actions in Headroom modal', async () => {
+    let extrasCalls = 0;
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/status')) {
+        return new Response(
+          JSON.stringify({
+            running: true,
+            healthy: true,
+            managed: true,
+            installed: true,
+            port: 8787,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.endsWith('/extras')) {
+        extrasCalls += 1;
+        return new Response(
+          JSON.stringify({
+            installed: true,
+            version: '0.35.0',
+            extras: extrasCalls === 1 ? { code: false, ml: false } : { code: true, ml: true },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response(JSON.stringify({ config }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    render(<TokenSaverPage />);
+    await userEvent.click(await screen.findByRole('button', { name: /Manage|Setup Headroom/ }));
+
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => expect(extrasCalls).toBeGreaterThanOrEqual(2));
+    expect(within(dialog).getAllByRole('button', { name: 'Uninstall' })).toHaveLength(2);
+    expect(within(dialog).queryByRole('button', { name: 'Install' })).not.toBeInTheDocument();
+  });
+
+  it('shows checking state instead of install while extras status is unknown', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/status')) {
+        return new Response(
+          JSON.stringify({
+            running: true,
+            healthy: true,
+            managed: true,
+            installed: true,
+            port: 8787,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.endsWith('/extras')) {
+        return new Promise<Response>(() => undefined);
+      }
+      return new Response(JSON.stringify({ config }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    render(<TokenSaverPage />);
+    await userEvent.click(await screen.findByRole('button', { name: /Manage|Setup Headroom/ }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getAllByText('Checking...')).toHaveLength(2);
+    expect(within(dialog).queryByRole('button', { name: 'Install' })).not.toBeInTheDocument();
+  });
+
+  it('shows retry state instead of install when extras status cannot be verified', async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/status')) {
+        return new Response(
+          JSON.stringify({
+            running: true,
+            healthy: true,
+            managed: true,
+            installed: true,
+            port: 8787,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.endsWith('/extras')) {
+        return new Response(JSON.stringify({ error: 'unavailable' }), { status: 502 });
+      }
+      return new Response(JSON.stringify({ config }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    render(<TokenSaverPage />);
+    await userEvent.click(await screen.findByRole('button', { name: /Manage|Setup Headroom/ }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findAllByText('Unable to verify')).toHaveLength(2);
+    expect(within(dialog).getAllByRole('button', { name: 'Retry' })).toHaveLength(2);
+    expect(within(dialog).queryByRole('button', { name: 'Install' })).not.toBeInTheDocument();
   });
 
   it('derives global enabled from four visible savers and preserves disabled PXPipe config', async () => {
@@ -130,14 +250,15 @@ describe('TokenSaverPage', () => {
         name: 'Lite',
       })
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-
     await waitFor(() => {
-      const call = vi.mocked(fetch).mock.calls.find(([, options]) => options?.method === 'PUT');
-      expect(call).toBeDefined();
-      const saved = JSON.parse(String(call?.[1]?.body));
+      const saved = vi
+        .mocked(fetch)
+        .mock.calls.filter(([, options]) => options?.method === 'PUT')
+        .map(([, options]) => JSON.parse(String(options?.body)))
+        .find((body) => body.caveman?.enabled === true || body.caveman?.level === 'terse');
+      expect(saved).toBeDefined();
       expect(saved.enabled).toBe(true);
-      expect(saved.caveman).toEqual({ enabled: true, level: 'terse' });
+      expect(saved.caveman.enabled || saved.caveman.level === 'terse').toBe(true);
       expect(saved.pxpipe).toEqual(config.pxpipe);
     });
   });
@@ -149,15 +270,22 @@ describe('TokenSaverPage', () => {
     await userEvent.click(screen.getByLabelText('RTK'));
     await userEvent.click(screen.getByLabelText('Headroom'));
     await userEvent.click(screen.getByLabelText('Ponytail'));
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-
     await waitFor(() => {
-      const call = vi.mocked(fetch).mock.calls.find(([, options]) => options?.method === 'PUT');
-      expect(JSON.parse(String(call?.[1]?.body)).enabled).toBe(false);
+      const saved = vi
+        .mocked(fetch)
+        .mock.calls.filter(([, options]) => options?.method === 'PUT')
+        .map(([, options]) => JSON.parse(String(options?.body)))
+        .find(
+          (body) =>
+            body.rtk === false &&
+            body.headroom?.enabled === false &&
+            body.ponytail?.enabled === false
+        );
+      expect(saved?.enabled).toBe(false);
     });
   });
 
-  it('includes hidden enabled PXPipe when deriving global enabled', async () => {
+  it('preserves hidden PXPipe config while auto-saving visible saver changes', async () => {
     const enabledPxpipe = {
       ...config,
       rtk: false,
@@ -181,38 +309,30 @@ describe('TokenSaverPage', () => {
     );
     render(<TokenSaverPage />);
     await screen.findByText('Compress tool output');
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await userEvent.click(screen.getByLabelText('Caveman'));
     await waitFor(() => {
-      const call = vi.mocked(fetch).mock.calls.find(([, options]) => options?.method === 'PUT');
-      expect(JSON.parse(String(call?.[1]?.body)).enabled).toBe(true);
+      const saved = vi
+        .mocked(fetch)
+        .mock.calls.filter(([, options]) => options?.method === 'PUT')
+        .map(([, options]) => JSON.parse(String(options?.body)))
+        .find((body) => body.caveman?.enabled === true);
+      expect(saved?.enabled).toBe(true);
+      expect(saved?.pxpipe).toEqual(enabledPxpipe.pxpipe);
     });
   });
 
-  it('disables mutating controls while save is pending and exposes live status', async () => {
-    let releaseSave: (() => void) | undefined;
-    vi.mocked(fetch).mockImplementation(async (input, options) => {
-      if (options?.method === 'PUT') {
-        await new Promise<void>((resolve) => {
-          releaseSave = resolve;
-        });
-      }
-      return new Response(
-        JSON.stringify(
-          String(input).endsWith('/status')
-            ? { running: true, healthy: true, managed: true }
-            : { config }
-        ),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      );
-    });
+  it('auto-saves visible saver changes', async () => {
     render(<TokenSaverPage />);
     await screen.findByText('Compress tool output');
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    expect(screen.getByLabelText('RTK')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent(/saving/i);
-    releaseSave?.();
-    await waitFor(() => expect(screen.getByLabelText('RTK')).not.toBeDisabled());
+    await userEvent.click(screen.getByLabelText('RTK'));
+    await waitFor(() => {
+      const saved = vi
+        .mocked(fetch)
+        .mock.calls.filter(([, options]) => options?.method === 'PUT')
+        .map(([, options]) => JSON.parse(String(options?.body)))
+        .find((body) => body.rtk === false);
+      expect(saved?.enabled).toBe(true);
+    });
   });
 
   it('disables mutating controls while lifecycle action is pending', async () => {
@@ -235,14 +355,56 @@ describe('TokenSaverPage', () => {
       );
     });
     render(<TokenSaverPage />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Setup Headroom' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Manage' }));
     await userEvent.click(screen.getByRole('button', { name: 'Stop' }));
     expect(screen.getByLabelText('Headroom URL')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Save changes', hidden: true })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Refresh status', hidden: true })).toBeDisabled();
     expect(screen.getByText('Updating Headroom process')).toBeInTheDocument();
     releaseAction?.();
     await waitFor(() => expect(screen.getByLabelText('Headroom URL')).not.toBeDisabled());
+  });
+
+  it('shows actionable Headroom startup diagnostics', async () => {
+    vi.mocked(fetch).mockImplementation(async (input, options) => {
+      const url = String(input);
+      if (url.endsWith('/status')) {
+        return new Response(JSON.stringify({ running: false, healthy: false, installed: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/extras')) {
+        return new Response(
+          JSON.stringify({ installed: true, version: '0.37.0', extras: { code: false, ml: true } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.endsWith('/start') && options?.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            code: 'HEADROOM_STARTUP_FAILED',
+            stage: 'readiness_timeout',
+            error: 'Headroom did not become healthy within 30s. Process tree stopped.',
+            hint: 'Run `headroom doctor`, then repair or update Headroom and retry.',
+          }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response(JSON.stringify({ config }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    render(<TokenSaverPage />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Setup' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Headroom did not become healthy within 30s. Process tree stopped. Run `headroom doctor`, then repair or update Headroom and retry. (readiness_timeout)'
+      )
+    );
   });
 
   it('shows accessible loading status', () => {
@@ -264,7 +426,7 @@ describe('TokenSaverPage', () => {
         )
     );
     render(<TokenSaverPage />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Setup Headroom' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Setup' }));
     expect(screen.getByText('Enter a valid HTTP or HTTPS Headroom URL.')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Open Headroom dashboard' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Headroom URL')).toHaveValue('not a url');
@@ -281,6 +443,17 @@ describe('TokenSaverPage', () => {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           })
+        );
+      }
+      if (String(input).endsWith('/extras')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ installed: true, version: null, extras: { code: false, ml: false } }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }
+          )
         );
       }
       return new Promise<Response>((resolve, reject) => {

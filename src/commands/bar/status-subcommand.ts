@@ -172,7 +172,9 @@ export async function handleBarStatus(
   }
 
   if (readProcessBirthIdentity(pid) !== birthIdentity) {
-    console.log(`[!] CCS Bar server: PID ${pid} belongs to a different process (birth identity mismatch)`);
+    console.log(
+      `[!] CCS Bar server: PID ${pid} belongs to a different process (birth identity mismatch)`
+    );
     console.log('[i] Run `ccs bar stop` to preserve and inspect recovery state.');
     return;
   }

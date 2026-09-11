@@ -26,6 +26,33 @@ const NATIVE_CONFIG_TOOLS: Record<string, string> = {
   opencode: '/api/cli-tools/opencode-settings',
 };
 
+export function normalizeSelectedOpenCodeModels(values: unknown, legacyModel?: string): string[] {
+  const source = Array.isArray(values) ? values : legacyModel ? [legacyModel] : [];
+  return [
+    ...new Set(
+      source
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter(Boolean)
+    ),
+  ];
+}
+
+export function removeSelectedOpenCodeModel(
+  models: string[],
+  activeModel: string,
+  subagentModel: string,
+  removedModel = activeModel
+): { models: string[]; activeModel: string; subagentModel: string } {
+  const remaining = models.filter((model) => model !== removedModel);
+  const nextActive = activeModel === removedModel ? remaining[0] || '' : activeModel;
+  return {
+    models: remaining,
+    activeModel: nextActive,
+    subagentModel: subagentModel === removedModel ? nextActive : subagentModel,
+  };
+}
+
 export function useOpenCodeEditor(
   provider: string,
   _catalog?: ProviderCatalog,
@@ -83,6 +110,7 @@ export function useOpenCodeEditor(
   // OpenCode model fields
   const currentModel = currentSettings?.model?.OPENCODE_MODEL;
   const subagentModel = currentSettings?.model?.OPENCODE_SUB_AGENT_MODEL;
+  const selectedModels = normalizeSelectedOpenCodeModels(currentSettings?.models, currentModel);
 
   const updateEnvValue = useCallback(
     (key: string, value: string) => {
@@ -100,6 +128,47 @@ export function useOpenCodeEditor(
       setRawJsonEdits(JSON.stringify(newSettings, null, 2));
     },
     [currentSettings]
+  );
+
+  const updateModels = useCallback(
+    (models: string[], activeModel: string, nextSubagentModel = subagentModel || activeModel) => {
+      const newModel = {
+        ...(currentSettings?.model || {}),
+        OPENCODE_MODEL: activeModel,
+        OPENCODE_SUB_AGENT_MODEL: nextSubagentModel,
+      };
+      setRawJsonEdits(JSON.stringify({ ...currentSettings, models, model: newModel }, null, 2));
+    },
+    [currentSettings, subagentModel]
+  );
+
+  const addModel = useCallback(
+    (model: string) => {
+      const value = model.trim();
+      if (!value || selectedModels.includes(value)) return;
+      updateModels([...selectedModels, value], currentModel || value);
+    },
+    [currentModel, selectedModels, updateModels]
+  );
+
+  const removeModel = useCallback(
+    (model: string) => {
+      const next = removeSelectedOpenCodeModel(
+        selectedModels,
+        currentModel || selectedModels[0] || '',
+        subagentModel || currentModel || selectedModels[0] || '',
+        model
+      );
+      updateModels(next.models, next.activeModel, next.subagentModel);
+    },
+    [currentModel, selectedModels, subagentModel, updateModels]
+  );
+
+  const setActiveModel = useCallback(
+    (model: string) => {
+      if (selectedModels.includes(model)) updateModels(selectedModels, model);
+    },
+    [selectedModels, updateModels]
   );
 
   const isRawJsonValid = useMemo(() => {
@@ -149,7 +218,12 @@ export function useOpenCodeEditor(
         const nativeRes = await fetch(nativeEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model }),
+          body: JSON.stringify({
+            model,
+            models: normalizeSelectedOpenCodeModels(settingsToSave.models, model.OPENCODE_MODEL),
+            activeModel: model.OPENCODE_MODEL,
+            subagentModel: model.OPENCODE_SUB_AGENT_MODEL,
+          }),
         });
         if (!nativeRes.ok) {
           const err = await nativeRes.json().catch(() => ({}));
@@ -205,6 +279,10 @@ export function useOpenCodeEditor(
     currentSettings,
     currentModel,
     subagentModel,
+    selectedModels,
+    addModel,
+    removeModel,
+    setActiveModel,
     handleRawJsonChange,
     updateEnvValue,
     updateEnvValues,

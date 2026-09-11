@@ -194,6 +194,18 @@ export const PROVIDER_CAPABILITIES: Record<CLIProxyProvider, ProviderCapabilitie
     tokenTypeValues: ['qoder'],
     aliases: [],
   },
+  'openai-compatibility': {
+    displayName: 'OpenAI-Compatible',
+    description: 'Custom OpenAI-compatible API providers',
+    oauthFlow: 'device_code',
+    callbackPort: null,
+    callbackProviderName: '',
+    authUrlProviderName: '',
+    refreshOwnership: 'unsupported',
+    authFilePrefixes: [],
+    tokenTypeValues: [],
+    aliases: [],
+  },
 };
 
 export const CLIPROXY_PROVIDER_IDS = Object.freeze(

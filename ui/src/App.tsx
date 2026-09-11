@@ -11,9 +11,9 @@ import { RequireAuth } from '@/components/auth/require-auth';
 import { Layout } from '@/components/layout/layout';
 import { Loader2 } from 'lucide-react';
 
-// Eager load: HomePage (initial route) + LoginPage (auth flow)
-import { HomePage } from '@/pages/home';
-import { LoginPage } from '@/pages/login';
+// Lazy load: pages
+const HomePage = lazy(() => import('@/pages/home').then((m) => ({ default: m.HomePage })));
+const LoginPage = lazy(() => import('@/pages/login').then((m) => ({ default: m.LoginPage })));
 
 // Lazy load: heavy pages with charts or complex dependencies
 const AnalyticsPage = lazy(() =>
@@ -60,12 +60,26 @@ export default function App() {
             <BrowserRouter>
               <Routes>
                 {/* Public route: Login page */}
-                <Route path="/login" element={<LoginPage />} />
+                <Route
+                  path="/login"
+                  element={
+                    <Suspense fallback={<PageLoader />}>
+                      <LoginPage />
+                    </Suspense>
+                  }
+                />
 
                 {/* Protected routes: wrapped with RequireAuth */}
                 <Route element={<RequireAuth />}>
                   <Route element={<Layout />}>
-                    <Route path="/" element={<HomePage />} />
+                    <Route
+                      path="/"
+                      element={
+                        <Suspense fallback={<PageLoader />}>
+                          <HomePage />
+                        </Suspense>
+                      }
+                    />
                     <Route
                       path="/analytics"
                       element={

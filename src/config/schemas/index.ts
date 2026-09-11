@@ -15,7 +15,6 @@ export type {
   ProfileConfig,
   OAuthAccounts,
   CLIProxyAuthConfig,
-  TokenRefreshSettings,
   DashboardAuthConfig,
 } from './auth';
 export { DEFAULT_DASHBOARD_AUTH_CONFIG } from './auth';

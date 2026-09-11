@@ -7,9 +7,9 @@
 import { useMemo } from 'react';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Loader2, Code2 } from 'lucide-react';
+import { Loader2, Code2, Star, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useCliproxyModels } from '@/hooks/use-cliproxy';
+import { useCliproxyModels, useAiProviderModels } from '@/hooks/use-cliproxy';
 import { useOpenCodeEditor } from './use-opencode-editor';
 import { CLIRawEditorSection } from './cli-raw-editor-section';
 import { CLIProviderInfoTab } from './cli-provider-info-tab';
@@ -20,21 +20,33 @@ import type { CLIProviderEditorProps } from './types';
 import type { ProviderCatalog } from '../provider-model-selector';
 import type { CliproxyProviderRoutingHints } from '@/lib/api-client';
 
-function OpenCodeModelConfigTab({
+export function OpenCodeModelConfigTab({
   currentModel,
+  selectedModels,
   subagentModel,
   providerModels,
   catalog,
   routing,
   onUpdateEnvValue,
+  onAddModel,
+  onRemoveModel,
+  onSetActiveModel,
 }: {
   currentModel?: string;
+  selectedModels: string[];
   subagentModel?: string;
   providerModels: Array<{ id: string; owned_by: string }>;
   catalog?: ProviderCatalog;
   routing?: CliproxyProviderRoutingHints;
   onUpdateEnvValue: (key: string, value: string) => void;
+  onAddModel: (model: string) => void;
+  onRemoveModel: (model: string) => void;
+  onSetActiveModel: (model: string) => void;
 }) {
+  const handleModelSelect = (model: string) => {
+    onAddModel(model);
+    onSetActiveModel(model);
+  };
   return (
     <ScrollArea className="flex-1">
       <div className="p-4 space-y-6">
@@ -44,11 +56,42 @@ function OpenCodeModelConfigTab({
             Configure which models to use for each role
           </p>
           <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Models</div>
+              <div className="flex flex-wrap gap-2" aria-label="Selected models">
+                {selectedModels.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">No models selected</span>
+                ) : null}
+                {selectedModels.map((model) => (
+                  <div
+                    key={model}
+                    className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs ${model === currentModel ? 'border-primary text-primary' : 'border-border'}`}
+                  >
+                    <button
+                      type="button"
+                      className="flex items-center gap-1"
+                      onClick={() => onSetActiveModel(model)}
+                      aria-label={`Set ${model} active`}
+                    >
+                      {model === currentModel ? <Star className="h-3 w-3 fill-current" /> : null}
+                      {model}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveModel(model)}
+                      aria-label={`Remove ${model}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
             <FlexibleModelSelector
-              label="Default Model"
-              description="Used when no specific role is requested"
+              label="Add Model"
+              description="Add another model to OpenCode"
               value={currentModel}
-              onChange={(model) => onUpdateEnvValue('OPENCODE_MODEL', model)}
+              onChange={handleModelSelect}
               catalog={catalog}
               allModels={providerModels}
               routing={routing}
@@ -96,7 +139,11 @@ export function OpenCodeEditor({
     isRawJsonValid,
     hasChanges,
     currentModel,
+    selectedModels,
     subagentModel,
+    addModel,
+    removeModel,
+    setActiveModel,
     handleRawJsonChange,
     updateEnvValue,
     saveMutation,
@@ -106,13 +153,26 @@ export function OpenCodeEditor({
   } = useOpenCodeEditor(provider, catalog, toolId, port);
 
   const { data: modelsData } = useCliproxyModels();
+  const { data: nvidiaModels } = useAiProviderModels('nvidia-api-key');
+  const { data: cloudflareModels } = useAiProviderModels('cloudflare-api-key');
+  const { data: openrouterModels } = useAiProviderModels('openrouter-api-key');
   const providerModels = useMemo(() => {
-    if (!modelsData?.models) return [];
-    return modelsData.models.map((m) => ({
-      id: m.id,
-      owned_by: m.owned_by,
-    }));
-  }, [modelsData]);
+    const base = modelsData?.models ?? [];
+    const extra = [
+      ...(nvidiaModels?.models ?? []),
+      ...(cloudflareModels?.models ?? []),
+      ...(openrouterModels?.models ?? []),
+    ];
+    const seen = new Set(base.map((m) => m.id));
+    const merged = [...base];
+    for (const m of extra) {
+      if (!seen.has(m.id)) {
+        seen.add(m.id);
+        merged.push({ id: m.id, owned_by: m.owned_by, object: 'model', created: 0 });
+      }
+    }
+    return merged.map((m) => ({ id: m.id, owned_by: m.owned_by }));
+  }, [modelsData, nvidiaModels, cloudflareModels, openrouterModels]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -124,7 +184,7 @@ export function OpenCodeEditor({
         data={data}
         isLoading={isLoading}
         hasChanges={hasChanges}
-        isRawJsonValid={isRawJsonValid}
+        isRawJsonValid={isRawJsonValid && Boolean(currentModel)}
         isSaving={saveMutation.isPending}
         isRemoteMode={isRemoteMode}
         port={port}
@@ -159,11 +219,15 @@ export function OpenCodeEditor({
                 >
                   <OpenCodeModelConfigTab
                     currentModel={currentModel}
+                    selectedModels={selectedModels}
                     subagentModel={subagentModel}
                     providerModels={providerModels}
                     catalog={catalog}
                     routing={routing}
                     onUpdateEnvValue={updateEnvValue}
+                    onAddModel={addModel}
+                    onRemoveModel={removeModel}
+                    onSetActiveModel={setActiveModel}
                   />
                 </TabsContent>
                 <TabsContent
@@ -224,4 +288,3 @@ export { CLIProviderInfoTab } from './cli-provider-info-tab';
 export { CLIProviderEditorHeader } from './cli-provider-editor-header';
 export { CLIModelConfigTab } from './cli-model-config-tab';
 export { useOpenCodeEditor } from './use-opencode-editor';
-

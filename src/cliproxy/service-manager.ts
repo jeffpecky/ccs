@@ -11,8 +11,7 @@
  * this module manages a persistent background instance.
  */
 
-import { spawn, ChildProcess } from 'child_process';
-import * as net from 'net';
+import { spawn, type ChildProcess } from 'child_process';
 import { ensureCLIProxyBinary } from './binary-manager';
 import {
   generateConfig,
@@ -25,54 +24,78 @@ import { registerSession } from './session-tracker';
 import { detectRunningProxy, waitForProxyHealthy } from './proxy/proxy-detector';
 import { withStartupLock } from './services/startup-lock';
 import { isCliproxyRunning } from './services/stats-fetcher';
-import { TokenRefreshWorker, type RefreshResult } from './auth/token-refresh-worker';
-import { getTokenRefreshConfig } from './auth/token-refresh-config';
 
 /** Background proxy process reference */
 let proxyProcess: ChildProcess | null = null;
-
-/** Token refresh worker instance */
-let tokenRefreshWorker: TokenRefreshWorker | null = null;
 
 /** Cleanup registered flag */
 let cleanupRegistered = false;
 
 /**
- * Wait for TCP port to become available
+ * Wait for process to exit during startup.
+ * Returns the exit code and signal if the process exited, null if still running.
  */
-async function waitForPort(
+function waitForProcessExit(
+  proc: ChildProcess,
+  timeoutMs: number
+): Promise<{ code: number | null; signal: NodeJS.Signals | null } | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      proc.removeListener('exit', onExit);
+      resolve(null); // Still running
+    }, timeoutMs);
+
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      clearTimeout(timer);
+      resolve({ code, signal });
+    };
+
+    proc.once('exit', onExit);
+  });
+}
+
+/**
+ * HTTP readiness check — verifies the proxy is not just listening on the port
+ * but actually ready to serve requests. Uses the existing health check function.
+ */
+async function waitForReadiness(
   port: number,
-  timeout: number = 5000,
-  pollInterval: number = 100
-): Promise<boolean> {
+  timeout: number = 30000,
+  pollInterval: number = 200
+): Promise<{
+  ready: boolean;
+  exitInfo: { code: number | null; signal: NodeJS.Signals | null } | null;
+}> {
   const start = Date.now();
 
   while (Date.now() - start < timeout) {
     try {
-      await new Promise<void>((resolve, reject) => {
-        const socket = net.createConnection({ port, host: '127.0.0.1' }, () => {
-          socket.destroy();
-          resolve();
-        });
-
-        socket.on('error', (err) => {
-          socket.destroy();
-          reject(err);
-        });
-
-        socket.setTimeout(500, () => {
-          socket.destroy();
-          reject(new Error('Connection timeout'));
-        });
-      });
-
-      return true; // Connection successful
+      const healthy = await isCliproxyRunning(port);
+      if (healthy) {
+        return { ready: true, exitInfo: null };
+      }
     } catch {
-      await new Promise((r) => setTimeout(r, pollInterval));
+      // Health check failed, continue polling
     }
+    await new Promise((r) => setTimeout(r, pollInterval));
   }
 
-  return false;
+  return { ready: false, exitInfo: null };
+}
+
+/** Maximum number of startup retry attempts for transient failures */
+const MAX_STARTUP_RETRIES = 2;
+
+/** Base delay for exponential backoff (ms) */
+const RETRY_BASE_DELAY_MS = 1000;
+
+/**
+ * Exponential backoff with jitter for retry delays.
+ */
+function getRetryDelay(attempt: number): number {
+  const base = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+  const jitter = Math.random() * 500;
+  return base + jitter;
 }
 
 /**
@@ -82,11 +105,6 @@ function registerCleanup(): void {
   if (cleanupRegistered) return;
 
   const cleanup = () => {
-    // Stop token refresh worker first
-    if (tokenRefreshWorker && tokenRefreshWorker.isActive()) {
-      tokenRefreshWorker.stop();
-      tokenRefreshWorker = null;
-    }
     // Do not stop detached CLIProxy on parent exit.
     // Persistence is expected across CCS command lifecycles.
   };
@@ -96,38 +114,6 @@ function registerCleanup(): void {
   process.once('SIGINT', cleanup);
 
   cleanupRegistered = true;
-}
-
-/**
- * Start token refresh worker if configured
- * @param verbose Enable verbose logging
- */
-function startTokenRefreshWorker(verbose: boolean): void {
-  // Skip if already running
-  if (tokenRefreshWorker && tokenRefreshWorker.isActive()) {
-    return;
-  }
-
-  // Load config
-  const config = getTokenRefreshConfig();
-  if (!config) {
-    // Not configured or disabled
-    return;
-  }
-
-  // Create and start worker
-  tokenRefreshWorker = new TokenRefreshWorker({
-    refreshInterval: config.interval_minutes ?? 30,
-    preemptiveTime: config.preemptive_minutes ?? 45,
-    maxRetries: config.max_retries ?? 3,
-    verbose: config.verbose || verbose,
-  });
-
-  tokenRefreshWorker.start();
-
-  if (verbose) {
-    console.error('[i] Token refresh worker started');
-  }
 }
 
 export interface ServiceStartResult {
@@ -259,71 +245,179 @@ export async function ensureCliproxyService(
     }
     log(`Config ready: ${configPath}`);
 
-    // 3. Spawn background process
+    // 3. Spawn background process with retry logic
     const proxyArgs = ['--config', configPath];
-    log(`Spawning: ${binaryPath} ${proxyArgs.join(' ')}`);
+    let lastExitInfo: { code: number | null; signal: NodeJS.Signals | null } | null = null;
+    let lastStderr = '';
 
-    proxyProcess = spawn(binaryPath, proxyArgs, {
-      stdio: ['ignore', verbose ? 'pipe' : 'ignore', verbose ? 'pipe' : 'ignore'],
-      detached: true,
-      env: {
-        ...process.env,
-        WRITABLE_PATH: getCliproxyWritablePath(),
-      },
-    });
+    for (let attempt = 0; attempt <= MAX_STARTUP_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const delay = getRetryDelay(attempt - 1);
+        log(
+          `Retry attempt ${attempt}/${MAX_STARTUP_RETRIES} after ${Math.round(delay)}ms delay...`
+        );
+        await new Promise((r) => setTimeout(r, delay));
 
-    if (verbose) {
-      proxyProcess.stdout?.on('data', (data: Buffer) => {
-        process.stderr.write(`[cliproxy] ${data.toString()}`);
+        // Re-check if proxy came up from another process during backoff
+        const lateCheck = await detectRunningProxyFn(port);
+        if (lateCheck.running && lateCheck.verified) {
+          log('Proxy came up during retry backoff');
+          return { started: true, alreadyRunning: true, port, configRegenerated };
+        }
+      }
+
+      log(`Spawning: ${binaryPath} ${proxyArgs.join(' ')}`);
+
+      // Always capture stderr during startup for diagnostics
+      const stderrChunks: Buffer[] = [];
+      let stderrListener: ((chunk: Buffer) => void) | null = null;
+
+      proxyProcess = spawn(binaryPath, proxyArgs, {
+        stdio: ['ignore', verbose ? 'pipe' : 'ignore', 'pipe'],
+        detached: true,
+        env: {
+          ...process.env,
+          WRITABLE_PATH: getCliproxyWritablePath(),
+        },
       });
-      proxyProcess.stderr?.on('data', (data: Buffer) => {
-        process.stderr.write(`[cliproxy-err] ${data.toString()}`);
+
+      // Capture stderr for error reporting (always, not just verbose)
+      if (proxyProcess.stderr) {
+        stderrListener = (chunk: Buffer) => {
+          stderrChunks.push(chunk);
+          if (verbose) {
+            process.stderr.write(`[cliproxy-err] ${chunk.toString()}`);
+          }
+        };
+        proxyProcess.stderr.on('data', stderrListener);
+      }
+
+      // Forward stdout in verbose mode
+      if (verbose) {
+        proxyProcess.stdout?.on('data', (data: Buffer) => {
+          process.stderr.write(`[cliproxy] ${data.toString()}`);
+        });
+      }
+
+      proxyProcess.unref();
+
+      // Fail fast on spawn error (e.g., binary not found, permission denied)
+      const spawnError = await new Promise<Error | null>((resolve) => {
+        proxyProcess!.once('error', (error) => {
+          resolve(error);
+        });
+        // If no error within 1s, assume spawn succeeded
+        setTimeout(() => resolve(null), 1000);
       });
-    }
 
-    proxyProcess.unref();
+      if (spawnError) {
+        log(`Spawn error: ${spawnError.message}`);
+        if (stderrListener && proxyProcess.stderr) {
+          proxyProcess.stderr.removeListener('data', stderrListener);
+        }
+        return {
+          started: false,
+          alreadyRunning: false,
+          port,
+          error: `Failed to start CLIProxy: ${spawnError.message}`,
+        };
+      }
 
-    proxyProcess.on('error', (error) => {
-      log(`Spawn error: ${error.message}`);
-    });
+      registerCleanup();
 
-    registerCleanup();
+      // 4. Wait for proxy to be ready with HTTP health checks
+      //    Also monitor for early process exit (crash during initialization)
+      log(`Waiting for CLIProxy on port ${port}...`);
 
-    // 4. Wait for proxy to be ready
-    log(`Waiting for CLIProxy on port ${port}...`);
-    const ready = await waitForPort(port, 30000);
+      const readinessResult = await waitForReadiness(port, 30000);
+      if (readinessResult.ready) {
+        // Success — detach stderr listener
+        if (stderrListener && proxyProcess?.stderr) {
+          proxyProcess.stderr.removeListener('data', stderrListener);
+        }
+        log(`CLIProxy service started on port ${port}`);
+        break; // Exit retry loop on success
+      }
 
-    if (!ready) {
-      if (proxyProcess && !proxyProcess.killed) {
+      // Check if process exited during startup
+      const exitInfo = await waitForProcessExit(proxyProcess!, 500);
+      if (exitInfo) {
+        // Process crashed — capture stderr for diagnostics
+        lastExitInfo = exitInfo;
+        lastStderr = Buffer.concat(stderrChunks).toString('utf-8').trim();
+        log(
+          `CLIProxy exited during startup: code=${exitInfo.code}, signal=${exitInfo.signal}` +
+            (lastStderr ? `, stderr: ${lastStderr.slice(0, 200)}` : '')
+        );
+
+        // Clean up before retry
+        if (stderrListener && proxyProcess?.stderr) {
+          proxyProcess.stderr.removeListener('data', stderrListener);
+        }
+        proxyProcess = null;
+
+        // Crash = don't retry (binary is broken, not a transient failure)
+        break;
+      }
+
+      // Timeout but process still running — could be slow startup, try once more
+      log('Readiness check timed out but process is still running');
+      lastStderr = Buffer.concat(stderrChunks).toString('utf-8').trim();
+      if (stderrListener && proxyProcess?.stderr) {
+        proxyProcess.stderr.removeListener('data', stderrListener);
+      }
+
+      // If this was the last attempt, kill the process
+      if (attempt === MAX_STARTUP_RETRIES && proxyProcess && !proxyProcess.killed) {
         proxyProcess.kill('SIGTERM');
         proxyProcess = null;
       }
+    }
 
-      // Get backend label for error message
+    // If we get here, startup failed
+    if (!proxyProcess || proxyProcess.killed) {
       const { loadOrCreateUnifiedConfig } = await import('../config/unified-config-loader');
       const { DEFAULT_BACKEND } = await import('./binary/platform-detector');
       const config = loadOrCreateUnifiedConfig();
       const backendLabel =
         (config.cliproxy?.backend ?? DEFAULT_BACKEND) === 'plus' ? 'CLIProxy Plus' : 'CLIProxy';
 
+      let errorDetail: string;
+      if (lastExitInfo) {
+        const exitDesc = lastExitInfo.signal
+          ? `killed by signal ${lastExitInfo.signal}`
+          : `exited with code ${lastExitInfo.code}`;
+        errorDetail = `${backendLabel} ${exitDesc} on port ${port}`;
+        if (lastStderr) {
+          // Include first line of stderr for actionable diagnostics
+          const firstLine = lastStderr.split('\n')[0]?.slice(0, 200);
+          if (firstLine) {
+            errorDetail += `: ${firstLine}`;
+          }
+        }
+      } else {
+        errorDetail = `${backendLabel} failed to start within 30s on port ${port}`;
+        if (lastStderr) {
+          const firstLine = lastStderr.split('\n')[0]?.slice(0, 200);
+          if (firstLine) {
+            errorDetail += ` (last output: ${firstLine})`;
+          }
+        }
+      }
+
       return {
         started: false,
         alreadyRunning: false,
         port,
-        error: `${backendLabel} failed to start within 30s on port ${port}`,
+        error: errorDetail,
       };
     }
-
-    log(`CLIProxy service started on port ${port}`);
 
     // 5. Register session
     if (proxyProcess.pid) {
       registerSession(port, proxyProcess.pid);
       log(`Session registered for PID ${proxyProcess.pid}`);
     }
-
-    // 6. Start token refresh worker if configured
-    startTokenRefreshWorker(verbose);
 
     return { started: true, alreadyRunning: false, port };
   });
@@ -333,13 +427,7 @@ export async function ensureCliproxyService(
  * Stop the managed CLIProxy service
  */
 export function stopCliproxyService(): boolean {
-  // Stop token refresh worker first
-  if (tokenRefreshWorker && tokenRefreshWorker.isActive()) {
-    tokenRefreshWorker.stop();
-    tokenRefreshWorker = null;
-  }
-
-  // Then stop proxy process
+  // Stop proxy process
   if (proxyProcess && !proxyProcess.killed) {
     proxyProcess.kill('SIGTERM');
     proxyProcess = null;
@@ -360,28 +448,4 @@ export async function getServiceStatus(port: number = CLIPROXY_DEFAULT_PORT): Pr
   const managedByUs = proxyProcess !== null && !proxyProcess.killed;
 
   return { running, managedByUs, port };
-}
-
-/**
- * Check if token refresh worker is running
- */
-export function isTokenRefreshWorkerRunning(): boolean {
-  return tokenRefreshWorker !== null && tokenRefreshWorker.isActive();
-}
-
-/**
- * Get token refresh worker status
- */
-export function getTokenRefreshStatus(): {
-  running: boolean;
-  lastResults: RefreshResult[] | null;
-} {
-  if (!tokenRefreshWorker) {
-    return { running: false, lastResults: null };
-  }
-
-  return {
-    running: tokenRefreshWorker.isActive(),
-    lastResults: tokenRefreshWorker.getLastRefreshResults(),
-  };
 }

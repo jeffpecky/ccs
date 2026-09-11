@@ -139,7 +139,9 @@ class Doctor {
     if (this.results.isHealthy() && !this.results.hasWarnings()) {
       console.log(ok('All checks passed! Installation is healthy.'));
       console.log('');
-      console.log(info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`));
+      console.log(
+        info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`)
+      );
     } else if (this.results.hasErrors()) {
       console.log(fail('Installation has errors. Run suggested fixes above.'));
     } else {
@@ -149,7 +151,9 @@ class Doctor {
         )
       );
       console.log('');
-      console.log(info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`));
+      console.log(
+        info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`)
+      );
     }
 
     // Pool onboarding hint: fires when >= 2 native Claude profiles exist and

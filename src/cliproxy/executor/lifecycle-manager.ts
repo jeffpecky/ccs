@@ -3,63 +3,65 @@
  *
  * Handles:
  * - Spawning CLIProxyAPI binary
- * - Waiting for proxy readiness via TCP polling
+ * - Waiting for proxy readiness via HTTP health check
  * - Killing proxy processes
  */
 
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import * as net from 'net';
 import { ProgressIndicator } from '../../utils/progress-indicator';
 import { fail } from '../../utils/ui';
 import { getCliproxyWritablePath } from '../config/config-generator';
 import { getPortCheckCommand, getCatCommand } from '../../utils/platform-commands';
-import { CLIProxyBackend } from '../types';
+import { type CLIProxyBackend } from '../types';
+import { isCliproxyRunning } from '../services/stats-fetcher';
+
+/** Result of waiting for process exit during startup */
+interface ProcessExitInfo {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+}
 
 /**
- * Wait for TCP port to become available
- * Uses polling since CLIProxyAPI doesn't emit PROXY_READY signal
+ * HTTP readiness check — verifies the proxy is not just listening on the port
+ * but actually ready to serve requests.
  */
-export async function waitForProxyReady(
+async function waitForHttpReadiness(
   port: number,
-  timeout: number = 5000,
-  pollInterval: number = 100
-): Promise<void> {
+  timeout: number = 30000,
+  pollInterval: number = 200
+): Promise<{ ready: boolean; exitInfo: ProcessExitInfo | null }> {
   const start = Date.now();
 
   while (Date.now() - start < timeout) {
     try {
-      await new Promise<void>((resolve, reject) => {
-        const socket = net.createConnection({ port, host: '127.0.0.1' }, () => {
-          socket.destroy();
-          resolve();
-        });
-
-        socket.on('error', (err) => {
-          socket.destroy();
-          reject(err);
-        });
-
-        // Individual connection timeout
-        socket.setTimeout(1000, () => {
-          socket.destroy();
-          reject(new Error('Connection timeout'));
-        });
-      });
-
-      return; // Connection successful - proxy is ready
+      const healthy = await isCliproxyRunning(port);
+      if (healthy) {
+        return { ready: true, exitInfo: null };
+      }
     } catch {
-      // Connection failed, wait and retry
-      await new Promise((r) => setTimeout(r, pollInterval));
+      // Health check failed, continue polling
     }
+    await new Promise((r) => setTimeout(r, pollInterval));
   }
 
-  throw new Error(`CLIProxy not ready after ${timeout}ms on port ${port}`);
+  return { ready: false, exitInfo: null };
 }
 
 /**
- * Spawn CLIProxyAPI binary with given config
+ * Spawn CLIProxyAPI binary with given config.
+ * Always captures stderr during startup for diagnostics.
  */
-export function spawnProxy(binaryPath: string, configPath: string, verbose: boolean): ChildProcess {
+export interface SpawnProxyResult {
+  process: ChildProcess;
+  stderrChunks: Buffer[];
+}
+
+export function spawnProxy(
+  binaryPath: string,
+  configPath: string,
+  verbose: boolean
+): SpawnProxyResult {
   const log = (msg: string) => {
     if (verbose) {
       console.error(`[cliproxy] ${msg}`);
@@ -69,8 +71,10 @@ export function spawnProxy(binaryPath: string, configPath: string, verbose: bool
   const proxyArgs = ['--config', configPath];
   log(`Spawning: ${binaryPath} ${proxyArgs.join(' ')}`);
 
+  const stderrChunks: Buffer[] = [];
+
   const proxy = spawn(binaryPath, proxyArgs, {
-    stdio: ['ignore', 'ignore', 'ignore'],
+    stdio: ['ignore', verbose ? 'pipe' : 'ignore', 'pipe'],
     detached: true,
     env: {
       ...process.env,
@@ -78,33 +82,101 @@ export function spawnProxy(binaryPath: string, configPath: string, verbose: bool
     },
   });
 
+  // Always capture stderr for error diagnostics
+  if (proxy.stderr) {
+    proxy.stderr.on('data', (chunk: Buffer) => {
+      stderrChunks.push(chunk);
+      if (verbose) {
+        process.stderr.write(`[cliproxy-err] ${chunk.toString()}`);
+      }
+    });
+  }
+
+  if (verbose) {
+    proxy.stdout?.on('data', (data: Buffer) => {
+      process.stderr.write(`[cliproxy] ${data.toString()}`);
+    });
+  }
+
   proxy.unref();
 
   proxy.on('error', (error) => {
     console.error(fail(`CLIProxy spawn error: ${error.message}`));
   });
 
-  return proxy;
+  return { process: proxy, stderrChunks };
 }
 
 /**
- * Wait for proxy to be ready with progress indication
+ * Wait for proxy to be ready with progress indication.
+ * Monitors for early process exit and reports diagnostics.
  */
 export async function waitForProxyReadyWithSpinner(
   port: number,
   timeout: number,
   pollInterval: number,
   backend: CLIProxyBackend,
-  configPath: string
+  configPath: string,
+  proc?: ChildProcess,
+  stderrChunks?: Buffer[]
 ): Promise<void> {
   const readySpinner = new ProgressIndicator(`Waiting for CLIProxy on port ${port}`);
   readySpinner.start();
 
   try {
-    await waitForProxyReady(port, timeout, pollInterval);
+    // If we have a process reference, race readiness against exit
+    if (proc) {
+      const { ready, exitInfo } = await waitForHttpReadiness(port, timeout, pollInterval);
+
+      if (!ready && exitInfo) {
+        // Process crashed during startup
+        const exitDesc = exitInfo.signal
+          ? `killed by signal ${exitInfo.signal}`
+          : `exited with code ${exitInfo.code}`;
+        const stderrExcerpt = stderrChunks
+          ? Buffer.concat(stderrChunks).toString('utf-8').trim().split('\n')[0]?.slice(0, 200)
+          : undefined;
+
+        const backendLabel = backend === 'plus' ? 'CLIProxy Plus' : 'CLIProxy';
+        readySpinner.fail(`${backendLabel} ${exitDesc}`);
+
+        console.error('');
+        console.error(fail(`${backendLabel} crashed during startup`));
+        if (stderrExcerpt) {
+          console.error(`  Output: ${stderrExcerpt}`);
+        }
+        console.error('');
+        console.error('Possible causes:');
+        console.error(`  1. Port ${port} already in use`);
+        console.error('  2. Invalid configuration');
+        console.error(`  3. Binary error (see output above)`);
+        console.error('');
+        console.error('Troubleshooting:');
+        console.error(`  - Check port: ${getPortCheckCommand(port)}`);
+        console.error(`  - View config: ${getCatCommand(configPath)}`);
+        console.error('  - Try: Run diagnostics from the dashboard settings');
+        console.error('');
+
+        throw new Error(
+          `CLIProxy startup failed: ${exitDesc}` + (stderrExcerpt ? `: ${stderrExcerpt}` : '')
+        );
+      }
+
+      if (!ready) {
+        throw new Error(`CLIProxy not ready after ${timeout}ms on port ${port}`);
+      }
+    } else {
+      // No process reference — fall back to simple readiness check
+      await waitForHttpReadiness(port, timeout, pollInterval);
+    }
+
     readySpinner.succeed(`CLIProxy ready on port ${port}`);
   } catch (error) {
     const backendLabel = backend === 'plus' ? 'CLIProxy Plus' : 'CLIProxy';
+    // If spinner already showed crash details, just re-throw
+    if (error instanceof Error && error.message.startsWith('CLIProxy startup failed:')) {
+      throw error;
+    }
     readySpinner.fail(`${backendLabel} startup failed`);
 
     const err = error as Error;

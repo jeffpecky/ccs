@@ -2,7 +2,7 @@
  * React Query hook for CLIProxyAPI stats
  */
 
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ModelQuota,
   QuotaResult,
@@ -54,6 +54,11 @@ export interface CliproxyStats {
 /** CLIProxy running status */
 export interface CliproxyStatus {
   running: boolean;
+}
+
+export interface CodexResetCreditsResult {
+  availableCount: number;
+  credits: Array<{ id: string | null; expiresAt: string | null }>;
 }
 
 /**
@@ -219,7 +224,14 @@ export type {
 };
 
 /** Providers with quota API support */
-export const QUOTA_SUPPORTED_PROVIDERS = ['agy', 'codex', 'claude', 'gemini', 'ghcp', 'kiro'] as const;
+export const QUOTA_SUPPORTED_PROVIDERS = [
+  'agy',
+  'codex',
+  'claude',
+  'gemini',
+  'ghcp',
+  'kiro',
+] as const;
 export type QuotaSupportedProvider = (typeof QUOTA_SUPPORTED_PROVIDERS)[number];
 const QUOTA_PROVIDER_ALIAS_MAP: Readonly<Record<string, QuotaSupportedProvider>> = {
   antigravity: 'agy',
@@ -354,7 +366,7 @@ async function fetchKiroQuotaApi(accountId: string): Promise<KiroQuotaResult> {
 export type { UnifiedQuotaResult } from '@/lib/utils';
 
 const DEFAULT_QUOTA_REFRESH_MS = 60000;
-const CLAUDE_QUOTA_REFRESH_MS = 180000;
+const CLAUDE_QUOTA_REFRESH_MS = 600000; // 10 minutes - matching 9router rate-limit protection
 
 function getAccountQuotaQueryOptions(provider: string, accountId: string, enabled = true) {
   const canonicalProvider = normalizeQuotaProvider(provider);
@@ -365,7 +377,7 @@ function getAccountQuotaQueryOptions(provider: string, accountId: string, enable
     queryKey: ['account-quota', canonicalProvider ?? provider, accountId],
     queryFn: () => fetchQuotaByProvider(canonicalProvider ?? provider, accountId),
     enabled: enabled && !!canonicalProvider && !!accountId,
-    staleTime: refreshMs,
+    staleTime: 0,
     refetchInterval: refreshMs,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
@@ -420,3 +432,43 @@ export function useAccountQuotas(
   });
 }
 
+export function useCodexResetCredits(accountId: string, enabled = true) {
+  return useQuery({
+    queryKey: ['cliproxy', 'quota', 'codex-reset-credits', accountId],
+    queryFn: async (): Promise<CodexResetCreditsResult> => {
+      const response = await fetch(
+        `/api/cliproxy/quota/codex/${encodeURIComponent(accountId)}/reset-credits`
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || error.error || 'Failed to fetch Codex reset credits');
+      }
+      return response.json();
+    },
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useConsumeCodexResetCredit(accountId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await fetch(
+        `/api/cliproxy/quota/codex/${encodeURIComponent(accountId)}/reset-credits`,
+        { method: 'POST' }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.message || data.error || 'Failed to reset Codex limit');
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cliproxy', 'quota', 'codex', accountId] });
+      queryClient.invalidateQueries({
+        queryKey: ['cliproxy', 'quota', 'codex-reset-credits', accountId],
+      });
+    },
+  });
+}

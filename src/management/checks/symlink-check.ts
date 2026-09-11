@@ -83,10 +83,16 @@ export class CcsSymlinksChecker implements IHealthChecker {
       } else {
         spinner.warn();
         console.log(`  ${warn('CCS Symlinks'.padEnd(22))}  ${health.issues.length} issues found`);
-        results.addCheck('CCS Symlinks', 'warning', health.issues.join(', '), 'Sync from the dashboard settings', {
-          status: 'WARN',
-          info: `${health.issues.length} issues`,
-        });
+        results.addCheck(
+          'CCS Symlinks',
+          'warning',
+          health.issues.join(', '),
+          'Sync from the dashboard settings',
+          {
+            status: 'WARN',
+            info: `${health.issues.length} issues`,
+          }
+        );
       }
     } catch (e) {
       spinner.warn();

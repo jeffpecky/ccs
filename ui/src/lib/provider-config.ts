@@ -19,7 +19,7 @@ import i18n from './i18n';
 /** Canonical list of CLIProxy provider IDs (shared with backend). */
 export const CLIPROXY_PROVIDERS = CLIPROXY_PROVIDER_IDS;
 export type CLIProxyProvider = (typeof CLIPROXY_PROVIDERS)[number];
-export type ProviderVisualId = CLIProxyProvider | 'openai' | 'vertex';
+export type ProviderVisualId = CLIProxyProvider | 'openai' | 'vertex' | 'cloudflare' | 'nvidia' | 'openrouter';
 export type CLIProxyProviderSectionId = 'core' | 'plus-extra';
 
 export interface CLIProxyProviderSection {
@@ -68,7 +68,7 @@ interface ProviderMetadata {
   description: string;
 }
 
-const SPECIAL_PROVIDER_VISUAL_IDS = ['openai', 'vertex'] as const;
+const SPECIAL_PROVIDER_VISUAL_IDS = ['openai', 'vertex', 'cloudflare', 'nvidia', 'openrouter'] as const;
 
 function isPresentationProvider(provider: string): provider is CLIProxyProvider {
   return isValidProvider(provider);
@@ -111,6 +111,9 @@ export const PROVIDER_ASSETS: Partial<Record<ProviderVisualId, string>> = {
   kimi: '/assets/providers/kimi.svg',
   openai: '/assets/providers/openai.svg',
   vertex: '/assets/providers/vertex.svg',
+  cloudflare: '/assets/providers/cloudflare.png',
+  nvidia: '/assets/providers/nvidia.png',
+  openrouter: '/assets/providers/openrouter.png',
 };
 
 interface ProviderFallbackVisual {
@@ -141,6 +144,10 @@ export const PROVIDER_FALLBACK_VISUALS: Record<ProviderVisualId, ProviderFallbac
   kimi: { textClass: 'text-orange-500', letter: 'K' },
   openai: { textClass: 'text-slate-900', letter: 'O' },
   vertex: { textClass: 'text-blue-600', letter: 'V' },
+  cloudflare: { textClass: 'text-orange-500', letter: 'CF' },
+  nvidia: { textClass: 'text-green-600', letter: 'NV' },
+  openrouter: { textClass: 'text-purple-600', letter: 'OR' },
+  'openai-compatibility': { textClass: 'text-gray-500', letter: 'A' },
 };
 
 /** Providers whose logo looks better on dark background. */
@@ -159,6 +166,12 @@ export function getAiProviderFamilyVisual(familyId: AiProviderFamilyId): Provide
       return 'vertex';
     case 'openai-compatibility':
       return 'openai';
+    case 'cloudflare-api-key':
+      return 'cloudflare';
+    case 'nvidia-api-key':
+      return 'nvidia';
+    case 'openrouter-api-key':
+      return 'openrouter';
   }
 }
 
@@ -278,6 +291,9 @@ export const PROVIDER_COLORS: Record<string, string> = {
   ghcp: '#43aa8b',
   claude: '#D97757',
   kimi: '#FF6B35',
+  cloudflare: '#F38020',
+  nvidia: '#76B900',
+  openrouter: '#8B5CF6',
 };
 
 const PROVIDER_NAMES: Record<string, string> = {
@@ -286,6 +302,9 @@ const PROVIDER_NAMES: Record<string, string> = {
   ),
   openai: 'OpenAI',
   vertex: 'Vertex AI',
+  cloudflare: 'Cloudflare',
+  nvidia: 'NVIDIA',
+  openrouter: 'OpenRouter',
 };
 
 export function getProviderDisplayName(provider: unknown): string {

@@ -247,7 +247,10 @@ export function createHeadroomRouter(deps: HeadroomRouterDeps = defaultDeps) {
   router.get('/extras', async (req: Request, res: Response) => {
     try {
       const logParam = req.query.log === '1' ? '?log=1' : '';
-      const { status, data } = await proxyToCliproxy('GET', `/v0/management/headroom/extras${logParam}`);
+      const { status, data } = await proxyToCliproxy(
+        'GET',
+        `/v0/management/headroom/extras${logParam}`
+      );
       res.status(status).json(data);
     } catch {
       // CLIProxyAPIPlus not reachable — return default status

@@ -5,6 +5,7 @@
 
 import { AccountSurfaceCard } from '@/components/account/shared/account-surface-card';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +16,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { PRIVACY_BLUR_CLASS } from '@/contexts/privacy-context';
 import { getAccountStats } from '@/lib/cliproxy-account-stats';
 import { cn } from '@/lib/utils';
-import { useAccountQuota, useCliproxyStats } from '@/hooks/use-cliproxy-stats';
+import {
+  useAccountQuota,
+  useCliproxyStats,
+  useCodexResetCredits,
+  useConsumeCodexResetCredit,
+} from '@/hooks/use-cliproxy-stats';
 import {
   AlertTriangle,
   Check,
@@ -25,6 +31,7 @@ import {
   Pause,
   Play,
   RefreshCw,
+  RotateCcw,
   Star,
   Trash2,
 } from 'lucide-react';
@@ -32,6 +39,8 @@ import {
 import type { AccountItemProps } from './types';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
 function renderProjectId(
   projectId: string | undefined,
@@ -99,6 +108,7 @@ export function AccountItem({
   onSelectChange,
 }: AccountItemProps) {
   const { t } = useTranslation();
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const normalizedProvider = account.provider.toLowerCase();
   const { data: stats } = useCliproxyStats(showQuota);
   const { data: quota, isLoading: quotaLoading } = useAccountQuota(
@@ -106,6 +116,12 @@ export function AccountItem({
     account.id,
     showQuota
   );
+  const { data: resetCredits } = useCodexResetCredits(
+    account.id,
+    showQuota && normalizedProvider === 'codex'
+  );
+  const resetLimit = useConsumeCodexResetCredit(account.id);
+  const resetCreditCount = resetCredits?.availableCount ?? 0;
   const runtimeLastUsed = getAccountStats(stats, account)?.lastUsedAt;
 
   const beforeIdentity =
@@ -188,38 +204,70 @@ export function AccountItem({
   );
 
   return (
-    <div
-      className={cn(
-        'rounded-lg border p-3 transition-colors overflow-hidden',
-        account.isDefault ? 'border-primary/30 bg-primary/5' : 'border-border hover:bg-muted/30',
-        account.paused && 'opacity-75',
-        selected && 'ring-2 ring-primary/50 bg-primary/5'
-      )}
-    >
-      <AccountSurfaceCard
-        mode="detailed"
-        provider={account.provider}
-        accountId={account.id}
-        email={account.email}
-        displayEmail={account.email || account.id}
-        tokenFile={account.tokenFile}
-        tier={account.tier}
-        isDefault={account.isDefault}
-        paused={account.paused}
-        privacyMode={privacyMode}
-        showQuota={showQuota}
-        quota={quota}
-        quotaLoading={quotaLoading}
-        runtimeLastUsed={runtimeLastUsed}
-        beforeIdentity={beforeIdentity}
-        headerEnd={headerEnd}
-        bodySlot={
-          account.provider === 'agy' ? renderProjectId(account.projectId, privacyMode, t) : null
-        }
-        quotaInsetClassName="pl-11"
-        showCountdown
+    <>
+      <div
+        className={cn(
+          'rounded-lg border p-3 transition-colors overflow-hidden',
+          account.isDefault ? 'border-primary/30 bg-primary/5' : 'border-border hover:bg-muted/30',
+          account.paused && 'opacity-75',
+          selected && 'ring-2 ring-primary/50 bg-primary/5'
+        )}
+      >
+        <AccountSurfaceCard
+          mode="detailed"
+          provider={account.provider}
+          accountId={account.id}
+          email={account.email}
+          displayEmail={account.email || account.id}
+          tokenFile={account.tokenFile}
+          tier={account.tier}
+          isDefault={account.isDefault}
+          paused={account.paused}
+          privacyMode={privacyMode}
+          showQuota={showQuota}
+          quota={quota}
+          quotaLoading={quotaLoading}
+          runtimeLastUsed={runtimeLastUsed}
+          beforeIdentity={beforeIdentity}
+          headerEnd={headerEnd}
+          bodySlot={
+            account.provider === 'agy' ? renderProjectId(account.projectId, privacyMode, t) : null
+          }
+          resetCreditAction={
+            normalizedProvider === 'codex' && resetCreditCount > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`Reset Codex limit, ${resetCreditCount} credit${resetCreditCount === 1 ? '' : 's'}`}
+                className="h-5 gap-1 px-1.5 text-[10px] border-orange-500/60 text-orange-600 hover:bg-orange-500/10 hover:text-orange-700 dark:text-orange-400"
+                onClick={() => setConfirmResetOpen(true)}
+              >
+                <RotateCcw className="w-3 h-3" />
+                {resetCreditCount}
+              </Button>
+            ) : null
+          }
+          quotaInsetClassName="pl-11"
+          showCountdown
+        />
+      </div>
+      <ConfirmDialog
+        open={confirmResetOpen}
+        title="Reset Codex limit?"
+        description={`Use 1 Codex reset credit for ${account.email || account.id}. This cannot be undone. Remaining credits: ${resetCreditCount}.`}
+        confirmText={resetLimit.isPending ? 'Resetting...' : 'Reset limit'}
+        onCancel={() => setConfirmResetOpen(false)}
+        onConfirm={() => {
+          resetLimit.mutate(undefined, {
+            onSuccess: () => {
+              setConfirmResetOpen(false);
+              toast.success('Codex limit reset.');
+            },
+            onError: (error) => toast.error((error as Error).message),
+          });
+        }}
       />
-    </div>
+    </>
   );
 }
-

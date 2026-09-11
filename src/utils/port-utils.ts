@@ -145,11 +145,7 @@ export function isCLIProxyProcess(process: PortProcess | null): boolean {
 
   const name = process.processName.toLowerCase();
   // All CLIProxy variants: cli-proxy-api, cli-proxy-api-plus, cliproxy, cliproxyapiplus, etc.
-  return (
-    name.includes('cli-proxy') ||
-    name.includes('cliproxy') ||
-    name.includes('cli_proxy')
-  );
+  return name.includes('cli-proxy') || name.includes('cliproxy') || name.includes('cli_proxy');
 }
 
 /**

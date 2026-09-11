@@ -7,6 +7,7 @@
  */
 
 import express from 'express';
+import compression from 'compression';
 import http from 'http';
 import type { AddressInfo } from 'net';
 import path from 'path';
@@ -74,6 +75,58 @@ export async function startServer(options: ServerOptions): Promise<ServerInstanc
     perMessageDeflate: false, // Prevent zip bomb attacks
   });
 
+  // Enable gzip compression for all responses
+  app.use(
+    compression({
+      filter: (req, res) => {
+        // Don't compress responses with Cache-Control: no-transform
+        if (res.getHeader('Cache-Control') === 'no-transform') {
+          return false;
+        }
+        // Use compression filter function
+        return compression.filter(req, res);
+      },
+      level: 6, // Balanced compression level (1-9)
+      threshold: 1024, // Only compress responses > 1KB
+    })
+  );
+
+  // Production static files served early to bypass API session/auth middleware overhead
+  if (!options.dev) {
+    const staticDir = options.staticDir || path.join(__dirname, '../ui');
+    app.use(
+      '/assets',
+      express.static(path.join(staticDir, 'assets'), {
+        maxAge: '1y',
+        immutable: true,
+        etag: true,
+        lastModified: true,
+      })
+    );
+    app.use(
+      express.static(staticDir, {
+        maxAge: '1y',
+        immutable: true,
+        etag: true,
+        lastModified: true,
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith('index.html')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            return;
+          }
+          if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+            return;
+          }
+          if (filePath.match(/\.(woff|woff2|ttf|eot)$/)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            return;
+          }
+        },
+      })
+    );
+  }
+
   // JSON body parsing with error handler for malformed JSON
   app.use(express.json());
   app.use(
@@ -135,11 +188,8 @@ export async function startServer(options: ServerOptions): Promise<ServerInstanc
     });
     app.use(vite.middlewares);
   } else {
-    // Production: serve static files from dist/ui/
+    // Production: SPA fallback - return index.html for non-API routes
     const staticDir = options.staticDir || path.join(__dirname, '../ui');
-    app.use(express.static(staticDir));
-
-    // SPA fallback - return index.html for all non-API routes
     app.get('*', (_req, res) => {
       res.sendFile(path.join(staticDir, 'index.html'));
     });

@@ -17,7 +17,8 @@ export type CLIProxyProvider =
   | 'gitlab'
   | 'codebuddy'
   | 'kilo'
-  | 'qoder';
+  | 'qoder'
+  | 'openai-compatibility';
 
 /** CLIProxy backend selection */
 export type CLIProxyBackend = 'original' | 'plus';

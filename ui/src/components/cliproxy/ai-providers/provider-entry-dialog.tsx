@@ -28,6 +28,18 @@ import type {
   UpsertAiProviderEntryInput,
 } from '../../../../../src/cliproxy/ai-providers';
 
+function isOpenAiCompatFamily(familyId: AiProviderFamilyId): boolean {
+  return familyId === 'openai-compatibility';
+}
+
+export function getProviderTestApiKey(
+  supportsOpenAiCompat: boolean,
+  apiKey: string,
+  apiKeys: string
+): string {
+  return supportsOpenAiCompat ? parseDelimitedLines(apiKeys)[0] || '' : apiKey.trim();
+}
+
 interface ProviderEntryDialogProps {
   family: AiProviderFamilyId;
   entry?: AiProviderEntryView | null;
@@ -174,6 +186,69 @@ function getDialogGuide(family: AiProviderFamilyId): DialogGuide {
           'Format: requested=upstream. Leave blank unless the connector expects a different model ID.',
         headersPlaceholder: 'HTTP-Referer: https://your-app.example',
       };
+    case 'cloudflare-api-key':
+      return {
+        familyName: 'Cloudflare Workers AI',
+        description:
+          'Store the Cloudflare API token here so CLIProxy can route Cloudflare Workers AI requests without creating a separate CCS API Profile.',
+        requiredNow: ['Paste the Cloudflare API token.'],
+        optionalLater: [
+          'Base URL if using a custom gateway or specific account endpoint.',
+          'Model mappings only when the upstream model name differs.',
+          'Headers only when the provider expects extra routing context.',
+        ],
+        keyLabel: 'Cloudflare API Token',
+        keyPlaceholder: '<CLOUDFLARE_API_TOKEN>',
+        keyHelper: 'Get your API token from the Cloudflare dashboard.',
+        baseUrlPlaceholder: 'https://api.cloudflare.com/client/v4',
+        baseUrlHelper: 'Optional. Leave blank to keep the default Cloudflare API endpoint.',
+        aliasesPlaceholder: '@cf/meta/llama-3.1-8b-instruct=llama-3.1-8b',
+        aliasesHelper:
+          'Format: requested=upstream. Leave blank unless the upstream model name differs.',
+        headersPlaceholder: 'X-Cloudflare-Account-ID: your-account-id',
+      };
+    case 'nvidia-api-key':
+      return {
+        familyName: 'NVIDIA NIM',
+        description:
+          'Store the NVIDIA API key here so CLIProxy can route NVIDIA NIM requests without creating a separate CCS API Profile.',
+        requiredNow: ['Paste the NVIDIA API key.'],
+        optionalLater: [
+          'Base URL if using a self-hosted or dedicated NIM deployment.',
+          'Model mappings only when the upstream model name differs.',
+          'Headers only when the provider expects extra routing context.',
+        ],
+        keyLabel: 'NVIDIA API Key',
+        keyPlaceholder: 'nvapi-...',
+        keyHelper: 'Get your API key from build.nvidia.com.',
+        baseUrlPlaceholder: 'https://integrate.api.nvidia.com/v1',
+        baseUrlHelper: 'Optional. Leave blank to keep the default NVIDIA NIM endpoint.',
+        aliasesPlaceholder: 'meta/llama-3.1-8b-instruct=llama-3.1-8b',
+        aliasesHelper:
+          'Format: requested=upstream. Leave blank unless the upstream model name differs.',
+        headersPlaceholder: 'X-Request-Source: cliproxy',
+      };
+    case 'openrouter-api-key':
+      return {
+        familyName: 'OpenRouter',
+        description:
+          'Store the OpenRouter API key here so CLIProxy can route OpenRouter requests without creating a separate CCS API Profile.',
+        requiredNow: ['Paste the OpenRouter API key.'],
+        optionalLater: [
+          'Base URL if using a custom proxy or regional gateway.',
+          'Model mappings only when the upstream model name differs.',
+          'Headers only when the provider expects extra routing context.',
+        ],
+        keyLabel: 'OpenRouter API Key',
+        keyPlaceholder: 'sk-or-...',
+        keyHelper: 'Get your API key from openrouter.ai.',
+        baseUrlPlaceholder: 'https://openrouter.ai/api/v1',
+        baseUrlHelper: 'Optional. Leave blank to keep the default OpenRouter endpoint.',
+        aliasesPlaceholder: 'claude-sonnet-4-5=openai/gpt-4.1',
+        aliasesHelper:
+          'Format: requested=upstream. Leave blank unless the upstream model name differs.',
+        headersPlaceholder: 'HTTP-Referer: https://your-app.example',
+      };
   }
 }
 
@@ -275,7 +350,7 @@ export function ProviderEntryDialog({
   const { t } = useTranslation();
   const guide = useMemo(() => getDialogGuide(family), [family]);
   const isEditing = Boolean(entry);
-  const supportsOpenAiCompat = family === 'openai-compatibility';
+  const supportsOpenAiCompat = isOpenAiCompatFamily(family);
   const supportsClaudeAdvanced = family === 'claude-api-key';
 
   const [name, setName] = useState(() => entry?.name || '');
@@ -284,6 +359,7 @@ export function ProviderEntryDialog({
   const [prefix, setPrefix] = useState(() => entry?.prefix || '');
   const [apiKey, setApiKey] = useState('');
   const [apiKeys, setApiKeys] = useState('');
+  const [accountId, setAccountId] = useState(() => entry?.accountId || '');
   const [headers, setHeaders] = useState(() => formatHeaders(entry));
   const [excludedModels, setExcludedModels] = useState(() => formatExcludedModels(entry));
   const [modelAliases, setModelAliases] = useState(() => formatModelAliases(entry));
@@ -296,6 +372,44 @@ export function ProviderEntryDialog({
       entry?.headers.length || entry?.excludedModels.length || entry?.proxyUrl || entry?.prefix
     )
   );
+
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTestConnection = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    try {
+      const testApiKey = getProviderTestApiKey(supportsOpenAiCompat, apiKey, apiKeys);
+      if (!testApiKey) {
+        setTestResult({ success: false, message: 'API key is required for testing connection' });
+        return;
+      }
+      const res = await fetch(`/api/cliproxy/ai-providers/${family}/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          family,
+          apiKey: testApiKey || undefined,
+          baseUrl: baseUrl.trim() || undefined,
+          headers: parseKeyValueLines(headers),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestResult({ success: true, message: data.message || 'Connection successful' });
+      } else {
+        setTestResult({
+          success: false,
+          message: data.error || data.message || 'Connection failed',
+        });
+      }
+    } catch (err) {
+      setTestResult({ success: false, message: (err as Error).message });
+    } finally {
+      setIsTesting(false);
+    }
+  };
 
   const secretHelper = useMemo(() => {
     if (!isEditing || !entry?.secretConfigured) return null;
@@ -323,6 +437,7 @@ export function ProviderEntryDialog({
       excludedModels: supportsClaudeAdvanced ? parseDelimitedLines(excludedModels) : undefined,
       models: parseModelAliasLines(modelAliases),
       preserveSecrets,
+      accountId: family === 'cloudflare-api-key' ? accountId.trim() || undefined : undefined,
       ...(supportsOpenAiCompat
         ? nextApiKeys.length > 0
           ? { apiKeys: nextApiKeys }
@@ -467,6 +582,21 @@ export function ProviderEntryDialog({
                 </div>
               ) : null}
 
+              {family === 'cloudflare-api-key' ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="account-id">Account ID</Label>
+                  <Input
+                    id="account-id"
+                    value={accountId}
+                    onChange={(event) => setAccountId(event.target.value)}
+                    placeholder="e.g. abc123def456..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Found in the Cloudflare dashboard sidebar. Required for model discovery.
+                  </p>
+                </div>
+              ) : null}
+
               <div className="space-y-1.5">
                 <Label>Model Mappings</Label>
                 <TextArea
@@ -576,27 +706,50 @@ export function ProviderEntryDialog({
             </Collapsible>
           </div>
 
-          <DialogFooter className="border-t bg-muted/10 px-6 py-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleSubmit()}
-              disabled={isSaving || modelRuleErrors.length > 0}
-            >
-              {isSaving
-                ? 'Saving...'
-                : supportsOpenAiCompat
-                  ? isEditing
-                    ? 'Save Connector'
-                    : 'Create Connector'
-                  : 'Save Entry'}
-            </Button>
+          <DialogFooter className="flex flex-wrap items-center justify-between border-t bg-muted/10 px-6 py-4">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => void handleTestConnection()}
+                disabled={isTesting || isSaving}
+              >
+                {isTesting ? 'Testing...' : 'Test Connection'}
+              </Button>
+              {testResult && (
+                <span
+                  className={cn(
+                    'text-xs font-medium',
+                    testResult.success ? 'text-emerald-500' : 'text-destructive'
+                  )}
+                >
+                  {testResult.message}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleSubmit()}
+                disabled={isSaving || modelRuleErrors.length > 0}
+              >
+                {isSaving
+                  ? 'Saving...'
+                  : supportsOpenAiCompat
+                    ? isEditing
+                      ? 'Save Connector'
+                      : 'Create Connector'
+                    : 'Save Entry'}
+              </Button>
+            </div>
           </DialogFooter>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
-

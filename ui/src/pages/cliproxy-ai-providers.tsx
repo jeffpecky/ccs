@@ -133,6 +133,19 @@ function EntrySecretBadge({ configured }: { configured: boolean }) {
 
 const STORED_SECRET_PLACEHOLDER = '<stored in CLIProxy>';
 
+const PROVIDER_API_KEY_URLS: Record<string, string> = {
+  'cloudflare-api-key': 'https://dash.cloudflare.com/profile/api-tokens',
+  'nvidia-api-key': 'https://build.nvidia.com/settings/api-keys',
+  'openrouter-api-key': 'https://openrouter.ai/workspaces/default/keys',
+  'gemini-api-key': 'https://aistudio.google.com/app/apikey',
+  'codex-api-key': 'https://platform.openai.com/api-keys',
+  'claude-api-key': 'https://console.anthropic.com/settings/keys',
+};
+
+function isOpenAiCompatFamily(familyId: AiProviderFamilyId): boolean {
+  return familyId === 'openai-compatibility';
+}
+
 type EntryEditorDraft = {
   name: string;
   baseUrl: string;
@@ -322,6 +335,105 @@ function getFamilyGuide(family: AiProviderFamilyState): FamilyGuide {
           },
         ],
       };
+    case 'cloudflare-api-key':
+      return {
+        requiredNow: [
+          'Add your Cloudflare API token.',
+        ],
+        optionalLater: [
+          'Base URL if using a specific account endpoint or gateway.',
+          'Headers for provider-specific routing.',
+          'Additional API keys for load balancing.',
+          'Model mappings for custom endpoints.',
+        ],
+        emptyStateSummary: [
+          `Requests to ${family.routePath} resolve through Cloudflare Workers AI.`,
+          'Cloudflare provides edge AI inference with low latency.',
+          'Set up the API token to get started.',
+        ],
+        profileBoundary:
+          'Use API Profiles when you want a CCS-native Anthropic-compatible profile instead of this CLIProxy-managed Cloudflare route.',
+        editPrompts: [
+          {
+            label: 'API Key',
+            hint: 'Your Cloudflare API token from the dashboard.',
+          },
+          {
+            label: 'Base URL',
+            hint: 'Optional. Use only if pointing to a custom gateway or specific account endpoint.',
+          },
+          {
+            label: 'Model mappings',
+            hint: 'Map requested model names to Cloudflare model IDs.',
+          },
+        ],
+      };
+    case 'nvidia-api-key':
+      return {
+        requiredNow: [
+          'Add your NVIDIA API key.',
+        ],
+        optionalLater: [
+          'Base URL if using a self-hosted or dedicated NIM endpoint.',
+          'Headers for provider-specific routing.',
+          'Additional API keys for load balancing.',
+          'Model mappings for custom endpoints.',
+        ],
+        emptyStateSummary: [
+          `Requests to ${family.routePath} resolve through NVIDIA NIM.`,
+          'NVIDIA NIM provides optimized inference for AI models.',
+          'Set up the API key to get started.',
+        ],
+        profileBoundary:
+          'Use API Profiles when you want a CCS-native Anthropic-compatible profile instead of this CLIProxy-managed NVIDIA route.',
+        editPrompts: [
+          {
+            label: 'API Key',
+            hint: 'Your NVIDIA API key from build.nvidia.com.',
+          },
+          {
+            label: 'Base URL',
+            hint: 'Optional. Defaults to https://integrate.api.nvidia.com/v1.',
+          },
+          {
+            label: 'Model mappings',
+            hint: 'Map requested model names to NVIDIA model IDs.',
+          },
+        ],
+      };
+    case 'openrouter-api-key':
+      return {
+        requiredNow: [
+          'Add your OpenRouter API key.',
+        ],
+        optionalLater: [
+          'Base URL if using a custom gateway or proxy.',
+          'Headers for provider-specific routing.',
+          'Additional API keys for load balancing.',
+          'Model mappings for custom endpoints.',
+        ],
+        emptyStateSummary: [
+          `Requests to ${family.routePath} resolve through OpenRouter.`,
+          'OpenRouter provides access to multiple AI models through a single API.',
+          'Set up the API key to get started.',
+        ],
+        profileBoundary:
+          'Use API Profiles when you want a CCS-native Anthropic-compatible profile instead of this CLIProxy-managed OpenRouter route.',
+        editPrompts: [
+          {
+            label: 'API Key',
+            hint: 'Your OpenRouter API key from openrouter.ai.',
+          },
+          {
+            label: 'Base URL',
+            hint: 'Optional. Defaults to https://openrouter.ai/api/v1.',
+          },
+          {
+            label: 'Model mappings',
+            hint: 'Map requested model names to OpenRouter model IDs.',
+          },
+        ],
+      };
   }
 }
 
@@ -410,7 +522,7 @@ function buildEntryConfigRecord(
   const secretValue =
     draft.apiKey.trim() || (entry.secretConfigured ? STORED_SECRET_PLACEHOLDER : '');
 
-  if (family.id === 'openai-compatibility') {
+  if (isOpenAiCompatFamily(family.id)) {
     const apiKeys = parseDelimitedLines(draft.apiKeysText);
     const existingKeyCount = entry.apiKeysMasked?.length || 1;
 
@@ -451,7 +563,7 @@ function parseEntryConfigDraft(
     throw new Error('Raw config must be a JSON object.');
   }
 
-  if (family.id === 'openai-compatibility') {
+  if (isOpenAiCompatFamily(family.id)) {
     const record = parsed as Record<string, unknown>;
     const apiKeyEntries = Array.isArray(record['api-key-entries']) ? record['api-key-entries'] : [];
     const apiKeys = apiKeyEntries
@@ -516,7 +628,7 @@ function buildEntryPayload(
   entry: AiProviderEntryView,
   draft: EntryEditorDraft
 ) {
-  if (family.id === 'openai-compatibility') {
+  if (isOpenAiCompatFamily(family.id)) {
     const apiKeys = parseDelimitedLines(draft.apiKeysText);
     const preserveSecrets = entry.secretConfigured && apiKeys.length === 0;
     return {
@@ -701,7 +813,7 @@ function EntryInspector({
     (draft.proxyUrl.trim() ? 1 : 0) +
     (draft.prefix.trim() ? 1 : 0);
   const advancedEnabled =
-    family.id === 'openai-compatibility'
+    isOpenAiCompatFamily(family.id)
       ? draft.headersText.trim().length > 0
       : Boolean(
           draft.proxyUrl.trim() ||
@@ -714,7 +826,7 @@ function EntryInspector({
       ? rawJsonEdits !== initialRawJsonContent
       : derivedRawJsonContent !== initialRawJsonContent;
   const missingRequiredFields = useMemo(() => {
-    if (family.id === 'openai-compatibility') {
+    if (isOpenAiCompatFamily(family.id)) {
       const missing: string[] = [];
       if (!draft.name.trim()) missing.push('name');
       if (!draft.baseUrl.trim()) missing.push('base-url');
@@ -771,7 +883,7 @@ function EntryInspector({
   const applyPreset = (preset: 'minimal' | 'clean-routing') => {
     updateDraft((current) => {
       if (preset === 'minimal') {
-        return family.id === 'openai-compatibility'
+        return isOpenAiCompatFamily(family.id)
           ? {
               ...current,
               headersText: '',
@@ -793,7 +905,7 @@ function EntryInspector({
         proxyUrl: '',
         prefix: '',
         headersText: '',
-        excludedModelsText: family.id === 'openai-compatibility' ? current.excludedModelsText : '',
+        excludedModelsText: isOpenAiCompatFamily(family.id) ? current.excludedModelsText : '',
       };
     });
   };
@@ -931,8 +1043,8 @@ function EntryInspector({
                     <KeyRound className="h-4 w-4 text-primary" />
                     Connection
                   </div>
-                  <div className="grid gap-4 2xl:grid-cols-2">
-                    {family.id === 'openai-compatibility' ? (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {isOpenAiCompatFamily(family.id) ? (
                       <EntryEditorField
                         label="Connector Name"
                         helper="This is the saved connector label shown in the entry switcher."
@@ -969,7 +1081,7 @@ function EntryInspector({
                       </EntryEditorField>
                     )}
 
-                    {family.id === 'openai-compatibility' ? (
+                    {isOpenAiCompatFamily(family.id) ? (
                       <EntryEditorField
                         label="API Keys"
                         helper={
@@ -992,7 +1104,7 @@ function EntryInspector({
                     <EntryEditorField
                       label="Base URL"
                       helper={
-                        family.id === 'openai-compatibility'
+                        isOpenAiCompatFamily(family.id)
                           ? 'Required for connectors. This is the upstream OpenAI-style endpoint.'
                           : 'Leave blank unless this route should target another upstream host.'
                       }
@@ -1007,14 +1119,14 @@ function EntryInspector({
                             ? 'https://api.openai.com/v1'
                             : family.id === 'claude-api-key'
                               ? 'https://api.anthropic.com'
-                              : family.id === 'openai-compatibility'
+                              : isOpenAiCompatFamily(family.id)
                                 ? 'https://openrouter.ai/api/v1'
                                 : 'https://provider.example.com'
                         }
                       />
                     </EntryEditorField>
 
-                    {family.id !== 'openai-compatibility' ? (
+                    {!isOpenAiCompatFamily(family.id) ? (
                       <EntryEditorField
                         label="Proxy URL"
                         helper="Optional intermediary endpoint. Leave blank for direct routing."
@@ -1029,7 +1141,7 @@ function EntryInspector({
                       </EntryEditorField>
                     ) : null}
 
-                    {family.id !== 'openai-compatibility' ? (
+                    {!isOpenAiCompatFamily(family.id) ? (
                       <EntryEditorField
                         label="Prefix"
                         helper="Optional model prefix rewrite for advanced routing only."
@@ -1109,7 +1221,7 @@ function EntryInspector({
                       />
                     </EntryEditorField>
 
-                    {family.id !== 'openai-compatibility' ? (
+                    {!isOpenAiCompatFamily(family.id) ? (
                       <EntryEditorField
                         label="Excluded Models"
                         helper="One model ID per line. These models will be blocked for this entry."
@@ -1222,24 +1334,23 @@ function EntryInspector({
             className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
           >
             <div className="flex h-full flex-col">
-              <div className="border-b bg-muted/10 px-6 py-3 text-sm text-muted-foreground">
+              <div className="border-b bg-muted/10 px-4 py-2 text-xs text-muted-foreground">
                 {entry.secretConfigured
                   ? `Stored secrets are shown as ${STORED_SECRET_PLACEHOLDER}. Replace the placeholder only when you want to rotate the secret.`
                   : 'Add secrets directly in the JSON or use the form on the left.'}
               </div>
               {rawJsonError ? (
-                <div className="mx-6 mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <div className="mx-4 mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
                   {rawJsonError}
                 </div>
               ) : null}
-              <div className="min-h-0 flex-1 px-6 pb-4 pt-4">
-                <div className="h-full overflow-hidden rounded-md border bg-background">
+              <div className="px-4 pb-2 pt-2">
+                <div className="overflow-hidden rounded-md border bg-background">
                   <CodeEditor
                     value={rawJsonContent}
                     onChange={handleRawJsonChange}
                     language="json"
-                    minHeight="100%"
-                    heightMode="fill-parent"
+                    heightMode="content"
                   />
                 </div>
               </div>
@@ -1251,23 +1362,22 @@ function EntryInspector({
             className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
           >
             <div className="flex h-full flex-col">
-              <div className="border-b bg-muted/10 px-6 py-3 text-sm text-muted-foreground">
+              <div className="border-b bg-muted/10 px-4 py-2 text-xs text-muted-foreground">
                 Derived preview for a CCS profile that points to this CLIProxy route. The route
                 stays local; the upstream key remains managed here.
               </div>
-              <div className="min-h-0 flex-1 px-6 pb-4 pt-4">
-                <div className="h-full overflow-hidden rounded-md border bg-background">
+              <div className="px-4 pb-2 pt-2">
+                <div className="overflow-hidden rounded-md border bg-background">
                   <CodeEditor
                     value={settingsPreviewContent}
                     onChange={() => {}}
                     language="json"
                     readonly
-                    minHeight="100%"
-                    heightMode="fill-parent"
+                    heightMode="content"
                   />
                 </div>
               </div>
-              <div className="mx-6 mb-4 overflow-hidden rounded-md border">
+              <div className="mx-4 mb-2 overflow-hidden rounded-md border">
                 <GlobalEnvIndicator profileEnv={settingsPreview.env} />
               </div>
             </div>
@@ -1650,16 +1760,29 @@ export function CliproxyAiProvidersPage() {
               >
                 Control Panel
               </Button>
-              <Button type="button" variant="outline" onClick={() => navigate('/providers')}>
-                API Profiles
-                <ExternalLink className="ml-1 h-3.5 w-3.5" />
-              </Button>
+              {PROVIDER_API_KEY_URLS[selectedFamilyState.id] ? (
+                <Button type="button" variant="outline" asChild>
+                  <a
+                    href={PROVIDER_API_KEY_URLS[selectedFamilyState.id]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Get API Key
+                    <ExternalLink className="ml-1 h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" onClick={() => navigate('/providers')}>
+                  API Profiles
+                  <ExternalLink className="ml-1 h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
           </div>
         </div>
 
         {hasEntries ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ScrollArea className="flex-1">
             <div className="shrink-0 border-b bg-muted/5 px-6 py-4">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -1677,42 +1800,46 @@ export function CliproxyAiProvidersPage() {
               </div>
 
               {hasMultipleEntries ? (
-                <div className="flex flex-wrap gap-3">
-                  {selectedFamilyState.entries.map((entry) => (
-                    <button
-                      key={entry.id}
-                      type="button"
-                      onClick={() => setSelectedEntryId(entry.id)}
-                      className={cn(
-                        'min-w-[220px] max-w-[280px] flex-1 rounded-xl border bg-background px-4 py-3 text-left transition-colors',
-                        entry.id === effectiveSelectedEntryId
-                          ? 'border-primary/30 bg-primary/5 shadow-sm'
-                          : 'border-border/60 hover:bg-muted/50'
-                      )}
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="truncate text-sm font-medium">{entry.label}</div>
-                        <EntrySecretBadge configured={entry.secretConfigured} />
-                      </div>
-                      <div className="mt-2 truncate text-xs text-muted-foreground">
-                        {entry.baseUrl || selectedFamilyState.routePath}
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        <Badge variant="outline" className="text-[10px]">
-                          {getRoutingMode(entry)}
-                        </Badge>
-                        {entry.models.length > 0 ? (
+                <ScrollArea className="max-h-52 pr-1">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {selectedFamilyState.entries.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => setSelectedEntryId(entry.id)}
+                        className={cn(
+                          'flex flex-col justify-between rounded-xl border bg-background p-3.5 text-left transition-colors',
+                          entry.id === effectiveSelectedEntryId
+                            ? 'border-primary/40 bg-primary/5 shadow-xs ring-1 ring-primary/20'
+                            : 'border-border/60 hover:bg-muted/50'
+                        )}
+                      >
+                        <div>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="truncate text-sm font-medium">{entry.label}</div>
+                            <EntrySecretBadge configured={entry.secretConfigured} />
+                          </div>
+                          <div className="mt-1 truncate text-xs text-muted-foreground">
+                            {entry.baseUrl || selectedFamilyState.routePath}
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
                           <Badge variant="outline" className="text-[10px]">
-                            {renderModelRuleSummary(entry.models)}
+                            {getRoutingMode(entry)}
                           </Badge>
-                        ) : null}
-                        <Badge variant="outline" className="text-[10px]">
-                          {entry.headers.length} hdr
-                        </Badge>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                          {entry.models.length > 0 ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              {renderModelRuleSummary(entry.models)}
+                            </Badge>
+                          ) : null}
+                          <Badge variant="outline" className="text-[10px]">
+                            {entry.headers.length} hdr
+                          </Badge>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </ScrollArea>
               ) : selectedEntry ? (
                 <div className="rounded-xl border bg-background px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1761,7 +1888,7 @@ export function CliproxyAiProvidersPage() {
                 onDelete={() => setDeleteEntry(selectedEntry)}
               />
             ) : null}
-          </div>
+          </ScrollArea>
         ) : (
           <ScrollArea className="flex-1">
             <div className="space-y-6 p-6">

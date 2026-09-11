@@ -94,11 +94,7 @@ export function readLatestLaunchPointer(pointerPath: string): LatestLaunchPointe
   }
   if (parsed.schema !== LATEST_LAUNCH_SCHEMA) return null;
   if (!isValidLaunchId(parsed.launchId)) return null;
-  if (
-    !Number.isSafeInteger(parsed.port) ||
-    (parsed.port ?? 0) <= 0 ||
-    (parsed.port ?? 0) > 65535
-  ) {
+  if (!Number.isSafeInteger(parsed.port) || (parsed.port ?? 0) <= 0 || (parsed.port ?? 0) > 65535) {
     return null;
   }
   if (typeof parsed.startedAt !== 'string' || parsed.startedAt === '') return null;

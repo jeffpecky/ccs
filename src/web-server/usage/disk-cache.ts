@@ -45,50 +45,21 @@ const CACHE_VERSION = 4;
 /**
  * Ensure ~/.ccs/cache directory exists
  */
-function ensureCacheDir(): void {
+async function ensureCacheDirAsync(): Promise<void> {
   const dir = getCacheDir();
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
-
-/**
- * Read usage data from disk cache
- * Returns null if cache is missing, corrupted, or has incompatible version
- * NOTE: Does NOT reject based on age - caller handles staleness via SWR pattern
- */
-export function readDiskCache(): UsageDiskCache | null {
   try {
-    const cacheFile = getCacheFile();
-    if (!fs.existsSync(cacheFile)) {
-      return null;
-    }
-
-    const data = fs.readFileSync(cacheFile, 'utf-8');
-    const cache: UsageDiskCache = JSON.parse(data);
-
-    // Version check - invalidate if schema changed
-    if (cache.version !== CACHE_VERSION) {
-      console.log(info('Cache version mismatch, will refresh'));
-      return null;
-    }
-
-    // Always return cache regardless of age - SWR pattern handles staleness
-    return cache;
-  } catch (err) {
-    // Cache corrupted or unreadable - treat as miss
-    console.log(info('Cache read failed, will refresh:') + ` ${(err as Error).message}`);
-    return null;
+    await fsp.access(dir);
+  } catch {
+    await fsp.mkdir(dir, { recursive: true });
   }
 }
 
 /**
- * Async variant of readDiskCache.
+ * Async read usage data from disk cache.
  *
  * The usage cache can grow to many megabytes; reading it through the thread
  * pool keeps the event loop free to answer health/summary requests while the
- * cache loads. Returns null on missing/corrupt/incompatible caches, mirroring
- * the sync reader's semantics.
+ * cache loads. Returns null on missing/corrupt/incompatible caches.
  */
 export async function readDiskCacheAsync(): Promise<UsageDiskCache | null> {
   try {
@@ -142,14 +113,14 @@ export function isDiskCacheStale(cache: UsageDiskCache | null): boolean {
 /**
  * Write usage data to disk cache
  */
-export function writeDiskCache(
+export async function writeDiskCache(
   daily: DailyUsage[],
   hourly: HourlyUsage[],
   monthly: MonthlyUsage[],
   session: SessionUsage[]
-): void {
+): Promise<void> {
   try {
-    ensureCacheDir();
+    await ensureCacheDirAsync();
 
     const cache: UsageDiskCache = {
       version: CACHE_VERSION,
@@ -163,8 +134,8 @@ export function writeDiskCache(
     // Write atomically using temp file + rename
     const cacheFile = getCacheFile();
     const tempFile = cacheFile + '.tmp';
-    fs.writeFileSync(tempFile, JSON.stringify(cache), 'utf-8');
-    fs.renameSync(tempFile, cacheFile);
+    await fsp.writeFile(tempFile, JSON.stringify(cache), 'utf-8');
+    await fsp.rename(tempFile, cacheFile);
 
     console.log(ok('Disk cache updated'));
   } catch (err) {

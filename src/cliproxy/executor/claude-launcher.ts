@@ -101,9 +101,7 @@ export async function launchClaude(context: ClaudeLaunchContext): Promise<ChildP
   const browserArgs = browserRuntimeEnv
     ? appendBrowserToolArgs(claudeSessionArgs)
     : claudeSessionArgs;
-  const launchArgs = isSubcommand
-    ? browserArgs
-    : ['--settings', settingsPath, ...browserArgs];
+  const launchArgs = isSubcommand ? browserArgs : ['--settings', settingsPath, ...browserArgs];
 
   let tracedEnv = stripClaudeCodeFeatureBlockingEnv({ ...env });
   // Strip telemetry-disable env vars for subcommands; otherwise Claude's

@@ -10,6 +10,7 @@ const CACHE_FILE_NAME = 'models-dev-registry-cache.json';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const LIVE_FETCH_TIMEOUT_MS = 3000;
 
+let inMemoryCache: ModelsDevCacheData | null = null;
 let pendingBackgroundRefresh: Promise<ModelsDevRegistry | null> | null = null;
 
 export interface RegistryCacheReadOptions {
@@ -74,13 +75,23 @@ export function getCachedModelsDevRegistry(
   options: RegistryCacheReadOptions = {}
 ): ModelsDevRegistry | null {
   try {
+    const now = options.now ?? Date.now();
+
+    // Check in-memory cache first to avoid disk I/O on hot paths
+    if (inMemoryCache) {
+      if (options.allowStale || now - inMemoryCache.fetchedAt <= CACHE_TTL_MS) {
+        return inMemoryCache.providers;
+      }
+    }
+
     const filePath = getCacheFilePath();
     if (!fs.existsSync(filePath)) return null;
 
     const cache = normalizeCachePayload(JSON.parse(fs.readFileSync(filePath, 'utf8')));
     if (!cache) return null;
 
-    const now = options.now ?? Date.now();
+    inMemoryCache = cache;
+
     if (!options.allowStale && now - cache.fetchedAt > CACHE_TTL_MS) return null;
     return cache.providers;
   } catch {
@@ -92,10 +103,12 @@ export function setCachedModelsDevRegistry(
   providers: ModelsDevRegistry,
   fetchedAt = Date.now()
 ): void {
+  const cache: ModelsDevCacheData = { version: 1, fetchedAt, providers };
+  inMemoryCache = cache;
+
   try {
     const filePath = getCacheFilePath();
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    const cache: ModelsDevCacheData = { version: 1, fetchedAt, providers };
     fs.writeFileSync(filePath, JSON.stringify(cache));
   } catch {
     // Best-effort cache writes must not break analytics.
@@ -103,6 +116,7 @@ export function setCachedModelsDevRegistry(
 }
 
 export function clearModelsDevRegistryCache(): boolean {
+  inMemoryCache = null;
   try {
     const filePath = getCacheFilePath();
     if (!fs.existsSync(filePath)) return false;

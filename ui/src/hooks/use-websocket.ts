@@ -27,6 +27,7 @@ export function useWebSocket() {
   const maxReconnectAttempts = 5;
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectRef = useRef<() => void>(() => {});
+  const suspendedRef = useRef(false);
 
   const handleMessage = useCallback(
     (message: WSMessage) => {
@@ -99,6 +100,8 @@ export function useWebSocket() {
       setStatus('disconnected');
       wsRef.current = null;
 
+      if (suspendedRef.current) return;
+
       // Attempt reconnect with exponential backoff
       if (reconnectAttempts.current < maxReconnectAttempts) {
         setIsReconnecting(true);
@@ -115,6 +118,7 @@ export function useWebSocket() {
     };
 
     ws.onerror = () => {
+      if (suspendedRef.current) return;
       console.log('[WS] Connection error');
     };
   }, [handleMessage]);
@@ -139,6 +143,31 @@ export function useWebSocket() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      suspendedRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      wsRef.current?.close();
+    };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      suspendedRef.current = false;
+      reconnectAttempts.current = 0;
+      connectRef.current();
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+  }, []);
+
   // Heartbeat to keep connection alive
   useEffect(() => {
     const interval = setInterval(() => {
@@ -155,4 +184,3 @@ export function useWebSocket() {
     [status, isReconnecting, connect, disconnect]
   );
 }
-

@@ -1623,10 +1623,18 @@ async function getNativeAccountRowsMultiProfile(
   const defaultCodex = deps.defaultCodexProfile ?? getDefaultCodexProfileFromDisk;
 
   const [claudeProfiles, codexProfiles, claudeDefault, codexDefault] = await Promise.all([
-    Promise.resolve().then(listClaude).catch(() => []),
-    Promise.resolve().then(listCodex).catch(() => []),
-    Promise.resolve().then(defaultClaude).catch(() => null),
-    Promise.resolve().then(defaultCodex).catch(() => null),
+    Promise.resolve()
+      .then(listClaude)
+      .catch(() => []),
+    Promise.resolve()
+      .then(listCodex)
+      .catch(() => []),
+    Promise.resolve()
+      .then(defaultClaude)
+      .catch(() => null),
+    Promise.resolve()
+      .then(defaultCodex)
+      .catch(() => null),
   ]);
 
   const tasks: Promise<BarSummaryRow | null>[] = [];

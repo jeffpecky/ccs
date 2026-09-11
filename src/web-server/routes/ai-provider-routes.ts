@@ -3,7 +3,9 @@ import {
   AI_PROVIDER_FAMILY_IDS,
   createAiProviderEntry,
   deleteAiProviderEntry,
+  fetchAiProviderModels,
   listAiProviders,
+  testAiProviderConnection,
   updateAiProviderEntry,
   type AiProviderFamilyId,
   type UpsertAiProviderEntryInput,
@@ -135,6 +137,36 @@ router.delete('/:family/:entryId', async (req: Request, res: Response) => {
   } catch (error) {
     const message = (error as Error).message;
     res.status(message === 'Entry not found' ? 404 : 400).json({ error: message });
+  }
+});
+
+router.post('/:family/test', async (req: Request, res: Response) => {
+  const family = parseFamily(req, res);
+  if (!family) return;
+
+  try {
+    const input = parseInput(req.body);
+    const result = await testAiProviderConnection({
+      family,
+      apiKey: input.apiKey,
+      baseUrl: input.baseUrl,
+      headers: input.headers,
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+});
+
+router.get('/:family/models', async (req: Request, res: Response) => {
+  const family = parseFamily(req, res);
+  if (!family) return;
+
+  try {
+    const result = await fetchAiProviderModels(family);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ models: [], provider: family, error: (error as Error).message });
   }
 });
 

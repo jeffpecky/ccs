@@ -104,7 +104,9 @@ router.put('/routing/pool', async (req: Request, res: Response): Promise<void> =
   }
 
   try {
-    const result = enabled ? enablePoolRouting(CLIPROXY_DEFAULT_PORT) : disablePoolRouting(CLIPROXY_DEFAULT_PORT);
+    const result = enabled
+      ? enablePoolRouting(CLIPROXY_DEFAULT_PORT)
+      : disablePoolRouting(CLIPROXY_DEFAULT_PORT);
     const poolState = getCliproxyPoolRoutingState();
     res.json({
       ...poolState,

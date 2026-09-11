@@ -19,10 +19,13 @@ let watcherInstance: chokidar.FSWatcher | null = null;
 let syncTimeout: NodeJS.Timeout | null = null;
 let isSyncing = false;
 
+/** Cached auto-sync enabled state (loaded once at startup) */
+let autoSyncEnabled: boolean | null = null;
+
 /**
  * Check if auto-sync is enabled in config.
  */
-export function isAutoSyncEnabled(): boolean {
+export async function isAutoSyncEnabled(): Promise<boolean> {
   try {
     const config = loadOrCreateUnifiedConfig();
     // For local sync, check cliproxy.auto_sync (simpler config location)
@@ -48,7 +51,7 @@ async function triggerSync(): Promise<void> {
     return;
   }
 
-  if (!isAutoSyncEnabled()) {
+  if (autoSyncEnabled === false) {
     log('Auto-sync disabled, skipping');
     return;
   }
@@ -56,7 +59,7 @@ async function triggerSync(): Promise<void> {
   isSyncing = true;
 
   try {
-    const result = syncToLocalConfig();
+    const result = await syncToLocalConfig();
 
     if (!result.success) {
       log(`Sync failed: ${result.error}`);
@@ -103,13 +106,14 @@ function onFileChange(filePath: string): void {
  * Start the auto-sync watcher.
  * Watches ~/.ccs/*.settings.json for changes.
  */
-export function startAutoSyncWatcher(): void {
+export async function startAutoSyncWatcher(): Promise<void> {
   if (watcherInstance) {
     log('Watcher already running');
     return;
   }
 
-  if (!isAutoSyncEnabled()) {
+  autoSyncEnabled = await isAutoSyncEnabled();
+  if (!autoSyncEnabled) {
     // Don't start if disabled, but log nothing (called at startup)
     return;
   }
@@ -182,7 +186,7 @@ export async function restartAutoSyncWatcher(): Promise<void> {
   }
 
   await stopAutoSyncWatcher();
-  startAutoSyncWatcher();
+  await startAutoSyncWatcher();
 }
 
 /**
@@ -194,7 +198,7 @@ export function getAutoSyncStatus(): {
   syncing: boolean;
 } {
   return {
-    enabled: isAutoSyncEnabled(),
+    enabled: autoSyncEnabled ?? false,
     watching: watcherInstance !== null,
     syncing: isSyncing,
   };

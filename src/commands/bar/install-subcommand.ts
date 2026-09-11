@@ -503,7 +503,8 @@ export async function handleBarInstall(
     await installWindowsBar(args);
     return;
   }
-  if (process.platform !== 'darwin' && Object.keys(deps).length === 0) throw new Error('CCS Bar supports macOS or Windows only.');
+  if (process.platform !== 'darwin' && Object.keys(deps).length === 0)
+    throw new Error('CCS Bar supports macOS or Windows only.');
   // Parse --launch / --no-launch / --await-quit flags before delegating to deps.
   const forceLaunch = hasAnyFlag(args, ['--launch']);
   const noLaunch = hasAnyFlag(args, ['--no-launch']);

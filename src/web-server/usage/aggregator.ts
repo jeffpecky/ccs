@@ -5,7 +5,7 @@
  * Combines data from default Claude config and all CCS instances.
  */
 
-import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import {
   aggregateDailyUsage,
@@ -16,7 +16,6 @@ import {
 } from './data-aggregator';
 import type { DailyUsage, HourlyUsage, MonthlyUsage, SessionUsage } from './types';
 import {
-  readDiskCache,
   writeDiskCache,
   readDiskCacheAsync,
   isDiskCacheFresh,
@@ -73,18 +72,27 @@ function getDefaultProjectsDirForAnalytics(): string {
  * Get list of CCS instance paths that have usage data
  * Only returns instances with existing projects/ directory
  */
-function getInstancePaths(): string[] {
+async function getInstancePaths(): Promise<string[]> {
   const instancesDir = getCcsInstancesDir();
-  if (!fs.existsSync(instancesDir)) {
+  try {
+    await fsp.access(instancesDir);
+  } catch {
     return [];
   }
 
   try {
-    return listAccountInstancePaths(instancesDir).filter((instancePath) => {
-      // Only include instances that have a projects directory
+    const allPaths = await listAccountInstancePaths(instancesDir);
+    const results: string[] = [];
+    for (const instancePath of allPaths) {
       const projectsPath = path.join(instancePath, 'projects');
-      return fs.existsSync(projectsPath);
-    });
+      try {
+        await fsp.access(projectsPath);
+        results.push(instancePath);
+      } catch {
+        // skip instances without projects dir
+      }
+    }
+    return results;
   } catch {
     console.error(fail('Failed to read CCS instances directory'));
     return [];
@@ -386,7 +394,7 @@ let pendingFullRefresh: Promise<{
 /**
  * Persist cache to disk when we have enough data to be useful.
  */
-function persistCacheIfComplete(): void {
+async function persistCacheIfComplete(): Promise<void> {
   const daily = cache.get('daily') as CacheEntry<DailyUsage[]> | undefined;
   const hourly = cache.get('hourly') as CacheEntry<HourlyUsage[]> | undefined;
   const monthly = cache.get('monthly') as CacheEntry<MonthlyUsage[]> | undefined;
@@ -394,7 +402,7 @@ function persistCacheIfComplete(): void {
 
   // Write if we have at least daily data (the most essential)
   if (daily) {
-    writeDiskCache(daily.data, hourly?.data ?? [], monthly?.data ?? [], session?.data ?? []);
+    await writeDiskCache(daily.data, hourly?.data ?? [], monthly?.data ?? [], session?.data ?? []);
   }
 }
 
@@ -423,7 +431,7 @@ async function refreshFromSource(): Promise<{
   );
 
   // Load data from all CCS instances sequentially
-  const instancePaths = getInstancePaths();
+  const instancePaths = await getInstancePaths();
   const instanceDataResults: Array<{
     daily: DailyUsage[];
     hourly: HourlyUsage[];
@@ -515,7 +523,7 @@ async function refreshFromSource(): Promise<{
   lastFetchTimestamp = now;
 
   // Persist to disk
-  writeDiskCache(daily, hourly, monthly, session);
+  await writeDiskCache(daily, hourly, monthly, session);
 
   return { daily, hourly, monthly, session };
 }
@@ -708,7 +716,7 @@ export async function prewarmUsageCache(): Promise<{
     // Start CLIProxy usage syncer early (runs in background every 5 min)
     startCliproxySync();
 
-    const diskCache = readDiskCache();
+    const diskCache = await readDiskCacheAsync();
 
     // Fresh disk cache - use it directly
     if (diskCache && isDiskCacheFresh(diskCache)) {

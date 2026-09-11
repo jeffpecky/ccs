@@ -76,8 +76,6 @@ export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfi
       kiro_no_incognito: partial.cliproxy?.kiro_no_incognito,
       // Auth config - preserve user values, no defaults (uses constants as fallback)
       auth: partial.cliproxy?.auth,
-      // Background token refresh config (optional)
-      token_refresh: partial.cliproxy?.token_refresh,
       // Backend selection - validate and preserve user choice (original vs plus)
       backend:
         partial.cliproxy?.backend === 'original' || partial.cliproxy?.backend === 'plus'

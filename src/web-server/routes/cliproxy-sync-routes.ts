@@ -65,7 +65,7 @@ router.get('/preview', async (_req: Request, res: Response): Promise<void> => {
  */
 router.post('/', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const result = syncToLocalConfig();
+    const result = await syncToLocalConfig();
 
     if (!result.success) {
       res.status(500).json({

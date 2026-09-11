@@ -1,5 +1,8 @@
 import { startServer } from './web-server';
-import { DEFAULT_LOCAL_DASHBOARD_HOST, DEFAULT_LOCAL_DASHBOARD_PORT } from './web-server/server-defaults';
+import {
+  DEFAULT_LOCAL_DASHBOARD_HOST,
+  DEFAULT_LOCAL_DASHBOARD_PORT,
+} from './web-server/server-defaults';
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);

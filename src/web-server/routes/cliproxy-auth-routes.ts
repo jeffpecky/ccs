@@ -806,11 +806,13 @@ router.post('/:provider/start', async (req: Request, res: Response): Promise<voi
         listProviderTokenSnapshots(localProvider),
         knownTokenFiles,
         accountId,
-        accountId ? (() => {
-          const accounts = getProviderAccounts(localProvider);
-          const expectedAccount = accounts.find((a) => a.id === accountId);
-          return expectedAccount?.email;
-        })() : undefined
+        accountId
+          ? (() => {
+              const accounts = getProviderAccounts(localProvider);
+              const expectedAccount = accounts.find((a) => a.id === accountId);
+              return expectedAccount?.email;
+            })()
+          : undefined
       );
       if (!tokenSnapshot) {
         res.status(409).json({
@@ -1126,7 +1128,10 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
     getStoredConfiguredBackend()
   );
   if (credentialError) {
-    logger.warn('start-url credential guard', `Credential guard fired for provider=${provider}`, { provider, credentialError });
+    logger.warn('start-url credential guard', `Credential guard fired for provider=${provider}`, {
+      provider,
+      credentialError,
+    });
     res.status(400).json({
       error: 'plus_oauth_credentials_missing',
       provider,
@@ -1181,7 +1186,11 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
       const authUrlError = getPlusAuthUrlCredentialError(provider as CLIProxyProvider, authUrl);
       if (authUrlError) {
         const redactedUrl = authUrl.split('?')[0];
-        logger.warn('start-url missing client_id', `Plus emitted OAuth URL without client_id for provider=${provider}`, { provider, redactedUrl });
+        logger.warn(
+          'start-url missing client_id',
+          `Plus emitted OAuth URL without client_id for provider=${provider}`,
+          { provider, redactedUrl }
+        );
         res.status(502).json({
           error: 'plus_oauth_url_missing_client_id',
           provider,
@@ -1208,7 +1217,11 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
         knownTokenFiles: listProviderTokenSnapshots(localProvider),
       });
     } else {
-      logger.warn('no-oauth-state', `No OAuth state received from CLIProxyAPI for provider=${provider}`, { provider });
+      logger.warn(
+        'no-oauth-state',
+        `No OAuth state received from CLIProxyAPI for provider=${provider}`,
+        { provider }
+      );
     }
 
     res.json({
@@ -1219,7 +1232,11 @@ router.post('/:provider/start-url', async (req: Request, res: Response): Promise
     });
   } catch (error) {
     if (error instanceof SyntaxError) {
-      logger.error('invalid-oauth-response', `Invalid OAuth start response for provider=${provider}`, { provider, errorMessage: error.message });
+      logger.error(
+        'invalid-oauth-response',
+        `Invalid OAuth start response for provider=${provider}`,
+        { provider, errorMessage: error.message }
+      );
       res.status(502).json({
         error: 'cliproxy_oauth_start_invalid_response',
         provider,
@@ -1283,11 +1300,15 @@ router.get('/:provider/status', async (req: Request, res: Response): Promise<voi
           return;
         }
 
-        logger.error('no-pending-auth', `No pending auth for state=${state} (provider=${provider})`, {
-          state,
-          provider,
-          activeStates: Array.from(pendingManualAuthState.keys()).join(', ') || '(none)',
-        });
+        logger.error(
+          'no-pending-auth',
+          `No pending auth for state=${state} (provider=${provider})`,
+          {
+            state,
+            provider,
+            activeStates: Array.from(pendingManualAuthState.keys()).join(', ') || '(none)',
+          }
+        );
         res.status(409).json({
           status: 'error',
           error:

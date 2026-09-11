@@ -1,18 +1,14 @@
 /**
  * GitHub Copilot (GHCP) Quota Fetcher Unit Tests
  *
- * Covers normalization and token extraction edge cases.
+ * Covers normalization and CLIProxy-managed quota behavior.
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  normalizeGhcpSnapshot,
-  extractGhcpAccessToken,
-  fetchGhcpQuota,
-} from '../quota-fetcher-ghcp';
+import { normalizeGhcpSnapshot, fetchGhcpQuota } from '../quota-fetcher-ghcp';
 
 let tmpDir: string;
 let originalCcsHome: string | undefined;
@@ -178,58 +174,46 @@ describe('GHCP Quota Fetcher', () => {
     });
   });
 
-  describe('extractGhcpAccessToken', () => {
-    it('extracts from top-level access_token', () => {
-      const token = extractGhcpAccessToken({
-        access_token: '  top-level-token  ',
-      });
-      expect(token).toBe('top-level-token');
-    });
-
-    it('extracts from nested token.access_token', () => {
-      const token = extractGhcpAccessToken({
-        token: {
-          access_token: 'nested-token',
-        },
-      });
-      expect(token).toBe('nested-token');
-    });
-
-    it('returns null for empty/whitespace tokens', () => {
-      const emptyTopLevel = extractGhcpAccessToken({ access_token: '   ' });
-      const emptyNested = extractGhcpAccessToken({
-        token: { access_token: '   ' },
-      });
-
-      expect(emptyTopLevel).toBeNull();
-      expect(emptyNested).toBeNull();
-    });
-  });
-
   describe('fetchGhcpQuota', () => {
-    it('fetches and normalizes quota for a valid account token', async () => {
-      createGhcpAccount('ghcp-main', { access_token: 'top-level-token' });
+    function mockManagedGhcpFetch(): ReturnType<typeof mock> {
+      return mock((url: string, options?: RequestInit) => {
+        if (url.endsWith('/v0/management/auth-files')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                files: [
+                  {
+                    id: 'ghcp-main',
+                    auth_index: 'ghcp-main',
+                    provider: 'github-copilot',
+                    email: 'ghcp-main',
+                  },
+                ],
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            )
+          );
+        }
 
-      global.fetch = mock((url: string, options?: RequestInit) => {
-        expect(url).toBe('https://api.github.com/copilot_internal/user');
-        expect(options?.method).toBe('GET');
-        expect(options?.headers).toEqual({
-          Accept: 'application/json',
-          Authorization: 'token top-level-token',
-          'User-Agent': 'GitHubCopilotChat/0.26.7',
-          'x-github-api-version': '2025-04-01',
-        });
+        expect(url).toContain('/v0/management/api-call');
+        const body = JSON.parse(String(options?.body ?? '{}'));
+        expect(body.auth_index).toBe('ghcp-main');
+        expect(body.url).toBe('https://api.github.com/copilot_internal/user');
+        expect(body.header?.Authorization).toBe('token $TOKEN$');
 
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              copilot_plan: 'business',
-              quota_reset_date: '2026-02-28T00:00:00Z',
-              quota_snapshots: {
-                premium_interactions: { entitlement: 1000, remaining: 900 },
-                chat: { entitlement: 500, remaining: 100, percent_remaining: 20 },
-                completions: { entitlement: 250, remaining: 125 },
-              },
+              status_code: 200,
+              body: JSON.stringify({
+                copilot_plan: 'business',
+                quota_reset_date: '2026-02-28T00:00:00Z',
+                quota_snapshots: {
+                  premium_interactions: { entitlement: 1000, remaining: 900 },
+                  chat: { entitlement: 500, remaining: 100, percent_remaining: 20 },
+                  completions: { entitlement: 250, remaining: 125 },
+                },
+              }),
             }),
             {
               status: 200,
@@ -237,7 +221,12 @@ describe('GHCP Quota Fetcher', () => {
             }
           )
         );
-      }) as typeof fetch;
+      });
+    }
+
+    it('fetches and normalizes quota through CLIProxy management API', async () => {
+      createGhcpAccount('ghcp-main', { access_token: 'top-level-token' });
+      global.fetch = mockManagedGhcpFetch() as typeof fetch;
 
       const result = await fetchGhcpQuota('ghcp-main');
 
@@ -250,10 +239,24 @@ describe('GHCP Quota Fetcher', () => {
       expect(result.snapshots.completions.percentRemaining).toBe(50);
     });
 
-    it('returns needsReauth on 401/403 responses', async () => {
+    it('returns needsReauth on final provider 401 responses', async () => {
       createGhcpAccount('ghcp-auth', { access_token: 'token-auth' });
 
-      global.fetch = mock(() => Promise.resolve(new Response('', { status: 401 }))) as typeof fetch;
+      global.fetch = mock((url: string) => {
+        if (url.endsWith('/v0/management/auth-files')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                files: [{ id: 'ghcp-auth', auth_index: 'ghcp-auth', provider: 'github-copilot' }],
+              }),
+              { status: 200 }
+            )
+          );
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify({ status_code: 401, body: '' }), { status: 200 })
+        );
+      }) as typeof fetch;
 
       const result = await fetchGhcpQuota('ghcp-auth');
 
@@ -262,16 +265,17 @@ describe('GHCP Quota Fetcher', () => {
       expect(result.error).toBe('Authentication expired or invalid');
     });
 
-    it('fails fast when token file has no valid access token', async () => {
-      createGhcpAccount('ghcp-missing-token', { access_token: '   ' });
-      const fetchMock = mock(() => Promise.resolve(new Response('', { status: 200 })));
-      global.fetch = fetchMock as typeof fetch;
+    it('reports CLIProxy outage as retryable, never as reauth', async () => {
+      createGhcpAccount('ghcp-outage', { access_token: 'token-outage' });
 
-      const result = await fetchGhcpQuota('ghcp-missing-token');
+      global.fetch = mock(() => Promise.reject(new Error('connect ECONNREFUSED'))) as typeof fetch;
+
+      const result = await fetchGhcpQuota('ghcp-outage');
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('No access token in auth file');
-      expect(fetchMock).toHaveBeenCalledTimes(0);
+      expect(result.needsReauth).toBeUndefined();
+      expect(result.errorCode).toBe('cliproxy_unavailable');
+      expect(result.retryable).toBe(true);
     });
   });
 });

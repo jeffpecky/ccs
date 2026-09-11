@@ -186,12 +186,13 @@ export function findNewTokenSnapshot(
       const matchesExpectedAccount =
         snapshot.file === expectedAccountId || snapshot.accountId === expectedAccountId;
       if (!matchesExpectedAccount && expectedEmail) {
-        const candidate = listTokenCandidatesFromSnapshots(
-          [snapshot],
-          knownTokenFiles
-        )[0];
+        const candidate = listTokenCandidatesFromSnapshots([snapshot], knownTokenFiles)[0];
         if (candidate && candidate.email?.toLowerCase() === expectedEmail.toLowerCase()) {
-          return !knownSnapshot || snapshot.fingerprint !== knownSnapshot.fingerprint || snapshot.mtimeMs !== knownSnapshot.mtimeMs;
+          return (
+            !knownSnapshot ||
+            snapshot.fingerprint !== knownSnapshot.fingerprint ||
+            snapshot.mtimeMs !== knownSnapshot.mtimeMs
+          );
         }
         return false;
       }

@@ -8,7 +8,7 @@
 import type { TargetType } from '../../targets/target-adapter';
 import type { CLIProxyProvider, CliproxyRoutingStrategy } from '../../cliproxy/types';
 import { CLIPROXY_PROVIDER_IDS } from '../../cliproxy/provider-capabilities';
-import type { OAuthAccounts, CLIProxyAuthConfig, TokenRefreshSettings } from './auth';
+import type { OAuthAccounts, CLIProxyAuthConfig } from './auth';
 
 /**
  * Supported CLIProxy providers.
@@ -231,8 +231,6 @@ export interface CLIProxyConfig {
   kiro_no_incognito?: boolean;
   /** Global auth configuration for CLIProxyAPI */
   auth?: CLIProxyAuthConfig;
-  /** Background token refresh worker settings */
-  token_refresh?: TokenRefreshSettings;
   /** Auto-sync API profiles to local CLIProxy config on settings change (default: true) */
   auto_sync?: boolean;
   /** Routing strategy for multi-account CLIProxy selection */

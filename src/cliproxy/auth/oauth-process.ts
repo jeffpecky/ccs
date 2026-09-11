@@ -895,7 +895,12 @@ export function executeOAuthProcess(options: OAuthProcessOptions): Promise<Accou
           info('Complete the login in your browser. This page will update automatically.')
         );
       }
-      if (!verbose) console.log(info('If stuck, try: Authenticate ' + provider + ' from the dashboard with verbose logging'));
+      if (!verbose)
+        console.log(
+          info(
+            'If stuck, try: Authenticate ' + provider + ' from the dashboard with verbose logging'
+          )
+        );
     }, 2000);
 
     // Timeout handling
@@ -965,7 +970,13 @@ export function executeOAuthProcess(options: OAuthProcessOptions): Promise<Accou
           }
 
           resolve(
-            registerAccountFromToken(provider, tokenDir, nickname, verbose, exitAnalysis.tokenSnapshot.file)
+            registerAccountFromToken(
+              provider,
+              tokenDir,
+              nickname,
+              verbose,
+              exitAnalysis.tokenSnapshot.file
+            )
           );
         } else {
           // Emit device code failure event for UI

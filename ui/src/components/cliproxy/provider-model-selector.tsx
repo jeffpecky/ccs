@@ -318,59 +318,6 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 };
 
 // Short provider prefixes for model display (like 9Router)
-const PROVIDER_SHORT_PREFIX: Record<string, string> = {
-  antigravity: 'ag',
-  agy: 'ag',
-  openai: 'cx',
-  codex: 'cx',
-  aws: 'kr',
-  kiro: 'kr',
-  anthropic: 'cc',
-  claude: 'cc',
-  gemini: 'gemini',
-  google: 'gemini',
-  qoder: 'qd',
-  github: 'gh',
-  'github-copilot': 'gh',
-  cloudflare: 'cf',
-  'cloudflare-ai': 'cf',
-  deepseek: 'ds',
-  xai: 'xai',
-  grok: 'gk',
-  'grok-cli': 'gk',
-  mistral: 'ml',
-  cohere: 'co',
-  together: 'tg',
-  fireworks: 'fw',
-  groq: 'gq',
-  sambanova: 'samba',
-  cerebras: 'cb',
-  nvidia: 'nv',
-  openrouter: 'or',
-  ollama: 'ollama',
-  azure: 'az',
-  vertex: 'vx',
-  'vertex-partner': 'vxp',
-  windsurf: 'ws',
-  cline: 'cl',
-  trae: 'tr',
-  zed: 'zd',
-  perplexity: 'px',
-  'perplexity-agent': 'px',
-  kimi: 'km',
-  minimax: 'mm',
-  'minimax-cn': 'mm',
-  glm: 'glm',
-  'glm-cn': 'glm',
-  siliconflow: 'sf',
-  huggingface: 'hf',
-  blackbox: 'bb',
-  devin: 'dv',
-  'devin-cli': 'dv',
-  opencode: 'oc',
-  'opencode-go': 'oc',
-};
-
 /** Flexible Model Selector - Combines catalog recommendations with full model list */
 interface FlexibleModelSelectorProps {
   label: string;
@@ -437,7 +384,10 @@ export function FlexibleModelSelector({
     [allModels, catalog, hideRecommended]
   );
   const supplementalModels = useMemo(
-    () => (hideRecommended ? [] : getSupplementalCatalogModels(catalog?.provider ?? '', catalog, allModels)),
+    () =>
+      hideRecommended
+        ? []
+        : getSupplementalCatalogModels(catalog?.provider ?? '', catalog, allModels),
     [allModels, catalog, hideRecommended]
   );
   const catalogModelIds = useMemo(
@@ -541,13 +491,11 @@ export function FlexibleModelSelector({
         isCodexProvider
       );
 
-      const shortPrefix = PROVIDER_SHORT_PREFIX[model.owned_by] || model.owned_by;
-
       return optionValues.map((optionValue) => {
-        const displayLabel = hideRecommended && shortPrefix ? `${shortPrefix}/${optionValue}` : optionValue;
+        const displayLabel = optionValue;
         return {
           value: optionValue,
-          groupKey: hideRecommended ? (model.owned_by || 'other') : 'all',
+          groupKey: hideRecommended ? model.owned_by || 'other' : 'all',
           searchText: `${optionValue} ${model.id} ${model.owned_by} ${routingHint?.recommendedModelId ?? ''}`,
           keywords: [model.owned_by],
           triggerContent: (
@@ -582,7 +530,16 @@ export function FlexibleModelSelector({
         };
       });
     });
-  }, [hideRecommended, allModels, supplementalModels, catalogModelIds, recommendedOptionValues, routingHints, isCodexProvider, t]);
+  }, [
+    hideRecommended,
+    allModels,
+    supplementalModels,
+    catalogModelIds,
+    recommendedOptionValues,
+    routingHints,
+    isCodexProvider,
+    t,
+  ]);
 
   // Group allModelOptions by provider
   const providerGroups = useMemo(() => {
@@ -658,7 +615,9 @@ export function FlexibleModelSelector({
                 {
                   key: 'recommended',
                   label: (
-                    <span className="text-xs text-primary">{t('providerModelSelector.recommended')}</span>
+                    <span className="text-xs text-primary">
+                      {t('providerModelSelector.recommended')}
+                    </span>
                   ),
                 },
               ]
@@ -696,19 +655,19 @@ export function FlexibleModelSelector({
                 ),
               }))
             : allModelOptions.length > 0
-            ? [
-                {
-                  key: 'all',
-                  label: (
-                    <span className="text-xs text-muted-foreground">
-                      {t('providerModelSelector.allModelsCount', {
-                        count: allModelOptions.length,
-                      })}
-                    </span>
-                  ),
-                },
-              ]
-            : []),
+              ? [
+                  {
+                    key: 'all',
+                    label: (
+                      <span className="text-xs text-muted-foreground">
+                        {t('providerModelSelector.allModelsCount', {
+                          count: allModelOptions.length,
+                        })}
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
         ]}
         options={[
           ...(selectedValueMissing && legacySelectedOption ? [legacySelectedOption] : []),
@@ -746,4 +705,3 @@ export function FlexibleModelSelector({
     </div>
   );
 }
-

@@ -283,10 +283,7 @@ export function buildClaudeEnvironment(config: ProxyChainConfig): Record<string,
 /**
  * Log environment configuration for debugging
  */
-export function logEnvironment(
-  env: Record<string, string>,
-  verbose: boolean
-): void {
+export function logEnvironment(env: Record<string, string>, verbose: boolean): void {
   if (!verbose) return;
 
   const log = (msg: string) => console.error(`[cliproxy] ${msg}`);

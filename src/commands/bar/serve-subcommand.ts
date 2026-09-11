@@ -262,7 +262,8 @@ export async function handleBarServe(args: string[], deps: Partial<ServeDeps> = 
       try {
         removeProcessRecordIfOwned(serverPidPath, processRecord);
       } catch (cleanupErr) {
-        const cleanupMessage = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+        const cleanupMessage =
+          cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
         console.error(`[!] Failed to roll back server.pid: ${cleanupMessage}`);
       }
       const msg = err instanceof Error ? err.message : String(err);

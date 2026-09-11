@@ -1,18 +1,22 @@
 /**
  * Quota Fetcher for Kiro (AWS CodeWhisperer) Accounts
  *
- * Mirrors 9Router's kiro usage flow:
+ * Mirrors 9Router's kiro usage flow, all through the CLIProxy management API:
  * - GET https://codewhisperer.us-east-1.amazonaws.com/getUsageLimits
  * - POST x-amz-target GetUsageLimits fallback
  * - GET https://q.us-east-1.amazonaws.com/getUsageLimits fallback
  * - Shared default profileArn when the auth file has none
- * - Token refresh (AWS OIDC / kiro.dev) with persistence back to the auth file
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { getProviderAccounts } from '../accounts/account-manager';
+import { getAuthDir } from '../config/config-generator';
+import {
+  callCLIProxyManagementApi,
+  CLIProxyManagementUnavailableError,
+  resolveCLIProxyAuth,
+} from './cli-proxy-auth-resolver';
 
 /** Kiro quota window */
 export interface KiroQuotaWindow {
@@ -56,6 +60,12 @@ export interface KiroQuotaResult {
   accountId?: string;
   /** Error code for programmatic handling */
   errorCode?: string;
+  /** Additional error context */
+  errorDetail?: string;
+  /** Whether the failure is retryable */
+  retryable?: boolean;
+  /** Whether CLIProxy's final provider response requires re-authentication */
+  needsReauth?: boolean;
 }
 
 /** Upstream endpoints (mirrors 9Router kiro registry) */
@@ -65,8 +75,6 @@ const CW_HOSTS = [
 ] as const;
 const Q_HOST = 'https://q.us-east-1.amazonaws.com';
 const LIMITS_PATH = '/getUsageLimits';
-const OIDC_TOKEN_URL = 'https://oidc.us-east-1.amazonaws.com/token';
-const KIRO_SOCIAL_REFRESH_URL = 'https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken';
 
 // Shared default CodeWhisperer profile ARNs (us-east-1), keyed by auth method.
 const KIRO_DEFAULT_PROFILE_ARNS = {
@@ -187,193 +195,37 @@ function authMethodHeaders(authMethod: string): Record<string, string> {
 }
 
 /**
- * Fetch usage limits trying the same endpoint chain as 9Router:
- * CW GET → CW POST → Q GET. Returns the first successful JSON body.
+ * Read non-secret Kiro auth metadata for request shaping (profile ARN, auth method).
  */
-async function fetchFromCodeWhisperer(
-  accessToken: string,
-  profileArn: string,
-  authMethod: string
-): Promise<UsageFetchResult> {
-  const extraHeaders = authMethodHeaders(authMethod);
-  const getUsageParams = new URLSearchParams({
-    isEmailRequired: 'true',
-    origin: 'AI_EDITOR',
-    resourceType: 'AGENTIC_REQUEST',
-  });
-  const qParams = new URLSearchParams({
-    origin: 'AI_EDITOR',
-    ...(profileArn ? { profileArn } : {}),
-    resourceType: 'AGENTIC_REQUEST',
-  });
-
-  const attempts: Array<{ name: string; run: () => Promise<Response> }> = [
-    ...CW_HOSTS.map((host) => ({
-      name: `cw-get:${host}`,
-      run: () =>
-        fetch(`${host}${LIMITS_PATH}?${getUsageParams.toString()}`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: 'application/json',
-            'x-amz-user-agent': 'aws-sdk-js/1.0.0 KiroIDE',
-            'user-agent': 'aws-sdk-js/1.0.0 KiroIDE',
-            ...extraHeaders,
-          },
-        }),
-    })),
-    ...CW_HOSTS.map((host) => ({
-      name: `cw-post:${host}`,
-      run: () =>
-        fetch(host, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/x-amz-json-1.0',
-            'x-amz-target': 'AmazonCodeWhispererService.GetUsageLimits',
-            Accept: 'application/json',
-            ...extraHeaders,
-          },
-          body: JSON.stringify({
-            origin: 'AI_EDITOR',
-            ...(profileArn ? { profileArn } : {}),
-            resourceType: 'AGENTIC_REQUEST',
-          }),
-        }),
-    })),
-    {
-      name: 'q-get',
-      run: () =>
-        fetch(`${Q_HOST}${LIMITS_PATH}?${qParams.toString()}`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: 'application/json',
-            ...extraHeaders,
-          },
-        }),
-    },
-  ];
-
-  let lastStatus = 0;
-  for (const attempt of attempts) {
-    try {
-      const response = await attempt.run();
-      if (response.ok) {
-        return { ok: true, status: response.status, data: (await response.json()) as CodeWhispererResponse };
-      }
-      lastStatus = response.status;
-    } catch {
-      // Continue to next attempt
-    }
-  }
-
-  return { ok: false, status: lastStatus };
-}
-
-/** Auth data read from a kiro token file */
-interface KiroAuthData {
-  accessToken: string;
-  refreshToken?: string;
+interface KiroAuthMetadata {
   profileArn?: string;
   authMethod?: string;
-  expiresAt?: string;
-  clientId?: string;
-  clientSecret?: string;
-  region?: string;
-  filePath: string;
 }
 
-/** Refreshed token payload persisted back to the auth file */
-interface RefreshedToken {
-  accessToken: string;
-  refreshToken?: string;
-  expiresIn?: number;
-}
-
-/**
- * Refresh a Kiro access token.
- * - builder-id/idc (client_id + client_secret): AWS OIDC refresh_token grant
- * - social (google/github): kiro.dev refreshToken endpoint
- */
-async function refreshKiroAccessToken(auth: KiroAuthData): Promise<RefreshedToken | null> {
-  if (!auth.refreshToken) return null;
-
+function readKiroAuthMetadata(accountId: string): KiroAuthMetadata | null {
   try {
-    let response: Response;
-    if (auth.clientId && auth.clientSecret) {
-      const endpoint =
-        auth.authMethod === 'idc' && auth.region
-          ? `https://oidc.${auth.region}.amazonaws.com/token`
-          : OIDC_TOKEN_URL;
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          clientId: auth.clientId,
-          clientSecret: auth.clientSecret,
-          refreshToken: auth.refreshToken,
-          grantType: 'refresh_token',
-        }),
-      });
-    } else {
-      response = await fetch(KIRO_SOCIAL_REFRESH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'kiro-cli/1.0.0' },
-        body: JSON.stringify({ refreshToken: auth.refreshToken }),
-      });
-    }
+    const authDir = getAuthDir();
+    const files = fs.readdirSync(authDir);
 
-    if (!response.ok) return null;
+    const kiroFile = files.find(
+      (f: string) => f.startsWith('kiro-aws-') && f.includes(accountId) && f.endsWith('.json')
+    );
+    if (!kiroFile) return null;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tokens: any = await response.json();
-    const accessToken = tokens.accessToken || tokens.access_token;
-    if (!accessToken) return null;
-
+    const content = JSON.parse(fs.readFileSync(path.join(authDir, kiroFile), 'utf-8'));
     return {
-      accessToken,
-      refreshToken: tokens.refreshToken || tokens.refresh_token || auth.refreshToken,
-      expiresIn: tokens.expiresIn || tokens.expires_in,
+      profileArn: content.profile_arn,
+      authMethod: content.auth_method,
     };
   } catch {
     return null;
   }
 }
 
-/** Persist refreshed tokens back to the auth file so subsequent calls reuse them */
-function persistRefreshedToken(filePath: string, refreshed: RefreshedToken): void {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    content.access_token = refreshed.accessToken;
-    if (refreshed.refreshToken) content.refresh_token = refreshed.refreshToken;
-    if (refreshed.expiresIn) {
-      content.expires_at = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString();
-      content.last_refresh = new Date().toISOString();
-    }
-    content.expired = false;
-    fs.writeFileSync(filePath, JSON.stringify(content, null, 2));
-  } catch {
-    // Non-fatal: quota fetch can still proceed with the in-memory token
-  }
-}
-
-/** Whether the stored access token is expired (or expiring within 60s) */
-function isTokenExpired(auth: KiroAuthData): boolean {
-  if (!auth.expiresAt) return false;
-  const expiresAt = new Date(auth.expiresAt).getTime();
-  if (isNaN(expiresAt)) return false;
-  return Date.now() >= expiresAt - 60_000;
-}
-
 /**
  * Fetch Kiro quota for an account
  */
-export async function fetchKiroQuota(
-  accountId: string,
-  verbose = false
-): Promise<KiroQuotaResult> {
+export async function fetchKiroQuota(accountId: string, verbose = false): Promise<KiroQuotaResult> {
   if (verbose) console.error(`[i] Fetching Kiro quota for ${accountId}...`);
 
   // Get account data
@@ -392,56 +244,137 @@ export async function fetchKiroQuota(
     };
   }
 
-  // Read auth data from auth file
-  const authData = readKiroAuthData(accountId);
-  if (!authData) {
+  let managedAuth: Awaited<ReturnType<typeof resolveCLIProxyAuth>>;
+  try {
+    managedAuth = await resolveCLIProxyAuth('kiro', accountId);
+  } catch (error) {
     return {
       success: false,
       planType: null,
       windows: [],
       lastUpdated: Date.now(),
-      error: 'Auth file not found',
-      errorCode: 'auth_file_missing',
+      error: 'CLIProxy is temporarily unavailable',
+      errorCode: 'cliproxy_unavailable',
+      errorDetail: error instanceof Error ? error.message : undefined,
+      retryable: true,
       accountId,
     };
   }
 
-  // Refresh proactively when the stored token is expired/near-expiry
-  let accessToken = authData.accessToken;
-  if (isTokenExpired(authData)) {
-    const refreshed = await refreshKiroAccessToken(authData);
-    if (refreshed) {
-      accessToken = refreshed.accessToken;
-      persistRefreshedToken(authData.filePath, refreshed);
-      if (verbose) console.error('[i] Kiro token refreshed proactively');
-    }
+  if (!managedAuth) {
+    return {
+      success: false,
+      planType: null,
+      windows: [],
+      lastUpdated: Date.now(),
+      error: 'Kiro account is not loaded by CLIProxy',
+      errorCode: 'managed_auth_missing',
+      retryable: false,
+      accountId,
+    };
   }
 
-  const authMethod = authData.authMethod || 'builder-id';
-  const profileArn = authData.profileArn || resolveDefaultProfileArn(authMethod);
+  const authMetadata = readKiroAuthMetadata(accountId);
+  const authMethod = authMetadata?.authMethod || 'builder-id';
+  const profileArn = authMetadata?.profileArn || resolveDefaultProfileArn(authMethod);
+
+  // Run the 9Router endpoint chain (CW GET → CW POST → Q GET) through CLIProxy
+  // management API with $TOKEN$ substitution — CLIProxy checks refresh
+  // eligibility and retries once on final 401/403.
+  const runManagedChain = async (): Promise<UsageFetchResult> => {
+    const extraHeaders = authMethodHeaders(authMethod);
+    const getUsageParams = new URLSearchParams({
+      isEmailRequired: 'true',
+      origin: 'AI_EDITOR',
+      resourceType: 'AGENTIC_REQUEST',
+    });
+    const qParams = new URLSearchParams({
+      origin: 'AI_EDITOR',
+      ...(profileArn ? { profileArn } : {}),
+      resourceType: 'AGENTIC_REQUEST',
+    });
+
+    const baseHeaders: Record<string, string> = {
+      Accept: 'application/json',
+      'x-amz-user-agent': 'aws-sdk-js/1.0.0 KiroIDE',
+      'user-agent': 'aws-sdk-js/1.0.0 KiroIDE',
+      ...extraHeaders,
+    };
+
+    const attempts: Array<{ name: string; run: () => Promise<Response> }> = [
+      ...CW_HOSTS.map((host) => ({
+        name: `cw-get:${host}`,
+        run: () =>
+          callCLIProxyManagementApi(managedAuth.authIndex, {
+            method: 'GET',
+            url: `${host}${LIMITS_PATH}?${getUsageParams.toString()}`,
+            header: { ...baseHeaders, Authorization: 'Bearer $TOKEN$' },
+          }),
+      })),
+      ...CW_HOSTS.map((host) => ({
+        name: `cw-post:${host}`,
+        run: () =>
+          callCLIProxyManagementApi(managedAuth.authIndex, {
+            method: 'POST',
+            url: host,
+            header: {
+              Authorization: 'Bearer $TOKEN$',
+              'Content-Type': 'application/x-amz-json-1.0',
+              'x-amz-target': 'AmazonCodeWhispererService.GetUsageLimits',
+              Accept: 'application/json',
+              ...extraHeaders,
+            },
+            data: JSON.stringify({
+              origin: 'AI_EDITOR',
+              ...(profileArn ? { profileArn } : {}),
+              resourceType: 'AGENTIC_REQUEST',
+            }),
+          }),
+      })),
+      {
+        name: 'q-get',
+        run: () =>
+          callCLIProxyManagementApi(managedAuth.authIndex, {
+            method: 'GET',
+            url: `${Q_HOST}${LIMITS_PATH}?${qParams.toString()}`,
+            header: { ...baseHeaders, Authorization: 'Bearer $TOKEN$' },
+          }),
+      },
+    ];
+
+    let lastStatus = 0;
+    for (const attempt of attempts) {
+      // A management outage propagates immediately; only real provider
+      // responses move the chain to the next endpoint.
+      const response = await attempt.run();
+      if (response.ok) {
+        return {
+          ok: true,
+          status: response.status,
+          data: (await response.json()) as CodeWhispererResponse,
+        };
+      }
+      lastStatus = response.status;
+    }
+    return { ok: false, status: lastStatus };
+  };
 
   try {
-    let result = await fetchFromCodeWhisperer(accessToken, profileArn, authMethod);
-
-    // On auth rejection refresh once and retry
-    if (!result.ok && (result.status === 401 || result.status === 403)) {
-      const refreshed = await refreshKiroAccessToken(authData);
-      if (refreshed) {
-        accessToken = refreshed.accessToken;
-        persistRefreshedToken(authData.filePath, refreshed);
-        if (verbose) console.error('[i] Kiro token refreshed after auth error');
-        result = await fetchFromCodeWhisperer(accessToken, profileArn, authMethod);
-      }
-    }
+    const result = await runManagedChain();
 
     if (!result.ok || !result.data) {
+      const needsReauth = result.status === 401 || result.status === 403;
       return {
         success: false,
         planType: null,
         windows: [],
         lastUpdated: Date.now(),
-        error: `Kiro quota API rejected the request (status ${result.status || 'unknown'})`,
-        errorCode: 'fetch_failed',
+        error: needsReauth
+          ? 'Authentication expired or invalid'
+          : `Kiro quota API rejected the request (status ${result.status || 'unknown'})`,
+        errorCode: needsReauth ? 'reauth_required' : 'fetch_failed',
+        retryable: false,
+        needsReauth,
         accountId,
       };
     }
@@ -452,6 +385,20 @@ export async function fetchKiroQuota(
     if (verbose) console.error(`[i] Kiro quota fetched: ${parsed.windows.length} windows`);
     return parsed;
   } catch (error) {
+    if (error instanceof CLIProxyManagementUnavailableError) {
+      if (verbose) console.error('[!] CLIProxy management API unavailable during Kiro fetch');
+      return {
+        success: false,
+        planType: null,
+        windows: [],
+        lastUpdated: Date.now(),
+        error: 'CLIProxy is temporarily unavailable',
+        errorCode: 'cliproxy_unavailable',
+        errorDetail: error.message,
+        retryable: true,
+        accountId,
+      };
+    }
     const message = error instanceof Error ? error.message : String(error);
     if (verbose) console.error(`[!] Kiro quota fetch failed: ${message}`);
     return {
@@ -463,40 +410,6 @@ export async function fetchKiroQuota(
       errorCode: 'fetch_failed',
       accountId,
     };
-  }
-}
-
-/**
- * Read Kiro auth data from auth file
- */
-function readKiroAuthData(accountId: string): KiroAuthData | null {
-  try {
-    const authDir = path.join(os.homedir(), '.ccs', 'cliproxy', 'auth');
-    const files = fs.readdirSync(authDir);
-
-    // Find kiro auth file for this account
-    const kiroFile = files.find(
-      (f: string) => f.startsWith('kiro-aws-') && f.includes(accountId) && f.endsWith('.json')
-    );
-
-    if (!kiroFile) return null;
-
-    const filePath = path.join(authDir, kiroFile);
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-
-    return {
-      accessToken: content.access_token,
-      refreshToken: content.refresh_token,
-      profileArn: content.profile_arn,
-      authMethod: content.auth_method,
-      expiresAt: content.expires_at,
-      clientId: content.client_id,
-      clientSecret: content.client_secret,
-      region: content.region,
-      filePath,
-    };
-  } catch {
-    return null;
   }
 }
 

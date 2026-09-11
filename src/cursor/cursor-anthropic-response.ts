@@ -328,7 +328,10 @@ function createAnthropicStreamingResponse(response: Response): Response {
                 enqueue('message_stop', { type: 'message_stop' });
               }
             } catch {
-              enqueue('error', createAnthropicErrorPayload('api_error', STREAM_TRANSLATION_ERROR_MESSAGE));
+              enqueue(
+                'error',
+                createAnthropicErrorPayload('api_error', STREAM_TRANSLATION_ERROR_MESSAGE)
+              );
               controller.close();
               return;
             }
@@ -348,7 +351,10 @@ function createAnthropicStreamingResponse(response: Response): Response {
         }
       } catch {
         if (!hasStarted) {
-          enqueue('error', createAnthropicErrorPayload('api_error', STREAM_TRANSLATION_ERROR_MESSAGE));
+          enqueue(
+            'error',
+            createAnthropicErrorPayload('api_error', STREAM_TRANSLATION_ERROR_MESSAGE)
+          );
         }
       } finally {
         reader.releaseLock();

@@ -167,7 +167,11 @@ async function defaultGetPort(opts: { port: number[]; host: string }): Promise<n
  * immediately. The child receives --launch-id so its self-published process
  * record and shutdown cleanup are bound to this launch's identity.
  */
-function defaultSpawnDetachedServer(port: number, logPath: string, launchId?: string): ChildProcess {
+function defaultSpawnDetachedServer(
+  port: number,
+  logPath: string,
+  launchId?: string
+): ChildProcess {
   const { spawn } = require('child_process') as typeof import('child_process');
 
   const args = [process.argv[1], 'bar', 'serve', '--port', String(port)];
@@ -219,7 +223,13 @@ export async function defaultWaitForServerLive(baseUrl: string): Promise<void> {
   async function probe(): Promise<{ statusCode: number | null; tokenMatched: boolean }> {
     const url = new URL(`${baseUrl}/api/bar/health`);
     const nonce = createBarAuthNonce();
-    const requestProof = createBarAuthProof(token, 'request', 'GET', url.pathname + url.search, nonce);
+    const requestProof = createBarAuthProof(
+      token,
+      'request',
+      'GET',
+      url.pathname + url.search,
+      nonce
+    );
     return new Promise((resolve) => {
       let rawResponse = '';
       let settled = false;
@@ -234,7 +244,17 @@ export async function defaultWaitForServerLive(baseUrl: string): Promise<void> {
           new RegExp(`${BAR_AUTH_TOKEN_HEADER}:\\s*([^\\r\\n]+)`, 'i')
         );
         const proof = echoMatch ? echoMatch[1].trim() : '';
-        resolve({ statusCode, tokenMatched: isMatchingBarAuthProof(token, 'response', 'GET', url.pathname + url.search, nonce, proof) });
+        resolve({
+          statusCode,
+          tokenMatched: isMatchingBarAuthProof(
+            token,
+            'response',
+            'GET',
+            url.pathname + url.search,
+            nonce,
+            proof
+          ),
+        });
       };
       const socket = net.connect(
         { host: url.hostname.replace(/^\[|\]$/g, ''), port: Number(url.port) },
@@ -335,8 +355,12 @@ const SELF_BIRTH_IDENTITY = getProcessBirthIdentity(process.pid);
 function processIsLive(pid: number, birthIdentity: string | null): boolean {
   const current = pid === process.pid ? SELF_BIRTH_IDENTITY : getProcessBirthIdentity(pid);
   if (current !== null) return birthIdentity === null || current === birthIdentity;
-  try { process.kill(pid, 0); return birthIdentity === null; }
-  catch { return false; }
+  try {
+    process.kill(pid, 0);
+    return birthIdentity === null;
+  } catch {
+    return false;
+  }
 }
 
 function withLatestLaunchLock<T>(pointerPath: string, launchId: string, action: () => T): T {
@@ -361,7 +385,13 @@ function withLatestLaunchLock<T>(pointerPath: string, launchId: string, action: 
         const lock = JSON.parse(raw) as Partial<LatestLaunchLock>;
         const age = Date.now() - Date.parse(String(lock.createdAt));
         const validPid = Number.isSafeInteger(lock.pid) && (lock.pid ?? 0) > 0;
-        if (validPid && processIsLive(lock.pid!, typeof lock.birthIdentity === 'string' ? lock.birthIdentity : null)) {
+        if (
+          validPid &&
+          processIsLive(
+            lock.pid!,
+            typeof lock.birthIdentity === 'string' ? lock.birthIdentity : null
+          )
+        ) {
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
           continue;
         }
@@ -382,24 +412,37 @@ function withLatestLaunchLock<T>(pointerPath: string, launchId: string, action: 
     }
   }
   if (lockFd === undefined) throw new Error(`Timed out acquiring ${lockPath}`);
-  try { return action(); }
-  finally {
+  try {
+    return action();
+  } finally {
     fs.closeSync(lockFd);
     fs.rmSync(lockPath, { force: true });
   }
 }
 
 function readCurrentPointer(pointerPath: string): LatestLaunchPointer | null {
-  try { return JSON.parse(fs.readFileSync(pointerPath, 'utf8')) as LatestLaunchPointer; }
-  catch { return null; }
+  try {
+    return JSON.parse(fs.readFileSync(pointerPath, 'utf8')) as LatestLaunchPointer;
+  } catch {
+    return null;
+  }
 }
 
 /** Replace pointer only when this launch still owns it or is newer. */
-export function defaultWriteLatestLaunchPointer(pointerPath: string, pointer: LatestLaunchPointer): boolean {
+export function defaultWriteLatestLaunchPointer(
+  pointerPath: string,
+  pointer: LatestLaunchPointer
+): boolean {
   return withLatestLaunchLock(pointerPath, pointer.launchId, () => {
     let current: LatestLaunchPointer | null = null;
     current = readCurrentPointer(pointerPath);
-    if (current?.launchId !== pointer.launchId && current?.startedAt && (current.startedAt > pointer.startedAt || current.startedAt === pointer.startedAt && current.launchId > pointer.launchId)) return false;
+    if (
+      current?.launchId !== pointer.launchId &&
+      current?.startedAt &&
+      (current.startedAt > pointer.startedAt ||
+        (current.startedAt === pointer.startedAt && current.launchId > pointer.launchId))
+    )
+      return false;
     if (current?.launchId !== pointer.launchId && pointer.status !== 'starting') return false;
     const tmpPath = `${pointerPath}.tmp-${process.pid}-${Date.now()}`;
     fs.writeFileSync(tmpPath, JSON.stringify(pointer, null, 2));
@@ -435,7 +478,12 @@ export async function handleBarLaunch(
   _args: string[],
   deps: Partial<LaunchDeps> = {}
 ): Promise<void> {
-  if (process.platform !== 'darwin' && process.platform !== 'win32' && Object.keys(deps).length === 0) throw new Error('CCS Bar supports macOS or Windows only.');
+  if (
+    process.platform !== 'darwin' &&
+    process.platform !== 'win32' &&
+    Object.keys(deps).length === 0
+  )
+    throw new Error('CCS Bar supports macOS or Windows only.');
   // --launch-id binds a serve process to its launcher-owned attempt; it must
   // never come from user-facing launch args.
   if (_args.includes('--launch-id')) {
@@ -451,9 +499,11 @@ export async function handleBarLaunch(
   }
   const ccsDir = (deps.getCcsDir ?? defaultGetCcsDir)();
   const openApp = deps.openApp ?? defaultOpenApp;
-  const appInstallPath = deps.appInstallPath ?? (process.platform === 'win32'
-    ? (await import('./platform-adapter')).getWindowsBarPaths().exe
-    : DEFAULT_APP_INSTALL_PATH);
+  const appInstallPath =
+    deps.appInstallPath ??
+    (process.platform === 'win32'
+      ? (await import('./platform-adapter')).getWindowsBarPaths().exe
+      : DEFAULT_APP_INSTALL_PATH);
   const getPortFn = deps.getPort ?? defaultGetPort;
   const spawnDetachedServer = deps.spawnDetachedServer ?? defaultSpawnDetachedServer;
   const waitForServerLive = deps.waitForServerLive ?? defaultWaitForServerLive;
@@ -607,14 +657,16 @@ export async function handleBarLaunch(
 
   const publishPointer = (status: LatestLaunchStatus): boolean => {
     try {
-      return writeLatestLaunchPointer(latestPointerPath, {
-        schema: LATEST_LAUNCH_SCHEMA,
-        launchId,
-        port: selectedPort,
-        startedAt: attemptStartedAt,
-        logPath: serveLogPath,
-        status,
-      }) !== false;
+      return (
+        writeLatestLaunchPointer(latestPointerPath, {
+          schema: LATEST_LAUNCH_SCHEMA,
+          launchId,
+          port: selectedPort,
+          startedAt: attemptStartedAt,
+          logPath: serveLogPath,
+          status,
+        }) !== false
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[!] Could not update latest-launch pointer: ${msg}`);
@@ -629,7 +681,8 @@ export async function handleBarLaunch(
 
   const withOwnership = (action: () => void): boolean =>
     withLatestLaunchLock(latestPointerPath, launchId, () =>
-      readCurrentPointer(latestPointerPath)?.launchId === launchId ? (action(), true) : false);
+      readCurrentPointer(latestPointerPath)?.launchId === launchId ? (action(), true) : false
+    );
 
   const rollbackAttemptDir = getLaunchDir(ccsDir, `rollback-${launchId}`);
   const rollbackLogPath = getLaunchServeLogPath(ccsDir, `rollback-${launchId}`);
@@ -637,10 +690,13 @@ export async function handleBarLaunch(
   const rollbackPriorServer = async (): Promise<void> => {
     if (movingFrom === null) return;
     try {
-      if (!withOwnership(() => {
-        fs.mkdirSync(rollbackAttemptDir, { recursive: true });
-        spawnDetachedServer(movingFrom!.port, rollbackLogPath);
-      })) return;
+      if (
+        !withOwnership(() => {
+          fs.mkdirSync(rollbackAttemptDir, { recursive: true });
+          spawnDetachedServer(movingFrom!.port, rollbackLogPath);
+        })
+      )
+        return;
       await waitForServerLive(movingFrom.baseUrl);
       console.log(`[OK] Restored CCS Bar server at ${movingFrom.baseUrl}.`);
     } catch (rollbackErr) {
@@ -650,7 +706,7 @@ export async function handleBarLaunch(
     }
   };
 
-const priorLaunchJson = (() => {
+  const priorLaunchJson = (() => {
     try {
       if (fs.existsSync(launchJsonPath) && fs.statSync(launchJsonPath).isFile()) {
         return fs.readFileSync(launchJsonPath, 'utf8');
@@ -673,7 +729,11 @@ const priorLaunchJson = (() => {
   const restoreLaunchJson = (): void => {
     withOwnership(() => {
       if (priorLaunchJson === null) {
-        try { fs.rmSync(launchJsonPath, { force: true }); } catch { /* already gone or directory */ }
+        try {
+          fs.rmSync(launchJsonPath, { force: true });
+        } catch {
+          /* already gone or directory */
+        }
       } else {
         writeFileAtomic(launchJsonPath, priorLaunchJson);
       }
@@ -682,7 +742,11 @@ const priorLaunchJson = (() => {
   const restoreBarJson = (): void => {
     withOwnership(() => {
       if (priorBarJson === null) {
-        try { fs.rmSync(barJsonPath, { force: true }); } catch { /* already gone or directory */ }
+        try {
+          fs.rmSync(barJsonPath, { force: true });
+        } catch {
+          /* already gone or directory */
+        }
       } else {
         writeFileAtomic(barJsonPath, priorBarJson);
       }
@@ -702,7 +766,7 @@ const priorLaunchJson = (() => {
     } catch {
       /* already gone */
     }
-    const confirmed = typeof child.pid !== 'number' || await waitForDetachedChildExit(child);
+    const confirmed = typeof child.pid !== 'number' || (await waitForDetachedChildExit(child));
     if (!confirmed) {
       console.error('[!] Could not confirm the detached child exited before rollback.');
     }
@@ -761,11 +825,15 @@ const priorLaunchJson = (() => {
       await killSpawnedChildAndAwaitExit();
       return;
     }
-} catch (err) {
+  } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[X] Could not write launch.json: ${msg}`);
     restoreLaunchJson();
-    try { publishPointer('failed'); } catch { /* ignore */ }
+    try {
+      publishPointer('failed');
+    } catch {
+      /* ignore */
+    }
     await killSpawnedChildAndAwaitExit();
     await rollbackPriorServer();
     process.exitCode = 1;

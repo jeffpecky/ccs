@@ -60,6 +60,31 @@ describe('models.dev registry cache', () => {
     expect(getCachedModelsDevRegistry({ allowStale: false, now: 123 })?.openai.id).toBe('openai');
   });
 
+  it('serves repeated reads from in-memory cache without disk I/O', () => {
+    setCachedModelsDevRegistry(
+      {
+        openai: {
+          id: 'openai',
+          models: {
+            'gpt-5.5': { id: 'gpt-5.5', cost: { input: 5, output: 30 } },
+          },
+        },
+      },
+      100
+    );
+
+    // Initial read populates or uses in-memory cache
+    const first = getCachedModelsDevRegistry({ allowStale: true });
+    expect(first?.openai.models?.['gpt-5.5']?.cost?.input).toBe(5);
+
+    // Remove the file on disk — subsequent call should still return in-memory cache
+    const filePath = path.join(getCcsDir(), 'models-dev-registry-cache.json');
+    fs.unlinkSync(filePath);
+
+    const second = getCachedModelsDevRegistry({ allowStale: true });
+    expect(second?.openai.models?.['gpt-5.5']?.cost?.input).toBe(5);
+  });
+
   it('uses stale cache when live refresh fails', async () => {
     setCachedModelsDevRegistry(
       {

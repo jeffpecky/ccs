@@ -5,13 +5,16 @@
  * using the account token managed by CLIProxy auth flow.
  */
 
-import * as fs from 'node:fs';
-import { getAccountTokenPath, getProviderAccounts } from '../accounts/account-manager';
+import { getProviderAccounts } from '../accounts/account-manager';
 import type { GhcpQuotaResult, GhcpQuotaSnapshot } from './quota-types';
 import { clampPercent } from '../../utils/percentage';
+import {
+  callProviderQuotaApi,
+  CLIProxyManagementUnavailableError,
+  resolveCLIProxyAuth,
+} from './cli-proxy-auth-resolver';
 
 const GHCP_USAGE_URL = 'https://api.github.com/copilot_internal/user';
-const GHCP_USAGE_TIMEOUT_MS = 10000;
 /**
  * Mirrors headers currently accepted by GitHub Copilot internal usage endpoint.
  * Keep aligned with upstream Copilot client/API changes when quota calls break.
@@ -37,13 +40,6 @@ interface RawGhcpUsageResponse {
     premium_interactions?: RawGhcpQuotaSnapshot;
     chat?: RawGhcpQuotaSnapshot;
     completions?: RawGhcpQuotaSnapshot;
-  };
-}
-
-interface TokenData {
-  access_token?: string;
-  token?: {
-    access_token?: string;
   };
 }
 
@@ -92,50 +88,6 @@ function normalizeSnapshot(raw?: RawGhcpQuotaSnapshot): GhcpQuotaSnapshot {
   };
 }
 
-function extractAccessToken(tokenData: TokenData): string | null {
-  if (typeof tokenData.access_token === 'string' && tokenData.access_token.trim()) {
-    return tokenData.access_token.trim();
-  }
-
-  if (
-    tokenData.token &&
-    typeof tokenData.token === 'object' &&
-    typeof tokenData.token.access_token === 'string' &&
-    tokenData.token.access_token.trim()
-  ) {
-    return tokenData.token.access_token.trim();
-  }
-
-  return null;
-}
-
-function readGhcpAccessToken(accountId: string): { accessToken: string | null; error?: string } {
-  const account = getProviderAccounts('ghcp').find((item) => item.id === accountId);
-  if (!account) {
-    return { accessToken: null, error: `Account not found: ${accountId}` };
-  }
-
-  const tokenPath = getAccountTokenPath(account);
-  if (!tokenPath || !fs.existsSync(tokenPath)) {
-    return { accessToken: null, error: 'Auth token file not found' };
-  }
-
-  try {
-    const raw = fs.readFileSync(tokenPath, 'utf-8');
-    const data = JSON.parse(raw) as TokenData;
-    const accessToken = extractAccessToken(data);
-    if (!accessToken) {
-      return { accessToken: null, error: 'No access token in auth file' };
-    }
-    return { accessToken };
-  } catch (error) {
-    return {
-      accessToken: null,
-      error: error instanceof Error ? error.message : 'Failed to parse auth token file',
-    };
-  }
-}
-
 function buildEmptyQuotaResult(error: string, accountId?: string): GhcpQuotaResult {
   return {
     success: false,
@@ -171,31 +123,34 @@ function normalizeUsageResponse(raw: RawGhcpUsageResponse): GhcpQuotaResult {
  * Fetch quota for one ghcp account.
  */
 export async function fetchGhcpQuota(accountId: string, verbose = false): Promise<GhcpQuotaResult> {
-  const { accessToken, error } = readGhcpAccessToken(accountId);
-  if (!accessToken) {
-    // Safe diagnostic: accountId + generic error only (never log token values/file contents).
-    if (verbose) console.error(`[!] ghcp quota token error (${accountId}): ${error}`);
-    return buildEmptyQuotaResult(error || 'Failed to load auth token', accountId);
-  }
-
   if (verbose) console.error(`[i] Fetching ghcp quota for ${accountId}...`);
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), GHCP_USAGE_TIMEOUT_MS);
+  let managedAuth: Awaited<ReturnType<typeof resolveCLIProxyAuth>>;
+  try {
+    managedAuth = await resolveCLIProxyAuth('github-copilot', accountId);
+  } catch (error) {
+    return {
+      ...buildEmptyQuotaResult('CLIProxy is temporarily unavailable', accountId),
+      errorCode: 'cliproxy_unavailable',
+      errorDetail: error instanceof Error ? error.message : undefined,
+      retryable: true,
+    };
+  }
+
+  if (!managedAuth) {
+    return {
+      ...buildEmptyQuotaResult('GitHub Copilot account is not loaded by CLIProxy', accountId),
+      errorCode: 'managed_auth_missing',
+    };
+  }
 
   try {
-    const response = await fetch(GHCP_USAGE_URL, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        Authorization: `token ${accessToken}`,
-        'User-Agent': GHCP_USER_AGENT,
-        'x-github-api-version': GHCP_API_VERSION,
-      },
+    const response = await callProviderQuotaApi(managedAuth, GHCP_USAGE_URL, {
+      Accept: 'application/json',
+      Authorization: 'token $TOKEN$',
+      'User-Agent': GHCP_USER_AGENT,
+      'x-github-api-version': GHCP_API_VERSION,
     });
-
-    clearTimeout(timeoutId);
 
     if (response.status === 401 || response.status === 403) {
       return {
@@ -218,14 +173,18 @@ export async function fetchGhcpQuota(accountId: string, verbose = false): Promis
       accountId,
     };
   } catch (error) {
-    clearTimeout(timeoutId);
-    const message =
-      error instanceof Error && error.name === 'AbortError'
-        ? 'Request timeout'
-        : error instanceof Error
-          ? error.message
-          : 'Unknown error';
-    return buildEmptyQuotaResult(message, accountId);
+    if (error instanceof CLIProxyManagementUnavailableError) {
+      return {
+        ...buildEmptyQuotaResult('CLIProxy is temporarily unavailable', accountId),
+        errorCode: 'cliproxy_unavailable',
+        errorDetail: error.message,
+        retryable: true,
+      };
+    }
+    return buildEmptyQuotaResult(
+      error instanceof Error ? error.message : 'Unknown error',
+      accountId
+    );
   }
 }
 
@@ -246,4 +205,4 @@ export async function fetchAllGhcpQuotas(
 }
 
 // Export for testing
-export { normalizeSnapshot as normalizeGhcpSnapshot, extractAccessToken as extractGhcpAccessToken };
+export { normalizeSnapshot as normalizeGhcpSnapshot };

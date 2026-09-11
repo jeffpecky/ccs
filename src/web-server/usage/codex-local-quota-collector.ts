@@ -15,6 +15,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { resolveCodexConfigPaths } from '../services/codex-dashboard-service';
 
@@ -60,9 +61,9 @@ export interface CodexLocalQuota {
 export interface CodexLocalQuotaDeps {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
-  existsSyncImpl?: (p: string) => boolean;
-  readdirImpl?: (dir: string) => fs.Dirent[];
-  statMtimeMsImpl?: (p: string) => number;
+  existsSyncImpl?: (p: string) => Promise<boolean>;
+  readdirImpl?: (dir: string) => Promise<fs.Dirent[]>;
+  statMtimeMsImpl?: (p: string) => Promise<number>;
   /** Returns the last N lines of a file (default: bounded fs tail). */
   tailLinesImpl?: (file: string, lines: number) => Promise<string[]>;
   now?: number;
@@ -152,17 +153,17 @@ function extractRateLimits(line: string): CodexRateLimits | null {
 }
 
 /** Recursive rollout-*.jsonl walker, lexicographically sorted (ISO ts in name). */
-function collectRolloutFiles(
+async function collectRolloutFiles(
   dir: string,
-  existsImpl: (p: string) => boolean,
-  readdirImpl: (d: string) => fs.Dirent[]
-): string[] {
-  if (!existsImpl(dir)) return [];
+  existsImpl: (p: string) => Promise<boolean>,
+  readdirImpl: (d: string) => Promise<fs.Dirent[]>
+): Promise<string[]> {
+  if (!(await existsImpl(dir))) return [];
   const files: string[] = [];
-  for (const entry of readdirImpl(dir)) {
+  for (const entry of await readdirImpl(dir)) {
     const entryPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      files.push(...collectRolloutFiles(entryPath, existsImpl, readdirImpl));
+      files.push(...(await collectRolloutFiles(entryPath, existsImpl, readdirImpl)));
       continue;
     }
     if (entry.isFile() && entry.name.startsWith('rollout-') && entry.name.endsWith('.jsonl')) {
@@ -289,17 +290,27 @@ async function readRateLimitsFromFile(
 export async function getCodexLocalQuota(
   deps: CodexLocalQuotaDeps = {}
 ): Promise<CodexLocalQuota | null> {
-  const existsImpl = deps.existsSyncImpl ?? fs.existsSync;
+  const existsImpl =
+    deps.existsSyncImpl ??
+    (async (p: string) => {
+      try {
+        await fsp.access(p);
+        return true;
+      } catch {
+        return false;
+      }
+    });
   const readdirImpl =
-    deps.readdirImpl ?? ((dir: string) => fs.readdirSync(dir, { withFileTypes: true }));
-  const statMtimeMsImpl = deps.statMtimeMsImpl ?? ((p: string) => fs.statSync(p).mtimeMs);
+    deps.readdirImpl ?? (async (dir: string) => await fsp.readdir(dir, { withFileTypes: true }));
+  const statMtimeMsImpl =
+    deps.statMtimeMsImpl ?? (async (p: string) => (await fsp.stat(p)).mtimeMs);
   const tailLinesImpl = deps.tailLinesImpl ?? defaultTailLines;
   const now = deps.now ?? Date.now();
 
   const { baseDir } = resolveCodexConfigPaths({ env: deps.env, homeDir: deps.homeDir });
   const sessionsDir = path.join(baseDir, 'sessions');
 
-  const rolloutFiles = collectRolloutFiles(sessionsDir, existsImpl, readdirImpl);
+  const rolloutFiles = await collectRolloutFiles(sessionsDir, existsImpl, readdirImpl);
   if (rolloutFiles.length === 0) return null;
 
   // Filenames carry an ISO timestamp, so the lexicographic order is chronological.
@@ -321,7 +332,7 @@ export async function getCodexLocalQuota(
   let stale = false;
   let staleAsOf: string | null = null;
   try {
-    const mtimeMs = statMtimeMsImpl(sourceFile);
+    const mtimeMs = await statMtimeMsImpl(sourceFile);
     stale = now - mtimeMs > STALE_AFTER_MS;
     if (stale) staleAsOf = new Date(mtimeMs).toISOString();
   } catch {

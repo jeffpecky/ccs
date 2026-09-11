@@ -91,7 +91,9 @@ export async function executeCopilotProfile(
   if (warnings.length > 0) {
     warnings.forEach(({ message }) => console.log(warn(message)));
     console.log(
-      warn('Configure from the dashboard settings and save the Copilot section to persist these replacements.')
+      warn(
+        'Configure from the dashboard settings and save the Copilot section to persist these replacements.'
+      )
     );
     console.log('');
   }
@@ -153,7 +155,9 @@ export async function executeCopilotProfile(
       console.error(`  npx copilot-api start --port ${normalizedConfig.port}`);
       console.error('');
       console.error('Or enable auto_start in config:');
-      console.error('  Configure from the dashboard settings (then enable auto_start in Copilot section)');
+      console.error(
+        '  Configure from the dashboard settings (then enable auto_start in Copilot section)'
+      );
       return 1;
     }
   }

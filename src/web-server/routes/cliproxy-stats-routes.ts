@@ -13,20 +13,16 @@ import {
   fetchCliproxyErrorLogContent,
 } from '../../cliproxy/services/stats-fetcher';
 import { fetchAccountQuota } from '../../cliproxy/quota/quota-fetcher';
-import { fetchCodexQuota } from '../../cliproxy/quota/quota-fetcher-codex';
+import { fetchCodexQuota, readCodexAuthData } from '../../cliproxy/quota/quota-fetcher-codex';
+import {
+  consumeCodexResetCredit,
+  fetchCodexResetCredits,
+} from '../../cliproxy/quota/codex-reset-credits';
 import { fetchClaudeQuota } from '../../cliproxy/quota/quota-fetcher-claude';
 import { fetchGeminiCliQuota } from '../../cliproxy/quota/quota-fetcher-gemini-cli';
 import { fetchGhcpQuota } from '../../cliproxy/quota/quota-fetcher-ghcp';
 import { fetchKiroQuota } from '../../cliproxy/quota/quota-fetcher-kiro';
-import { getCachedQuota, setCachedQuota } from '../../cliproxy/quota/quota-response-cache';
-import type {
-  CodexQuotaResult,
-  ClaudeQuotaResult,
-  GeminiCliQuotaResult,
-  GhcpQuotaResult,
-  KiroQuotaResult,
-} from '../../cliproxy/quota/quota-types';
-import type { QuotaResult } from '../../cliproxy/quota/quota-fetcher';
+
 import type { CLIProxyProvider } from '../../cliproxy/types';
 import { CLIPROXY_PROFILES } from '../../auth/profile-detector';
 import {
@@ -779,27 +775,50 @@ router.get('/quota/codex/:accountId', async (req: Request, res: Response): Promi
   }
 
   try {
-    // Check cache first
-    const cached = getCachedQuota<CodexQuotaResult>('codex', accountId);
-    if (cached) {
-      res.json({ ...cached, cached: true });
-      return;
-    }
-
-    // Fetch from external API
     const result = await fetchCodexQuota(accountId);
-
-    // Cache successful and stable failure states; skip transient network failures.
-    if (shouldCacheQuotaResult(result)) {
-      setCachedQuota('codex', accountId, result);
-    }
-
     res.json(result);
   } catch (error) {
     console.error(`[cliproxy-stats] ${(error as Error).message}`);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+router.get(
+  '/quota/codex/:accountId/reset-credits',
+  async (req: Request, res: Response): Promise<void> => {
+    const { accountId } = req.params;
+    const auth = readCodexAuthData(accountId);
+    if (!auth?.accessToken) {
+      res.status(404).json({ error: 'Codex account auth not found' });
+      return;
+    }
+
+    try {
+      res.json(await fetchCodexResetCredits(auth.accessToken));
+    } catch (error) {
+      res.status(502).json({ error: (error as Error).message });
+    }
+  }
+);
+
+router.post(
+  '/quota/codex/:accountId/reset-credits',
+  async (req: Request, res: Response): Promise<void> => {
+    const { accountId } = req.params;
+    const auth = readCodexAuthData(accountId);
+    if (!auth?.accessToken) {
+      res.status(404).json({ error: 'Codex account auth not found' });
+      return;
+    }
+
+    try {
+      const result = await consumeCodexResetCredit(auth.accessToken, crypto.randomUUID());
+      res.status(result.ok || result.noCredit ? 200 : 502).json(result);
+    } catch (error) {
+      res.status(502).json({ error: (error as Error).message });
+    }
+  }
+);
 
 /**
  * GET /api/cliproxy/quota/claude/:accountId - Get Claude quota for a specific account
@@ -827,21 +846,7 @@ router.get('/quota/claude/:accountId', async (req: Request, res: Response): Prom
   }
 
   try {
-    // Check cache first
-    const cached = getCachedQuota<ClaudeQuotaResult>('claude', accountId);
-    if (cached) {
-      res.json({ ...cached, cached: true });
-      return;
-    }
-
-    // Fetch from external API
     const result = await fetchClaudeQuota(accountId);
-
-    // Cache successful and stable failure states; skip transient network failures.
-    if (shouldCacheQuotaResult(result)) {
-      setCachedQuota('claude', accountId, result);
-    }
-
     res.json(result);
   } catch (error) {
     console.error(`[cliproxy-stats] ${(error as Error).message}`);
@@ -875,21 +880,7 @@ router.get('/quota/gemini/:accountId', async (req: Request, res: Response): Prom
   }
 
   try {
-    // Check cache first
-    const cached = getCachedQuota<GeminiCliQuotaResult>('gemini', accountId);
-    if (cached) {
-      res.json({ ...cached, cached: true });
-      return;
-    }
-
-    // Fetch from external API
     const result = await fetchGeminiCliQuota(accountId);
-
-    // Cache successful and stable failure states; skip transient network failures.
-    if (shouldCacheQuotaResult(result)) {
-      setCachedQuota('gemini', accountId, result);
-    }
-
     res.json(result);
   } catch (error) {
     console.error(`[cliproxy-stats] ${(error as Error).message}`);
@@ -923,21 +914,7 @@ router.get('/quota/ghcp/:accountId', async (req: Request, res: Response): Promis
   }
 
   try {
-    // Check cache first
-    const cached = getCachedQuota<GhcpQuotaResult>('ghcp', accountId);
-    if (cached) {
-      res.json({ ...cached, cached: true });
-      return;
-    }
-
-    // Fetch from GitHub API
     const result = await fetchGhcpQuota(accountId);
-
-    // Cache successful and stable failure states; skip transient network failures.
-    if (shouldCacheQuotaResult(result)) {
-      setCachedQuota('ghcp', accountId, result);
-    }
-
     res.json(result);
   } catch (error) {
     console.error(`[cliproxy-stats] ${(error as Error).message}`);
@@ -971,21 +948,7 @@ router.get('/quota/kiro/:accountId', async (req: Request, res: Response): Promis
   }
 
   try {
-    // Check cache first
-    const cached = getCachedQuota<KiroQuotaResult>('kiro', accountId);
-    if (cached) {
-      res.json({ ...cached, cached: true });
-      return;
-    }
-
-    // Fetch from AWS CodeWhisperer API
     const result = await fetchKiroQuota(accountId);
-
-    // Cache successful and stable failure states; skip transient network failures.
-    if (shouldCacheQuotaResult(result)) {
-      setCachedQuota('kiro', accountId, result);
-    }
-
     res.json(result);
   } catch (error) {
     console.error(`[cliproxy-stats] ${(error as Error).message}`);
@@ -1030,21 +993,7 @@ router.get('/quota/:provider/:accountId', async (req: Request, res: Response): P
   }
 
   try {
-    // Check cache first
-    const cached = getCachedQuota<QuotaResult>(provider, accountId);
-    if (cached) {
-      res.json({ ...cached, cached: true });
-      return;
-    }
-
-    // Fetch from external API
     const result = await fetchAccountQuota(provider as CLIProxyProvider, accountId);
-
-    // Cache successful results
-    if (result.success) {
-      setCachedQuota(provider, accountId, result);
-    }
-
     res.json(result);
   } catch (error) {
     console.error(`[cliproxy-stats] ${(error as Error).message}`);

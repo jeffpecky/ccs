@@ -25,7 +25,6 @@ import type {
   ProfileConfig,
   OAuthAccounts,
   CLIProxyAuthConfig,
-  TokenRefreshSettings,
   DashboardAuthConfig,
   CLIProxyVariantConfig,
   CompositeTierConfig,

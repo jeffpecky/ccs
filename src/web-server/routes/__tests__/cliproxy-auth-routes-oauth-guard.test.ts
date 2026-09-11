@@ -126,9 +126,7 @@ describe('start-url route: response body contract', () => {
 
 describe('status route: duplicate completion polling', () => {
   it('returns the completed account again for duplicate polls after state cleanup', async () => {
-    const authRoutes = await import(
-      `../cliproxy-auth-routes?duplicate-status-${Date.now()}`
-    );
+    const authRoutes = await import(`../cliproxy-auth-routes?duplicate-status-${Date.now()}`);
     const account = {
       id: 'newtrial530@gmail.com',
       email: 'newtrial530@gmail.com',

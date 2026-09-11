@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import * as readline from 'readline';
 import { getCcsDir } from '../../utils/config-manager';
@@ -135,23 +136,23 @@ function isCodexNativeUsageCache(value: unknown): value is CodexNativeUsageCache
   return Object.values(value.files).every(isCachedRolloutFile);
 }
 
-function chmodBestEffort(targetPath: string, mode: number): void {
+async function chmodBestEffort(targetPath: string, mode: number): Promise<void> {
   try {
-    fs.chmodSync(targetPath, mode);
+    await fsp.chmod(targetPath, mode);
   } catch {
     // Cache reads and writes remain best-effort on filesystems that do not support chmod.
   }
 }
 
-function readUsageCache(
+async function readUsageCache(
   cacheDir: string,
   includeCliproxySessions: boolean
-): CodexNativeUsageCache | null {
+): Promise<CodexNativeUsageCache | null> {
   try {
     const cachePath = getCacheFilePath(cacheDir, includeCliproxySessions);
-    if (!fs.existsSync(cachePath)) return null;
+    await fsp.access(cachePath);
 
-    const parsed = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as unknown;
+    const parsed = JSON.parse(await fsp.readFile(cachePath, 'utf8')) as unknown;
     if (!isCodexNativeUsageCache(parsed)) return null;
     if (parsed.includeCliproxySessions !== includeCliproxySessions) return null;
 
@@ -161,19 +162,19 @@ function readUsageCache(
   }
 }
 
-function writeUsageCache(cacheDir: string, cache: CodexNativeUsageCache): void {
+async function writeUsageCache(cacheDir: string, cache: CodexNativeUsageCache): Promise<void> {
   try {
-    fs.mkdirSync(cacheDir, { recursive: true, mode: SECURE_CACHE_DIR_MODE });
-    chmodBestEffort(cacheDir, SECURE_CACHE_DIR_MODE);
+    await fsp.mkdir(cacheDir, { recursive: true, mode: SECURE_CACHE_DIR_MODE });
+    await chmodBestEffort(cacheDir, SECURE_CACHE_DIR_MODE);
     const cachePath = getCacheFilePath(cacheDir, cache.includeCliproxySessions);
     const tempPath = `${cachePath}.${process.pid}.tmp`;
-    fs.writeFileSync(tempPath, JSON.stringify(cache), {
+    await fsp.writeFile(tempPath, JSON.stringify(cache), {
       encoding: 'utf8',
       mode: SECURE_CACHE_FILE_MODE,
     });
-    chmodBestEffort(tempPath, SECURE_CACHE_FILE_MODE);
-    fs.renameSync(tempPath, cachePath);
-    chmodBestEffort(cachePath, SECURE_CACHE_FILE_MODE);
+    await chmodBestEffort(tempPath, SECURE_CACHE_FILE_MODE);
+    await fsp.rename(tempPath, cachePath);
+    await chmodBestEffort(cachePath, SECURE_CACHE_FILE_MODE);
   } catch {
     // Best-effort only.
   }
@@ -313,7 +314,7 @@ export async function scanCodexNativeUsageEntries(
   }
 
   const cacheDir = options.cacheDir ?? getDefaultCacheDir();
-  const previousCache = readUsageCache(cacheDir, includeCliproxySessions);
+  const previousCache = await readUsageCache(cacheDir, includeCliproxySessions);
   const nextCache: CodexNativeUsageCache = {
     version: CODEX_NATIVE_USAGE_CACHE_VERSION,
     includeCliproxySessions,
@@ -341,6 +342,6 @@ export async function scanCodexNativeUsageEntries(
     };
   }
 
-  writeUsageCache(cacheDir, nextCache);
+  await writeUsageCache(cacheDir, nextCache);
   return entries;
 }

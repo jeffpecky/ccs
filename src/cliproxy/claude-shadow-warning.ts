@@ -170,9 +170,7 @@ export function maybeShowClaudeRoutingNotice(): void {
 
   markRoutingNoticeShown();
 
-  process.stderr.write(
-    info('Claude: traffic routes through the local CLIProxy instance.') + '\n'
-  );
+  process.stderr.write(info('Claude: traffic routes through the local CLIProxy instance.') + '\n');
   process.stderr.write(
     `    Native Claude Code (direct Anthropic API) is still available via bare \`ccs\`.\n`
   );

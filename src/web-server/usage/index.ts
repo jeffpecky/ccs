@@ -22,7 +22,7 @@ export type {
 
 // Disk cache
 export {
-  readDiskCache,
+  readDiskCacheAsync,
   writeDiskCache,
   isDiskCacheFresh,
   isDiskCacheStale,

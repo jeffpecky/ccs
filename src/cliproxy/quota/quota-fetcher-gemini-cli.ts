@@ -9,7 +9,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getAuthDir } from '../config/config-generator';
 import { getProviderAccounts, getPausedDir, setAccountTier } from '../accounts/account-manager';
-import { getTokenExpiryTimestamp, sanitizeEmail, isTokenExpired } from '../auth/auth-utils';
+import { sanitizeEmail } from '../auth/auth-utils';
 import {
   buildGeminiCliBucketsFromParsedBuckets,
   type GeminiCliParsedBucket,
@@ -38,14 +38,10 @@ const GEMINI_CLI_ERROR_DETAIL_MAX_LENGTH = 320;
 const GEMINI_CLI_ERROR_DETAIL_TRUNCATION_SUFFIX = '...[truncated]';
 const GEMINI_CLI_G1_CREDIT_TYPE = 'GOOGLE_ONE_AI';
 const MANAGEMENT_API_TIMEOUT_MS = 5000;
-const SECONDARY_REQUEST_TIMEOUT_MS = 2000;
 
-/** Auth data extracted from Gemini CLI auth file */
+/** Non-secret metadata extracted from Gemini CLI auth file */
 interface GeminiCliAuthData {
-  accessToken: string;
   projectId: string | null;
-  isExpired: boolean;
-  expiresAt: string | number | null;
 }
 
 /** Raw bucket from API response */
@@ -101,10 +97,12 @@ interface GeminiCliSupplementaryInfo {
 }
 
 interface ManagementAuthFile {
+  id?: string;
   auth_index?: string | number;
   provider?: string;
   type?: string;
   email?: string;
+  account?: string;
   name?: string;
 }
 
@@ -154,46 +152,11 @@ function resolveGeminiCliProjectId(accountField: string): string | null {
 }
 
 /**
- * Extract access token from Gemini auth file data
- * Handles both flat (access_token) and nested (token.access_token) structures
+ * Extract project ID from Gemini auth file data (non-secret metadata only).
  */
-function extractAccessToken(data: Record<string, unknown>): string | null {
-  // Flat structure: { access_token: "..." }
-  if (typeof data.access_token === 'string') {
-    return data.access_token;
-  }
-  // Nested structure: { token: { access_token: "..." } }
-  if (data.token && typeof data.token === 'object') {
-    const token = data.token as Record<string, unknown>;
-    if (typeof token.access_token === 'string') {
-      return token.access_token;
-    }
-  }
-  return null;
-}
-
-/**
- * Extract expiry from Gemini auth file data
- * Handles both flat (expired) and nested (token.expiry) structures
- */
-function extractExpiry(data: Record<string, unknown>): string | number | null {
-  // Flat structure: { expired: "..." }
-  if (typeof data.expired === 'string') {
-    return data.expired;
-  }
-  if (typeof data.expired === 'number') {
-    return data.expired;
-  }
-  // Nested structure: { token: { expiry: "..." } }
-  if (data.token && typeof data.token === 'object') {
-    const token = data.token as Record<string, unknown>;
-    if (typeof token.expiry === 'string') {
-      return token.expiry;
-    }
-    if (typeof token.expiry === 'number') {
-      return token.expiry;
-    }
-  }
+function extractProjectId(data: Record<string, unknown>): string | null {
+  if (typeof data.project_id === 'string') return data.project_id;
+  if (typeof data.account === 'string') return resolveGeminiCliProjectId(data.account);
   return null;
 }
 
@@ -220,28 +183,18 @@ function safeParseJson(bodyText: string): unknown {
   }
 }
 
-async function readManagedResponse(
-  response: Response,
-  viaManagement: boolean
-): Promise<ManagedResponse> {
-  const bodyText = await response.text();
-  return {
-    status: response.status,
-    bodyText,
-    json: safeParseJson(bodyText),
-    viaManagement,
-  };
-}
-
 function isGeminiAuthFileForAccount(file: ManagementAuthFile, accountId: string): boolean {
   const rawProvider = normalizeStringValue(file.provider ?? file.type);
   if (!rawProvider || mapExternalProviderName(rawProvider) !== 'gemini') {
     return false;
   }
 
-  const email = normalizeStringValue(file.email);
   const normalizedAccountId = accountId.trim().toLowerCase();
-  if (email?.toLowerCase() === normalizedAccountId) {
+  if (
+    [file.id, file.email, file.account].some(
+      (value) => normalizeStringValue(value)?.toLowerCase() === normalizedAccountId
+    )
+  ) {
     return true;
   }
 
@@ -307,6 +260,13 @@ class GeminiManagedAuthUnavailableError extends Error {
   }
 }
 
+class GeminiManagedAuthMissingError extends Error {
+  constructor() {
+    super('Gemini account is not loaded by CLIProxy');
+    this.name = 'GeminiManagedAuthMissingError';
+  }
+}
+
 async function performManagedGeminiRequest(
   accountId: string,
   url: string,
@@ -358,10 +318,14 @@ async function performManagedGeminiRequest(
     }
 
     const apiResponse = (await response.json()) as ManagementApiCallResponse;
+    const status = apiResponse.status_code;
+    if (!Number.isInteger(status) || status === undefined || status < 200 || status > 599) {
+      return { response: null, unavailable: true };
+    }
     const bodyText = typeof apiResponse.body === 'string' ? apiResponse.body : '';
     return {
       response: {
-        status: typeof apiResponse.status_code === 'number' ? apiResponse.status_code : 500,
+        status,
         bodyText,
         json: safeParseJson(bodyText),
         viaManagement: true,
@@ -376,83 +340,29 @@ async function performManagedGeminiRequest(
 
 async function performGeminiCliRequest(
   accountId: string,
-  accessToken: string,
   url: string,
   body: string,
-  preferManagement = false,
   authContext?: ManagedGeminiAuthContext
 ): Promise<ManagedResponse> {
-  let managementAttempted = false;
-  let managementUnavailable = false;
-
-  if (preferManagement) {
-    managementAttempted = true;
-    const managedResult = await performManagedGeminiRequest(
-      accountId,
-      url,
-      body,
-      MANAGEMENT_API_TIMEOUT_MS,
-      authContext
-    );
-    managementUnavailable = managedResult.unavailable;
-    if (managedResult.response) {
-      return managedResult.response;
-    }
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(
-    () => controller.abort(),
-    managementAttempted ? SECONDARY_REQUEST_TIMEOUT_MS : MANAGEMENT_API_TIMEOUT_MS
+  const managedResult = await performManagedGeminiRequest(
+    accountId,
+    url,
+    body,
+    MANAGEMENT_API_TIMEOUT_MS,
+    authContext
   );
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body,
-    });
-    clearTimeout(timeoutId);
-
-    const directResult = await readManagedResponse(response, false);
-    if (directResult.status !== 401) {
-      return directResult;
-    }
-
-    if (managementAttempted) {
-      if (managementUnavailable) {
-        throw new GeminiManagedAuthUnavailableError();
-      }
-      return directResult;
-    }
-
-    const managedResult = await performManagedGeminiRequest(
-      accountId,
-      url,
-      body,
-      SECONDARY_REQUEST_TIMEOUT_MS,
-      authContext
-    );
-    if (managedResult.response) {
-      return managedResult.response;
-    }
-    if (managedResult.unavailable) {
-      throw new GeminiManagedAuthUnavailableError();
-    }
-    return directResult;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
+  if (managedResult.response) {
+    return managedResult.response;
   }
+  if (managedResult.unavailable) {
+    throw new GeminiManagedAuthUnavailableError();
+  }
+  throw new GeminiManagedAuthMissingError();
 }
 
 /**
- * Read auth data from Gemini CLI auth file
- * Supports multiple file naming conventions and JSON structures
+ * Read non-secret Gemini CLI auth metadata (project ID) from auth files.
+ * Never reads or returns access tokens; OAuth refresh stays inside CLIProxy.
  */
 function readGeminiCliAuthData(accountId: string): GeminiCliAuthData | null {
   const authDirs = [getAuthDir(), getPausedDir()];
@@ -471,20 +381,9 @@ function readGeminiCliAuthData(accountId: string): GeminiCliAuthData | null {
       try {
         const content = fs.readFileSync(legacyPath, 'utf-8');
         const data = JSON.parse(content) as Record<string, unknown>;
-        const accessToken = extractAccessToken(data);
-        if (accessToken) {
-          const projectId =
-            typeof data.project_id === 'string'
-              ? data.project_id
-              : resolveGeminiCliProjectId(String(data.account || ''));
-          const expiry = extractExpiry(data);
-
-          return {
-            accessToken,
-            projectId,
-            isExpired: isTokenExpired(expiry ?? undefined),
-            expiresAt: expiry,
-          };
+        const projectId = extractProjectId(data);
+        if (projectId) {
+          return { projectId };
         }
       } catch {
         // Continue to fallback
@@ -510,20 +409,9 @@ function readGeminiCliAuthData(accountId: string): GeminiCliAuthData | null {
 
         // Must match account AND be gemini type (or legacy gemini- prefix)
         if ((matchesEmail || matchesFilename) && (isGeminiType || file.startsWith('gemini-'))) {
-          const accessToken = extractAccessToken(data);
-          if (accessToken) {
-            const projectId =
-              typeof data.project_id === 'string'
-                ? data.project_id
-                : resolveGeminiCliProjectId(String(data.account || ''));
-            const expiry = extractExpiry(data);
-
-            return {
-              accessToken,
-              projectId,
-              isExpired: isTokenExpired(expiry ?? undefined),
-              expiresAt: expiry,
-            };
+          const projectId = extractProjectId(data);
+          if (projectId) {
+            return { projectId };
           }
         }
       } catch {
@@ -592,7 +480,6 @@ function resolveGeminiCliCreditBalance(payload: GeminiCliCodeAssistResponse | nu
 
 async function fetchGeminiCliSupplementary(
   accountId: string,
-  accessToken: string,
   projectId: string,
   verbose: boolean,
   authContext?: ManagedGeminiAuthContext
@@ -610,18 +497,15 @@ async function fetchGeminiCliSupplementary(
   try {
     const response = await performGeminiCliRequest(
       accountId,
-      accessToken,
       GEMINI_CLI_CODE_ASSIST_URL,
       requestBody,
-      false,
       authContext
     );
 
     if (response.status !== 200) {
       if (verbose) {
-        const source = response.viaManagement ? 'managed' : 'direct';
         console.error(
-          `[i] Gemini CLI supplementary metadata unavailable via ${source}: HTTP ${response.status}`
+          `[i] Gemini CLI supplementary metadata unavailable via managed: HTTP ${response.status}`
         );
       }
       return { tierLabel: null, tierId: null, creditBalance: null, normalizedTier: 'unknown' };
@@ -958,7 +842,8 @@ async function fetchWithAuthData(
     return buildGeminiCliFailureResult(accountId, null, {
       error,
       errorCode: 'missing_project_id',
-      actionHint: 'Authenticate Gemini from the dashboard to reconnect this account and recover the project ID.',
+      actionHint:
+        'Authenticate Gemini from the dashboard to reconnect this account and recover the project ID.',
       retryable: false,
     });
   }
@@ -966,7 +851,6 @@ async function fetchWithAuthData(
   const authContext: ManagedGeminiAuthContext = {};
   const supplementaryPromise = fetchGeminiCliSupplementary(
     accountId,
-    authData.accessToken,
     authData.projectId,
     verbose,
     authContext
@@ -976,16 +860,13 @@ async function fetchWithAuthData(
   try {
     const response = await performGeminiCliRequest(
       accountId,
-      authData.accessToken,
       GEMINI_CLI_QUOTA_URL,
       requestBody,
-      authData.isExpired,
       authContext
     );
 
     if (verbose) {
-      const source = response.viaManagement ? 'managed' : 'direct';
-      console.error(`[i] Gemini CLI API status via ${source}: ${response.status}`);
+      console.error(`[i] Gemini CLI API status via managed: ${response.status}`);
     }
 
     if (response.status !== 200) {
@@ -1030,11 +911,19 @@ async function fetchWithAuthData(
   } catch (err) {
     if (err instanceof GeminiManagedAuthUnavailableError) {
       return buildGeminiCliFailureResult(accountId, authData.projectId, {
-        error: 'Gemini delegated auth refresh is temporarily unavailable',
-        errorCode: 'managed_auth_unavailable',
+        error: 'CLIProxy is temporarily unavailable',
+        errorCode: 'cliproxy_unavailable',
         errorDetail: err.message,
-        actionHint: 'Retry later. CLIProxy management could not refresh this Gemini account.',
+        actionHint: 'Start CLIProxy and retry the quota check.',
         retryable: true,
+      });
+    }
+    if (err instanceof GeminiManagedAuthMissingError) {
+      return buildGeminiCliFailureResult(accountId, authData.projectId, {
+        error: err.message,
+        errorCode: 'managed_auth_missing',
+        actionHint: 'Load this Gemini account in CLIProxy and retry.',
+        retryable: false,
       });
     }
 
@@ -1081,14 +970,6 @@ export async function fetchGeminiCliQuota(
       actionHint: 'Authenticate Gemini from the dashboard to reconnect this account.',
       retryable: false,
     });
-  }
-
-  if (authData.isExpired && verbose) {
-    const expiresAt = getTokenExpiryTimestamp(authData.expiresAt);
-    const expiryLabel = expiresAt ? new Date(expiresAt).toISOString() : 'unknown';
-    console.error(
-      `[i] Gemini access token is expired (${expiryLabel}); quota requests will defer to managed auth when available.`
-    );
   }
 
   return await fetchWithAuthData(authData, accountId, verbose);

@@ -18,7 +18,11 @@ import { fetchClaudeQuota } from './quota-fetcher-claude';
 import { fetchCodexQuota } from './quota-fetcher-codex';
 import { fetchGeminiCliQuota } from './quota-fetcher-gemini-cli';
 import { fetchGhcpQuota } from './quota-fetcher-ghcp';
-import { fetchKiroQuota, calculateKiroMinQuotaPercent, type KiroQuotaResult } from './quota-fetcher-kiro';
+import {
+  fetchKiroQuota,
+  calculateKiroMinQuotaPercent,
+  type KiroQuotaResult,
+} from './quota-fetcher-kiro';
 import type {
   ClaudeQuotaResult,
   CodexQuotaResult,

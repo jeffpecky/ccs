@@ -1,6 +1,6 @@
 import * as os from 'os';
 
-export const DEFAULT_DASHBOARD_HOST = 'localhost';
+export const DEFAULT_DASHBOARD_HOST = '127.0.0.1';
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const WILDCARD_HOSTS = new Set(['0.0.0.0', '::']);

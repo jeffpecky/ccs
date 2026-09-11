@@ -855,6 +855,12 @@ export const MODEL_CATALOGS: Record<string, ProviderCatalog> = {
       },
     ],
   },
+  'openai-compatibility': {
+    provider: 'openai-compatibility',
+    displayName: 'OpenAI-Compatible',
+    defaultModel: '',
+    models: [],
+  },
 };
 
 function findCatalogModelInCatalog(catalog: ProviderCatalog | undefined, modelId: string) {

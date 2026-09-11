@@ -550,9 +550,7 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-async function getToolStatus(
-  toolId: string
-): Promise<'installed' | 'not-installed' | 'unknown'> {
+async function getToolStatus(toolId: string): Promise<'installed' | 'not-installed' | 'unknown'> {
   try {
     const isWindows = process.platform === 'win32';
     const binaryNames: Record<string, string[]> = {
@@ -579,12 +577,8 @@ async function getToolStatus(
 
     // Fallback: check if config file exists
     const configPaths: Record<string, string[]> = {
-      'claude-code': [
-        path.join(os.homedir(), '.claude', 'settings.json'),
-      ],
-      opencode: [
-        path.join(os.homedir(), '.config', 'opencode', 'opencode.json'),
-      ],
+      'claude-code': [path.join(os.homedir(), '.claude', 'settings.json')],
+      opencode: [path.join(os.homedir(), '.config', 'opencode', 'opencode.json')],
       codex: [
         path.join(os.homedir(), '.codex', 'config.toml'),
         path.join(os.homedir(), '.codex', 'auth.json'),

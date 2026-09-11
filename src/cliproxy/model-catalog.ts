@@ -496,6 +496,12 @@ export const MODEL_CATALOG: Partial<Record<CLIProxyProvider, ProviderCatalog>> =
       },
     ],
   },
+  'openai-compatibility': {
+    provider: 'openai-compatibility',
+    displayName: 'OpenAI-Compatible',
+    defaultModel: '',
+    models: [],
+  },
 };
 
 /**

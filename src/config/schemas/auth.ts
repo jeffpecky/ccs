@@ -6,7 +6,6 @@
  * - ProfileConfig: API-based profiles (env var injection)
  * - OAuthAccounts: CLIProxy nickname-to-email mapping
  * - CLIProxyAuthConfig: API key and management secret customization
- * - TokenRefreshSettings: background token refresh worker config
  * - DashboardAuthConfig: dashboard login protection
  */
 
@@ -64,23 +63,6 @@ export interface CLIProxyAuthConfig {
   api_key?: string;
   /** Management secret for Control Panel login (default: 'mgmt-...') */
   management_secret?: string;
-}
-
-/**
- * Token refresh configuration.
- * Manages background token refresh worker settings.
- */
-export interface TokenRefreshSettings {
-  /** Enable background token refresh (default: true) */
-  enabled?: boolean;
-  /** Refresh check interval in minutes (default: 5) */
-  interval_minutes?: number;
-  /** Preemptive refresh time in minutes (default: 30) */
-  preemptive_minutes?: number;
-  /** Maximum retry attempts per token (default: 3) */
-  max_retries?: number;
-  /** Enable verbose logging (default: false) */
-  verbose?: boolean;
 }
 
 /**

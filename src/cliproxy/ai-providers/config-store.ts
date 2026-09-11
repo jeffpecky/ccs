@@ -18,6 +18,9 @@ type FamilyEntriesMap = {
   'claude-api-key': AiProviderApiKeyEntry[];
   'vertex-api-key': AiProviderApiKeyEntry[];
   'openai-compatibility': OpenAICompatEntry[];
+  'cloudflare-api-key': AiProviderApiKeyEntry[];
+  'nvidia-api-key': AiProviderApiKeyEntry[];
+  'openrouter-api-key': AiProviderApiKeyEntry[];
 };
 
 export type FamilyEntries<F extends AiProviderFamilyId> = FamilyEntriesMap[F];
@@ -151,7 +154,7 @@ export async function readFamilyEntries<F extends AiProviderFamilyId>(
   if (normalized.changed) {
     await client.putSection<FamilyEntries<F>[number]>(
       family,
-      normalized.entries as FamilyEntries<F>[number][]
+      normalized.entries as unknown as FamilyEntries<F>[number][]
     );
   }
   return normalized.entries;
@@ -179,6 +182,6 @@ export async function writeFamilyEntries<F extends AiProviderFamilyId>(
 
   await client.putSection<FamilyEntries<F>[number]>(
     family,
-    normalized.entries as FamilyEntries<F>[number][]
+    normalized.entries as unknown as FamilyEntries<F>[number][]
   );
 }

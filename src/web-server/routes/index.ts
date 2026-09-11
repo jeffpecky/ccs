@@ -75,7 +75,16 @@ apiRoutes.use((req, res, next) => {
     if (requireLocalAccessWhenAuthDisabled(req, res, BAR_LOCAL_ACCESS_ERROR)) {
       const nonce = req.header(BAR_AUTH_NONCE_HEADER)?.trim() ?? '';
       if (isValidBarAuthNonce(nonce)) {
-        res.setHeader(BAR_AUTH_TOKEN_HEADER, createBarAuthProof(getOrCreateBarAuthToken(), 'response', req.method, req.originalUrl, nonce));
+        res.setHeader(
+          BAR_AUTH_TOKEN_HEADER,
+          createBarAuthProof(
+            getOrCreateBarAuthToken(),
+            'response',
+            req.method,
+            req.originalUrl,
+            nonce
+          )
+        );
       }
       next();
     }

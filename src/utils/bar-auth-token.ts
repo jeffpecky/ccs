@@ -24,12 +24,31 @@ export function normalizeBarAuthPath(value: string): string {
   return `${url.pathname}${url.search}`;
 }
 
-export function createBarAuthProof(token: string, direction: BarAuthDirection, method: string, requestPath: string, nonce: string): string {
-  const message = [BAR_AUTH_DOMAIN, direction, method.toUpperCase(), normalizeBarAuthPath(requestPath), nonce].join('\n');
+export function createBarAuthProof(
+  token: string,
+  direction: BarAuthDirection,
+  method: string,
+  requestPath: string,
+  nonce: string
+): string {
+  const message = [
+    BAR_AUTH_DOMAIN,
+    direction,
+    method.toUpperCase(),
+    normalizeBarAuthPath(requestPath),
+    nonce,
+  ].join('\n');
   return crypto.createHmac('sha256', token).update(message).digest('hex');
 }
 
-export function isMatchingBarAuthProof(token: string, direction: BarAuthDirection, method: string, requestPath: string, nonce: string, proof: string): boolean {
+export function isMatchingBarAuthProof(
+  token: string,
+  direction: BarAuthDirection,
+  method: string,
+  requestPath: string,
+  nonce: string,
+  proof: string
+): boolean {
   if (!isValidBarAuthNonce(nonce) || !/^[a-f0-9]{64}$/i.test(proof)) {
     return false;
   }
@@ -39,8 +58,14 @@ export function isMatchingBarAuthProof(token: string, direction: BarAuthDirectio
 
 export class BarAuthNonceCache {
   private readonly nonces = new Map<string, number>();
-  constructor(private readonly maxSize = 2048, private readonly ttlMs = 5 * 60_000, private readonly now = Date.now) {}
-  get size(): number { return this.nonces.size; }
+  constructor(
+    private readonly maxSize = 2048,
+    private readonly ttlMs = 5 * 60_000,
+    private readonly now = Date.now
+  ) {}
+  get size(): number {
+    return this.nonces.size;
+  }
   consume(nonce: string): boolean {
     const now = this.now();
     for (const [key, expires] of this.nonces) if (expires <= now) this.nonces.delete(key);

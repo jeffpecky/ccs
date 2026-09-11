@@ -1126,7 +1126,9 @@ export async function triggerOAuth(
 
   if (provider === 'kiro' && resolvedKiroMethod === 'github') {
     console.log(fail('Kiro GitHub login is only available in Dashboard management OAuth flow.'));
-    console.log('    Use: the dashboard settings -> Accounts -> Add Kiro account -> Method: GitHub OAuth');
+    console.log(
+      '    Use: the dashboard settings -> Accounts -> Add Kiro account -> Method: GitHub OAuth'
+    );
     return null;
   }
 

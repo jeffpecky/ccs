@@ -231,7 +231,9 @@ export async function maybeOfferPoolRouting(
   );
   console.log('      - Your existing routing strategy and session affinity are preserved.');
   console.log('');
-  console.log('    You can roll back at any time: Disable pool routing from the dashboard control panel');
+  console.log(
+    '    You can roll back at any time: Disable pool routing from the dashboard control panel'
+  );
   console.log('    (Or re-enable later: Enable pool routing from the dashboard control panel)');
   console.log('');
 
@@ -245,7 +247,7 @@ export async function maybeOfferPoolRouting(
     dismissPoolPrompt();
     console.log(
       info(
-        "    Declined. Pool routing stays off. Enable pool routing from the dashboard control panel to opt in later."
+        '    Declined. Pool routing stays off. Enable pool routing from the dashboard control panel to opt in later.'
       )
     );
     console.log('');

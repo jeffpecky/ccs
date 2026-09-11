@@ -311,7 +311,8 @@ function pruneSafetyBackups(keepCount = 3): void {
   const backupsDir = path.join(getCcsDir(), 'backups');
   if (!fs.existsSync(backupsDir)) return;
 
-  const entries = fs.readdirSync(backupsDir)
+  const entries = fs
+    .readdirSync(backupsDir)
     .filter((d) => d.startsWith('pre-import-'))
     .map((d) => ({ name: d, time: fs.statSync(path.join(backupsDir, d)).mtimeMs }))
     .sort((a, b) => b.time - a.time);
@@ -333,7 +334,8 @@ router.get('/export', (_req: Request, res: Response): void => {
     // Read auth token files
     const readTokenDir = (dir: string): Array<{ filename: string; content: unknown }> => {
       if (!fs.existsSync(dir)) return [];
-      return fs.readdirSync(dir)
+      return fs
+        .readdirSync(dir)
         .filter((f) => f.endsWith('.json'))
         .reduce<Array<{ filename: string; content: unknown }>>((acc, f) => {
           const filePath = path.join(dir, f);
@@ -347,7 +349,9 @@ router.get('/export', (_req: Request, res: Response): void => {
               content: JSON.parse(fs.readFileSync(filePath, 'utf-8')),
             });
           } catch (err) {
-            console.warn(`[persist-routes] Skipping invalid JSON file in export: ${filePath} - ${(err as Error).message}`);
+            console.warn(
+              `[persist-routes] Skipping invalid JSON file in export: ${filePath} - ${(err as Error).message}`
+            );
           }
           return acc;
         }, []);
@@ -370,7 +374,10 @@ router.get('/export', (_req: Request, res: Response): void => {
     };
 
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="ccs-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="ccs-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json"`
+    );
     res.json(backup);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -392,7 +399,10 @@ router.post('/import', importLimiter, async (req: Request, res: Response): Promi
   try {
     const backup = req.body as {
       version?: number;
-      auth?: { active?: Array<{ filename: string; content: unknown }>; paused?: Array<{ filename: string; content: unknown }> };
+      auth?: {
+        active?: Array<{ filename: string; content: unknown }>;
+        paused?: Array<{ filename: string; content: unknown }>;
+      };
       accounts?: unknown;
     };
 

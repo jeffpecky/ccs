@@ -6,15 +6,10 @@ export function isAccountInstanceName(name: string): boolean {
 }
 
 export function listAccountInstanceNames(instancesDir: string): string[] {
-  if (!fs.existsSync(instancesDir)) {
-    return [];
-  }
+  if (!fs.existsSync(instancesDir)) return [];
 
   return fs.readdirSync(instancesDir).filter((name) => {
-    if (!isAccountInstanceName(name)) {
-      return false;
-    }
-
+    if (!isAccountInstanceName(name)) return false;
     try {
       return fs.statSync(path.join(instancesDir, name)).isDirectory();
     } catch {

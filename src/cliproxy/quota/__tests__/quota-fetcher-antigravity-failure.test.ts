@@ -1,9 +1,68 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 async function loadAntigravityQuotaTestExports() {
   const moduleId = Date.now() + Math.random();
   const mod = await import(`../quota-fetcher?agy-quota-fetcher=${moduleId}`);
   return mod.__testExports;
+}
+
+function installManagedFetch(
+  accountId: string,
+  providerFetch: (url: string, init?: RequestInit) => Promise<Response>
+): typeof fetch {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url.endsWith('/v0/management/auth-files')) {
+      return Response.json({
+        files: [
+          {
+            id: accountId,
+            auth_index: `agy-${accountId}`,
+            provider: 'antigravity',
+            email: accountId,
+          },
+        ],
+      });
+    }
+    if (url.endsWith('/v0/management/api-call')) {
+      const call = JSON.parse(String(init?.body ?? '{}')) as {
+        method?: string;
+        url: string;
+        header?: Record<string, string>;
+        data?: string;
+      };
+      expect(call.header?.Authorization).toBe('Bearer $TOKEN$');
+      const response = await providerFetch(call.url, {
+        method: call.method,
+        headers: call.header,
+        body: call.data,
+      });
+      return Response.json({
+        status_code: response.status,
+        header: Object.fromEntries(response.headers.entries()),
+        body: await response.text(),
+      });
+    }
+    return Response.json({ error: 'Direct provider request attempted' }, { status: 500 });
+  }) as typeof fetch;
+  return originalFetch;
+}
+
+async function withTemporaryCcsHome(run: () => Promise<void>): Promise<void> {
+  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-agy-managed-test-'));
+  const originalCcsHome = process.env.CCS_HOME;
+  process.env.CCS_HOME = tempHome;
+  try {
+    await run();
+  } finally {
+    if (originalCcsHome === undefined) delete process.env.CCS_HOME;
+    else process.env.CCS_HOME = originalCcsHome;
+    fs.rmSync(tempHome, { recursive: true, force: true });
+  }
 }
 
 describe('Antigravity quota failure metadata', () => {
@@ -26,6 +85,44 @@ describe('Antigravity quota failure metadata', () => {
     expect(result.entitlement).toMatchObject({
       accessState: 'unknown',
       capacityState: 'rate_limited',
+    });
+  });
+
+  it('maps management outage to retryable service failure', async () => {
+    await withTemporaryCcsHome(async () => {
+      const moduleId = Date.now() + Math.random();
+      const { fetchAccountQuota } = await import(`../quota-fetcher?agy-outage=${moduleId}`);
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mock(() =>
+        Promise.reject(new Error('connect ECONNREFUSED'))
+      ) as typeof fetch;
+      try {
+        const result = await fetchAccountQuota('agy', 'outage@example.com');
+        expect(result.success).toBe(false);
+        expect(result.needsReauth).toBeUndefined();
+        expect(result.errorCode).toBe('cliproxy_unavailable');
+        expect(result.retryable).toBe(true);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  it('reports managed auth missing without reauth', async () => {
+    await withTemporaryCcsHome(async () => {
+      const moduleId = Date.now() + Math.random();
+      const { fetchAccountQuota } = await import(`../quota-fetcher?agy-missing=${moduleId}`);
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mock(() => Promise.resolve(Response.json({ files: [] }))) as typeof fetch;
+      try {
+        const result = await fetchAccountQuota('agy', 'missing@example.com');
+        expect(result.success).toBe(false);
+        expect(result.needsReauth).toBeUndefined();
+        expect(result.errorCode).toBe('managed_auth_missing');
+        expect(result.retryable).toBe(false);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
   });
 
@@ -56,12 +153,14 @@ describe('Antigravity quota failure metadata', () => {
         })
       );
 
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = (async () =>
-        new Response(JSON.stringify({ error: { message: 'forbidden' } }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json' },
-        })) as typeof fetch;
+      const originalFetch = installManagedFetch(
+        'user@example.com',
+        async () =>
+          new Response(JSON.stringify({ error: { message: 'forbidden' } }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          })
+      );
 
       try {
         const result = await fetchAccountQuota('agy', 'user@example.com');
@@ -109,12 +208,14 @@ describe('Antigravity quota failure metadata', () => {
         })
       );
 
-      const originalFetch = globalThis.fetch;
-      globalThis.fetch = (async () =>
-        new Response('', {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })) as typeof fetch;
+      const originalFetch = installManagedFetch(
+        'user@example.com',
+        async () =>
+          new Response('', {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+      );
 
       try {
         const result = await fetchAccountQuota('agy', 'user@example.com');
@@ -163,9 +264,8 @@ describe('Antigravity quota failure metadata', () => {
         })
       );
 
-      const originalFetch = globalThis.fetch;
       let requestCount = 0;
-      globalThis.fetch = (async () => {
+      const originalFetch = installManagedFetch('user@example.com', async () => {
         requestCount += 1;
         if (requestCount === 1) {
           return new Response(
@@ -184,7 +284,7 @@ describe('Antigravity quota failure metadata', () => {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
-      }) as typeof fetch;
+      });
 
       try {
         const result = await fetchAccountQuota('agy', 'user@example.com');
@@ -235,10 +335,8 @@ describe('Antigravity quota failure metadata', () => {
         })
       );
 
-      const originalFetch = globalThis.fetch;
       const urls: string[] = [];
-      globalThis.fetch = (async (input, init) => {
-        const url = String(input);
+      const originalFetch = installManagedFetch('user@example.com', async (url, init) => {
         urls.push(url);
 
         if (url === 'https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist') {
@@ -291,7 +389,7 @@ describe('Antigravity quota failure metadata', () => {
         }
 
         return new Response('unexpected url', { status: 500 });
-      }) as typeof fetch;
+      });
 
       try {
         const result = await fetchAccountQuota('agy', 'user@example.com');

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import type { RawUsageEntry } from '../jsonl-parser';
 import { resolveDroidConfigPaths } from '../services/droid-dashboard-service';
@@ -55,12 +56,16 @@ function normalizeCustomModels(settings: Record<string, unknown>): Array<Record<
   return [];
 }
 
-function buildCustomModelMap(settingsPath: string): Map<string, string> {
+async function buildCustomModelMap(settingsPath: string): Promise<Map<string, string>> {
   const selectors = new Map<string, string>();
-  if (!fs.existsSync(settingsPath)) return selectors;
+  try {
+    await fsp.access(settingsPath);
+  } catch {
+    return selectors;
+  }
 
   try {
-    const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    const parsed = JSON.parse(await fsp.readFile(settingsPath, 'utf8'));
     if (!isObject(parsed)) return selectors;
 
     for (const [index, entry] of normalizeCustomModels(parsed).entries()) {
@@ -76,13 +81,22 @@ function buildCustomModelMap(settingsPath: string): Map<string, string> {
   return selectors;
 }
 
-function collectSessionFiles(dir: string, suffix: string, results: string[] = []): string[] {
-  if (!fs.existsSync(dir)) return results;
+async function collectSessionFiles(
+  dir: string,
+  suffix: string,
+  results: string[] = []
+): Promise<string[]> {
+  try {
+    await fsp.access(dir);
+  } catch {
+    return results;
+  }
 
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+  const entries = await fsp.readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
     const entryPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      collectSessionFiles(entryPath, suffix, results);
+      await collectSessionFiles(entryPath, suffix, results);
       continue;
     }
     if (entry.isFile() && entry.name.endsWith(suffix)) {
@@ -93,11 +107,11 @@ function collectSessionFiles(dir: string, suffix: string, results: string[] = []
   return results;
 }
 
-function readSessionStartMetadata(
+async function readSessionStartMetadata(
   filePath: string
-): { projectPath: string; version?: string } | null {
+): Promise<{ projectPath: string; version?: string } | null> {
   try {
-    const firstLine = fs.readFileSync(filePath, 'utf8').split('\n')[0];
+    const firstLine = (await fsp.readFile(filePath, 'utf8')).split('\n')[0];
     const parsed = JSON.parse(firstLine);
     if (parsed?.type !== 'session_start') return null;
     return {
@@ -112,19 +126,19 @@ function readSessionStartMetadata(
   }
 }
 
-function loadSessionMetadata(factoryDir: string): Map<string, DroidSessionMetadata> {
+async function loadSessionMetadata(factoryDir: string): Promise<Map<string, DroidSessionMetadata>> {
   const metadata = new Map<string, DroidSessionMetadata>();
-  const selectorMap = buildCustomModelMap(path.join(factoryDir, 'settings.json'));
+  const selectorMap = await buildCustomModelMap(path.join(factoryDir, 'settings.json'));
   const sessionsDir = path.join(factoryDir, 'sessions');
 
-  for (const settingsPath of collectSessionFiles(sessionsDir, '.settings.json')) {
+  for (const settingsPath of await collectSessionFiles(sessionsDir, '.settings.json')) {
     const sessionId = path.basename(settingsPath, '.settings.json');
     const jsonlPath = settingsPath.replace(/\.settings\.json$/, '.jsonl');
-    const start = readSessionStartMetadata(jsonlPath);
+    const start = await readSessionStartMetadata(jsonlPath);
     if (!start) continue;
 
     try {
-      const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      const parsed = JSON.parse(await fsp.readFile(settingsPath, 'utf8'));
       const rawSelector = asString(parsed?.model) ?? 'unknown-droid-model';
       metadata.set(sessionId, {
         model: selectorMap.get(rawSelector) ?? rawSelector,
@@ -167,7 +181,7 @@ export async function scanDroidNativeUsageEntries(
   }
   if (!rows.length) return [];
 
-  const metadata = loadSessionMetadata(factoryDir);
+  const metadata = await loadSessionMetadata(factoryDir);
   const entries: RawUsageEntry[] = [];
   let skippedRowsWithoutMetadata = 0;
 

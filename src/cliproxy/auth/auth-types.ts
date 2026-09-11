@@ -313,6 +313,13 @@ export const OAUTH_CONFIGS: Record<CLIProxyProvider, ProviderOAuthConfig> = {
     scopes: [],
     authFlag: '--qoder-login',
   },
+  'openai-compatibility': {
+    provider: 'openai-compatibility',
+    displayName: 'OpenAI-Compatible',
+    authUrl: '',
+    scopes: [],
+    authFlag: '',
+  },
 };
 
 /**

@@ -34,6 +34,7 @@ interface AccountSurfaceCardProps {
   runtimeLastUsed?: string;
   beforeIdentity?: ReactNode;
   headerEnd?: ReactNode;
+  resetCreditAction?: ReactNode;
   compactMetaBadges?: ReactNode;
   bodySlot?: ReactNode;
   footerSlot?: ReactNode;
@@ -164,6 +165,7 @@ export function AccountSurfaceCard({
   runtimeLastUsed,
   beforeIdentity,
   headerEnd,
+  resetCreditAction,
   compactMetaBadges,
   bodySlot,
   footerSlot,
@@ -281,69 +283,76 @@ export function AccountSurfaceCard({
           )}
 
           <div className="min-w-0 flex-1">
-            <div
-              className={cn('flex items-center min-w-0', isCompact ? 'gap-1.5' : 'gap-2 flex-wrap')}
-            >
-              <span
-                title={sensitiveTitle(title)}
-                className={cn(
-                  isCompact
-                    ? 'flex-1 min-w-0 text-xs font-semibold tracking-tight truncate leading-none'
-                    : 'font-medium text-sm truncate',
-                  privacyMode && PRIVACY_BLUR_CLASS
-                )}
-              >
-                {title}
-              </span>
-              {isCompact && (compactMetaBadges ?? defaultCompactMetaBadges)}
-              {!isCompact && normalizedProvider === 'codex' && effectiveCodexBadge?.label && (
-                <Badge
-                  variant="outline"
+            <div className={cn('min-w-0', isCompact ? 'flex items-center gap-1.5' : 'space-y-1')}>
+              <div className="flex items-center min-w-0 gap-2">
+                <span
+                  title={sensitiveTitle(title)}
                   className={cn(
-                    'text-[10px] h-4 px-1.5 border-transparent',
-                    privacyMode && PRIVACY_BLUR_CLASS,
-                    getAudienceBadgeClass(effectiveCodexBadge.audience)
+                    isCompact
+                      ? 'flex-1 min-w-0 text-xs font-semibold tracking-tight truncate leading-none'
+                      : 'font-medium text-sm truncate',
+                    privacyMode && PRIVACY_BLUR_CLASS
                   )}
                 >
-                  {effectiveCodexBadge.label}
-                </Badge>
-              )}
-              {!isCompact && normalizedProvider !== 'codex' && identity.audienceLabel && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    'text-[10px] h-4 px-1.5 border-transparent',
-                    privacyMode && PRIVACY_BLUR_CLASS,
-                    getAudienceBadgeClass(identity.audience)
+                  {title}
+                </span>
+                {isCompact && (compactMetaBadges ?? defaultCompactMetaBadges)}
+              </div>
+              {!isCompact && (
+                <div className="flex items-center gap-1.5 whitespace-nowrap">
+                  {normalizedProvider === 'codex' && effectiveCodexBadge?.label && (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        'text-[10px] h-4 px-1.5 border-transparent',
+                        privacyMode && PRIVACY_BLUR_CLASS,
+                        getAudienceBadgeClass(effectiveCodexBadge.audience)
+                      )}
+                    >
+                      {effectiveCodexBadge.label}
+                    </Badge>
                   )}
-                >
-                  {identity.audienceLabel}
-                </Badge>
-              )}
-              {!isCompact && normalizedProvider !== 'codex' && identity.detailLabel && (
-                <Badge
-                  variant="outline"
-                  className={cn('text-[10px] h-4 px-1.5', privacyMode && PRIVACY_BLUR_CLASS)}
-                >
-                  {identity.detailLabel}
-                </Badge>
-              )}
-              {!isCompact && isDefault && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1.5 gap-0.5">
-                  <Star className="w-2.5 h-2.5 fill-current" />
-                  {/* TODO i18n: missing key for "Default" badge */}
-                  Default
-                </Badge>
+                  {normalizedProvider === 'codex' && resetCreditAction}
+                  {normalizedProvider !== 'codex' && identity.audienceLabel && (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        'text-[10px] h-4 px-1.5 border-transparent',
+                        privacyMode && PRIVACY_BLUR_CLASS,
+                        getAudienceBadgeClass(identity.audience)
+                      )}
+                    >
+                      {identity.audienceLabel}
+                    </Badge>
+                  )}
+                  {normalizedProvider !== 'codex' && identity.detailLabel && (
+                    <Badge
+                      variant="outline"
+                      className={cn('text-[10px] h-4 px-1.5', privacyMode && PRIVACY_BLUR_CLASS)}
+                    >
+                      {identity.detailLabel}
+                    </Badge>
+                  )}
+                  {isDefault && (
+                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5 gap-0.5">
+                      <Star className="w-2.5 h-2.5 fill-current" />
+                      {/* TODO i18n: missing key for "Default" badge */}
+                      Default
+                    </Badge>
+                  )}
+                </div>
               )}
               {!isCompact && paused && (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] h-4 px-1.5 border-yellow-500 text-yellow-600"
-                >
-                  <Pause className="w-2 h-2 mr-0.5" />
-                  {/* TODO i18n: missing key for "Paused" badge */}
-                  Paused
-                </Badge>
+                <div>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] h-4 px-1.5 border-yellow-500 text-yellow-600"
+                  >
+                    <Pause className="w-2 h-2 mr-0.5" />
+                    {/* TODO i18n: missing key for "Paused" badge */}
+                    Paused
+                  </Badge>
+                </div>
               )}
             </div>
 
@@ -374,4 +383,3 @@ export function AccountSurfaceCard({
     </div>
   );
 }
-

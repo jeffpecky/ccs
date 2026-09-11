@@ -61,6 +61,8 @@ interface HeadroomExtrasStatus {
   extras: { code: boolean; ml: boolean };
 }
 
+type HeadroomExtrasLoadState = 'loading' | 'ready' | 'error';
+
 function getHeadroomDashboardUrl(value: string): string | null {
   try {
     const url = new URL(value);
@@ -73,6 +75,18 @@ function getHeadroomDashboardUrl(value: string): string | null {
 }
 
 const LEVELS = ['Lite', 'Full', 'Ultra'] as const;
+
+function normalizeExtrasStatus(value: unknown): HeadroomExtrasStatus {
+  const root = value && typeof value === 'object' ? (value as Partial<HeadroomExtrasStatus>) : {};
+  return {
+    installed: root.installed === true,
+    version: typeof root.version === 'string' ? root.version : null,
+    extras: {
+      code: root.extras?.code === true,
+      ml: root.extras?.ml === true,
+    },
+  };
+}
 
 function displayLevel(value: string): (typeof LEVELS)[number] {
   if (value === 'lite') return 'Lite';
@@ -177,6 +191,7 @@ function SaverRow({
 export function TokenSaverPage() {
   const [config, setConfig] = useState<TokenSaverConfig>();
   const [status, setStatus] = useState<HeadroomStatus>();
+  const [extrasState, setExtrasState] = useState<HeadroomExtrasLoadState>('loading');
   const [extrasStatus, setExtrasStatus] = useState<HeadroomExtrasStatus>({
     installed: false,
     version: null,
@@ -196,6 +211,21 @@ export function TokenSaverPage() {
   const refreshSequence = useRef(0);
   const persistSequence = useRef(0);
 
+  const refreshExtras = useCallback(async () => {
+    setExtrasState('loading');
+    try {
+      const response = await fetch('/api/headroom/extras', {
+        headers: { 'Cache-Control': 'no-store' },
+      });
+      if (!response.ok) throw new Error('Unable to verify Headroom extras.');
+      setExtrasStatus(normalizeExtrasStatus(await response.json()));
+      setExtrasState('ready');
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') return;
+      setExtrasState('error');
+    }
+  }, []);
+
   const refresh = async (manual = false) => {
     refreshController.current?.abort();
     const controller = new AbortController();
@@ -203,13 +233,9 @@ export function TokenSaverPage() {
     const sequence = ++refreshSequence.current;
     if (manual) setRefreshing(true);
     try {
-      const [configResponse, statusResponse, extrasResponse] = await Promise.all([
+      const [configResponse, statusResponse] = await Promise.all([
         fetch('/api/headroom/config', { signal: controller.signal }),
         fetch('/api/headroom/status', {
-          headers: { 'Cache-Control': 'no-store' },
-          signal: controller.signal,
-        }),
-        fetch('/api/headroom/extras', {
           headers: { 'Cache-Control': 'no-store' },
           signal: controller.signal,
         }),
@@ -219,9 +245,7 @@ export function TokenSaverPage() {
       setConfig(((await configResponse.json()) as { config: TokenSaverConfig }).config);
       if (sequence !== refreshSequence.current) return;
       setStatus((await statusResponse.json()) as HeadroomStatus);
-      if (extrasResponse.ok) {
-        setExtrasStatus((await extrasResponse.json()) as HeadroomExtrasStatus);
-      }
+      void refreshExtras();
     } catch (error) {
       if ((error as Error).name === 'AbortError') return;
       toast.error((error as Error).message);
@@ -241,6 +265,10 @@ export function TokenSaverPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (setupOpen) void refreshExtras();
+  }, [refreshExtras, setupOpen]);
+
   const configForSave = (current: TokenSaverConfig): TokenSaverConfig => ({
     ...current,
     enabled:
@@ -251,26 +279,23 @@ export function TokenSaverPage() {
       current.pxpipe.enabled,
   });
 
-  const persist = useCallback(
-    async (current: TokenSaverConfig) => {
-      persistController.current?.abort();
-      const controller = new AbortController();
-      persistController.current = controller;
-      const sequence = ++persistSequence.current;
-      const response = await fetch('/api/headroom/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(configForSave(current)),
-        signal: controller.signal,
-      });
-      if (sequence !== persistSequence.current) return;
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? 'Unable to save Token Saver settings.');
-      }
-    },
-    []
-  );
+  const persist = useCallback(async (current: TokenSaverConfig) => {
+    persistController.current?.abort();
+    const controller = new AbortController();
+    persistController.current = controller;
+    const sequence = ++persistSequence.current;
+    const response = await fetch('/api/headroom/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(configForSave(current)),
+      signal: controller.signal,
+    });
+    if (sequence !== persistSequence.current) return;
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? 'Unable to save Token Saver settings.');
+    }
+  }, []);
 
   const updateConfig = useCallback(
     (patch: Partial<TokenSaverConfig> | ((prev: TokenSaverConfig) => TokenSaverConfig)) => {
@@ -297,8 +322,17 @@ export function TokenSaverPage() {
     try {
       await persist(config);
       const response = await fetch(`/api/headroom/${action}`, { method: 'POST' });
-      const body = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) throw new Error(body.error ?? `Unable to ${action} Headroom.`);
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        hint?: string;
+        stage?: string;
+      };
+      if (!response.ok) {
+        const detail = [body.error ?? `Unable to ${action} Headroom.`, body.hint]
+          .filter(Boolean)
+          .join(' ');
+        throw new Error(body.stage ? `${detail} (${body.stage})` : detail);
+      }
       await refresh();
     } catch (error) {
       toast.error((error as Error).message);
@@ -317,7 +351,10 @@ export function TokenSaverPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ extras }),
       });
-      const body = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean };
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        success?: boolean;
+      };
       if (!response.ok || !body.success) throw new Error(body.error ?? 'Installation failed.');
       toast.success('Headroom installed successfully.');
       await refresh();
@@ -338,7 +375,11 @@ export function TokenSaverPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ extras: [extra] }),
       });
-      const body = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean; status?: string };
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        success?: boolean;
+        status?: string;
+      };
       if (!response.ok) throw new Error(body.error ?? `Failed to install ${extra}.`);
       // Install is async - poll until extras status changes
       if (body.status === 'installing') {
@@ -362,10 +403,14 @@ export function TokenSaverPage() {
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       try {
-        const res = await fetch('/api/headroom/extras', { headers: { 'Cache-Control': 'no-store' } });
-        const data = await res.json() as HeadroomExtrasStatus;
+        const res = await fetch('/api/headroom/extras', {
+          headers: { 'Cache-Control': 'no-store' },
+        });
+        const data = (await res.json()) as HeadroomExtrasStatus;
         if (data.extras[extra as keyof typeof data.extras]) return true;
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     return false;
   };
@@ -377,7 +422,11 @@ export function TokenSaverPage() {
       const response = await fetch(`/api/headroom/extras/uninstall/${extra}`, {
         method: 'POST',
       });
-      const body = (await response.json().catch(() => ({}))) as { error?: string; success?: boolean; status?: string };
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        success?: boolean;
+        status?: string;
+      };
       if (!response.ok) throw new Error(body.error ?? `Failed to uninstall ${extra}.`);
       // Uninstall is async - poll until extras status changes
       if (body.status === 'uninstalling') {
@@ -397,10 +446,14 @@ export function TokenSaverPage() {
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       try {
-        const res = await fetch('/api/headroom/extras', { headers: { 'Cache-Control': 'no-store' } });
-        const data = await res.json() as HeadroomExtrasStatus;
+        const res = await fetch('/api/headroom/extras', {
+          headers: { 'Cache-Control': 'no-store' },
+        });
+        const data = (await res.json()) as HeadroomExtrasStatus;
         if (!data.extras[extra as keyof typeof data.extras]) return true;
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     return false;
   };
@@ -497,8 +550,7 @@ export function TokenSaverPage() {
             controls={
               <>
                 <Badge variant={status?.healthy ? 'default' : 'secondary'}>
-                  <Activity className="mr-1 h-3 w-3" />{' '}
-                  {status?.healthy ? 'Healthy' : 'Offline'}
+                  <Activity className="mr-1 h-3 w-3" /> {status?.healthy ? 'Healthy' : 'Offline'}
                 </Badge>
                 <Button
                   variant="ghost"
@@ -559,9 +611,7 @@ export function TokenSaverPage() {
       <Dialog open={setupOpen} onOpenChange={setSetupOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>
-              {status?.running ? 'Headroom' : 'Setup Headroom'}
-            </DialogTitle>
+            <DialogTitle>{status?.running ? 'Headroom' : 'Setup Headroom'}</DialogTitle>
             <DialogDescription>
               Configure compression and manage local Headroom process.
             </DialogDescription>
@@ -586,20 +636,35 @@ export function TokenSaverPage() {
                 </p>
               </div>
               <Badge variant={status?.healthy ? 'default' : 'secondary'}>
-                <Activity className="mr-1 h-3 w-3" />{' '}
-                {status?.healthy ? 'Healthy' : 'Offline'}
+                <Activity className="mr-1 h-3 w-3" /> {status?.healthy ? 'Healthy' : 'Offline'}
               </Badge>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="headroom-url">Headroom URL</Label>
-              <Input
-                id="headroom-url"
-                aria-label="Headroom URL"
-                value={config.headroom.url}
-                onChange={(event) => updateHeadroom({ url: event.target.value })}
-                disabled={mutating}
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="headroom-url">Headroom URL</Label>
+                <Input
+                  id="headroom-url"
+                  aria-label="Headroom URL"
+                  value={config.headroom.url}
+                  onChange={(event) => updateHeadroom({ url: event.target.value })}
+                  disabled={mutating}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="headroom-timeout">Timeout (ms)</Label>
+                <Input
+                  id="headroom-timeout"
+                  type="number"
+                  aria-label="Headroom Timeout ms"
+                  value={config.headroom.timeout_ms ?? 3000}
+                  onChange={(event) => {
+                    const val = parseInt(event.target.value, 10);
+                    updateHeadroom({ timeout_ms: Number.isNaN(val) ? 3000 : val });
+                  }}
+                  disabled={mutating}
+                />
+              </div>
             </div>
 
             {!status?.installed && (
@@ -608,13 +673,8 @@ export function TokenSaverPage() {
                 <p className="mb-3 text-xs text-muted-foreground">
                   Python &gt;= 3.10 is required. Click Install to install Headroom on the backend.
                 </p>
-                <Button
-                  onClick={() => void installHeadroom()}
-                  disabled={mutating}
-                >
-                  {installing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : null}
+                <Button onClick={() => void installHeadroom()} disabled={mutating}>
+                  {installing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Install Headroom
                 </Button>
               </div>
@@ -630,7 +690,7 @@ export function TokenSaverPage() {
                     id: 'code',
                     label: 'Code-aware compression',
                     description: 'tree-sitter AST compression for code responses',
-                    installed: extrasStatus.extras.code,
+                    installed: extrasState === 'ready' && extrasStatus.extras.code,
                     active: config.headroom.code_aware,
                     toggle: (value: boolean) => updateHeadroom({ code_aware: value }),
                   },
@@ -638,7 +698,7 @@ export function TokenSaverPage() {
                     id: 'ml',
                     label: 'Kompress ML',
                     description: 'Kompress-v2 HF model for prose/agentic traces (~+1GB)',
-                    installed: extrasStatus.extras.ml,
+                    installed: extrasState === 'ready' && extrasStatus.extras.ml,
                     active: config.headroom.kompress,
                     toggle: (value: boolean) => updateHeadroom({ kompress: value }),
                   },
@@ -652,7 +712,16 @@ export function TokenSaverPage() {
                       <p className="text-xs text-muted-foreground">{extra.description}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {extra.installed ? (
+                      {extrasState === 'loading' ? (
+                        <span className="text-xs text-muted-foreground">Checking...</span>
+                      ) : extrasState === 'error' ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Unable to verify</span>
+                          <Button variant="outline" size="sm" onClick={() => void refreshExtras()}>
+                            Retry
+                          </Button>
+                        </div>
+                      ) : extra.installed ? (
                         <>
                           <Switch
                             id={extra.id}
@@ -726,8 +795,20 @@ export function TokenSaverPage() {
                 </Button>
               )}
               {dashboardUrl ? (
-                <Button asChild variant="secondary" className="sm:ml-auto" disabled={!status?.running}>
-                  <a href={dashboardUrl} target="_blank" rel="noreferrer" onClick={(e) => { if (!status?.running) e.preventDefault(); }}>
+                <Button
+                  asChild
+                  variant="secondary"
+                  className="sm:ml-auto"
+                  disabled={!status?.running}
+                >
+                  <a
+                    href={dashboardUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => {
+                      if (!status?.running) e.preventDefault();
+                    }}
+                  >
                     Open Headroom dashboard <ExternalLink className="ml-2 h-4 w-4" />
                   </a>
                 </Button>
@@ -743,4 +824,3 @@ export function TokenSaverPage() {
     </div>
   );
 }
-

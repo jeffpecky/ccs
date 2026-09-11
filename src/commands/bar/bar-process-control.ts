@@ -48,7 +48,10 @@ export function parseBarServerProcessRecord(raw: string): BarServerProcessRecord
     const pid = parsed.pid;
     if (!Number.isSafeInteger(pid) || (pid ?? 0) <= 0) return null;
     if (typeof parsed.birthIdentity !== 'string' || parsed.birthIdentity.trim() === '') return null;
-    const record: BarServerProcessRecord = { pid: pid as number, birthIdentity: parsed.birthIdentity };
+    const record: BarServerProcessRecord = {
+      pid: pid as number,
+      birthIdentity: parsed.birthIdentity,
+    };
     if (parsed.launchId !== undefined) {
       if (!isValidLaunchId(parsed.launchId)) return null;
       record.launchId = parsed.launchId;
@@ -73,8 +76,7 @@ export function serializeBarServerProcessRecord(record: BarServerProcessRecord):
 /** Publish a lifecycle file atomically so readers never observe torn content. */
 export function writeFileAtomic(filePath: string, content: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${Math
-    .random()
+  const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${Math.random()
     .toString(16)
     .slice(2)}`;
   fs.writeFileSync(tmpPath, content);
@@ -354,8 +356,7 @@ export function claimStaleBarServerProcessRecord(
   const record = kind === 'modern' ? parseBarServerProcessRecord(raw) : null;
   if (record !== null && getIdentity(record.pid) !== null) return 'preserved';
 
-  const claimPath = `${pidPath}.claim-${process.pid}-${Date.now()}-${Math
-    .random()
+  const claimPath = `${pidPath}.claim-${process.pid}-${Date.now()}-${Math.random()
     .toString(16)
     .slice(2)}`;
   try {

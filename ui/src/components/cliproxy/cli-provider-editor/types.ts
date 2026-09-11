@@ -3,11 +3,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type {
-  AuthStatus,
-  CliTarget,
-  CliproxyProviderRoutingHints,
-} from '@/lib/api-client';
+import type { AuthStatus, CliTarget, CliproxyProviderRoutingHints } from '@/lib/api-client';
 import type { ProviderCatalog } from '../provider-model-selector';
 
 export interface SettingsResponse {
@@ -23,12 +19,17 @@ export interface OpenCodeSettingsResponse {
   profile: string;
   settings: {
     model?: Record<string, string>;
+    models?: string[];
   };
   mtime: number;
   path: string;
 }
 
-export type AnySettingsResponse = SettingsResponse | OpenCodeSettingsResponse | CodexSettingsResponse | DroidSettingsResponse;
+export type AnySettingsResponse =
+  | SettingsResponse
+  | OpenCodeSettingsResponse
+  | CodexSettingsResponse
+  | DroidSettingsResponse;
 
 export interface CLIProviderEditorProps {
   provider: string;
@@ -137,9 +138,13 @@ export interface ClaudeEditorReturn extends BaseEditorReturn {
 /** OpenCode editor return type - uses OPENCODE_MODEL + OPENCODE_SUB_AGENT_MODEL */
 export interface OpenCodeEditorReturn extends Omit<BaseEditorReturn, 'data' | 'currentSettings'> {
   data: OpenCodeSettingsResponse | undefined;
-  currentSettings: { model?: Record<string, string> };
+  currentSettings: { model?: Record<string, string>; models?: string[] };
   currentModel?: string;
   subagentModel?: string;
+  selectedModels: string[];
+  addModel: (model: string) => void;
+  removeModel: (model: string) => void;
+  setActiveModel: (model: string) => void;
 }
 
 /** Codex settings response - uses 'model' key like OpenCode */
@@ -178,7 +183,9 @@ export interface DroidSettingsResponse {
 /** Factory Droid editor return type - uses custom_models array */
 export interface DroidEditorReturn extends Omit<BaseEditorReturn, 'data' | 'currentSettings'> {
   data: DroidSettingsResponse | undefined;
-  currentSettings: { custom_models?: Array<{ model: string; base_url: string; api_key: string; provider: string }> };
+  currentSettings: {
+    custom_models?: Array<{ model: string; base_url: string; api_key: string; provider: string }>;
+  };
   currentModel?: string;
   subagentModel?: string;
 }
@@ -198,4 +205,3 @@ export interface UseCLIProviderEditorReturn extends BaseEditorReturn {
   extendedContextEnabled: boolean;
   toggleExtendedContext: (enabled: boolean) => void;
 }
-

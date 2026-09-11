@@ -70,7 +70,9 @@ async function handleAutoUpdate(config: BinaryManagerConfig, verbose: boolean): 
           `Upgrade to latest stable recommended.`
       )
     );
-    console.log(info(`Install CLIProxy from the dashboard control panel to upgrade to latest stable`));
+    console.log(
+      info(`Install CLIProxy from the dashboard control panel to upgrade to latest stable`)
+    );
   }
 
   if (!updateResult.hasUpdate) return;
@@ -88,7 +90,9 @@ async function handleAutoUpdate(config: BinaryManagerConfig, verbose: boolean): 
 
   if (proxyRunning) {
     console.log(info(updateMsg));
-    console.log(info('Stop CLIProxy from the dashboard control panel, then restart to apply update'));
+    console.log(
+      info('Stop CLIProxy from the dashboard control panel, then restart to apply update')
+    );
     log(`Skipping update: ${backendLabel} is currently running`, verbose);
   } else {
     console.log(info(updateMsg));

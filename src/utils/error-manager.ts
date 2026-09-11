@@ -169,7 +169,9 @@ export class ErrorManager {
     console.error('  Create a new account profile:');
     console.error(`    ${color('Authenticate from the dashboard', 'command')}`);
     console.error('');
-    console.error(info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`));
+    console.error(
+      info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`)
+    );
     console.error('');
 
     this.showErrorCode(ERROR_CODES.PROFILE_NOT_FOUND);
@@ -224,7 +226,9 @@ export class ErrorManager {
     console.error('');
     console.error(dim('This displays manual authentication steps.'));
     console.error('');
-    console.error(info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`));
+    console.error(
+      info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`)
+    );
     console.error('');
   }
 
@@ -301,7 +305,9 @@ export class ErrorManager {
     console.error(dim('This will open a browser for OAuth login.'));
     console.error(dim('After login, you can use the profile normally.'));
     console.error('');
-    console.error(info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`));
+    console.error(
+      info(`Tip: Use ${color('the dashboard settings', 'command')} for web-based configuration`)
+    );
     console.error('');
   }
 }

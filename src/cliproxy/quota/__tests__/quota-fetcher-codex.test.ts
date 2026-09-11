@@ -587,10 +587,43 @@ describe('Codex Quota Fetcher', () => {
       );
     }
 
+    function mockManagedCodex(
+      accountId: string,
+      providerFetch: (call: { header?: Record<string, string> }) => Promise<Response>
+    ): typeof fetch {
+      return mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.endsWith('/v0/management/auth-files')) {
+          return Response.json({
+            files: [
+              {
+                id: accountId,
+                auth_index: `codex-${accountId}`,
+                provider: 'codex',
+                email: accountId,
+              },
+            ],
+          });
+        }
+        expect(url).toContain('/v0/management/api-call');
+        const call = JSON.parse(String(init?.body ?? '{}')) as {
+          header?: Record<string, string>;
+        };
+        expect(call.header?.Authorization).toBe('Bearer $TOKEN$');
+        const response = await providerFetch(call);
+        return Response.json({
+          status_code: response.status,
+          header: Object.fromEntries(response.headers.entries()),
+          body: await response.text(),
+        });
+      }) as typeof fetch;
+    }
+
     it('maps deactivated workspace 402 responses to structured metadata', async () => {
       createValidCodexAccount('workspace@example.com', 'workspace-123');
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedCodex('workspace@example.com', () =>
         Promise.resolve(
           new Response(JSON.stringify({ detail: { code: 'deactivated_workspace' } }), {
             status: 402,
@@ -612,7 +645,9 @@ describe('Codex Quota Fetcher', () => {
     it('maps 401 responses to reauth-required metadata', async () => {
       createValidCodexAccount('reauth@example.com', 'workspace-reauth');
 
-      global.fetch = mock(() => Promise.resolve(new Response('', { status: 401 }))) as typeof fetch;
+      global.fetch = mockManagedCodex('reauth@example.com', () =>
+        Promise.resolve(new Response('', { status: 401 }))
+      );
 
       const result = await fetchCodexQuota('reauth@example.com');
 
@@ -620,7 +655,7 @@ describe('Codex Quota Fetcher', () => {
       expect(result.httpStatus).toBe(401);
       expect(result.errorCode).toBe('reauth_required');
       expect(result.needsReauth).toBe(true);
-      expect(result.actionHint).toContain('Authenticate codex from the dashboard');
+      expect(result.actionHint).toContain('ccs cliproxy auth codex');
     });
 
     it('uses the registry token file for duplicate-email Codex accounts', async () => {
@@ -642,8 +677,10 @@ describe('Codex Quota Fetcher', () => {
         'kaidu.kd@gmail.com'
       );
 
-      const fetchSpy = mock((input: RequestInfo | URL, init?: RequestInit) =>
-        Promise.resolve(
+      let managedCall: { header?: Record<string, string> } | undefined;
+      global.fetch = mockManagedCodex(freeAccount.id, (call) => {
+        managedCall = call;
+        return Promise.resolve(
           new Response(
             JSON.stringify({
               plan_type: 'free',
@@ -656,51 +693,35 @@ describe('Codex Quota Fetcher', () => {
               headers: { 'Content-Type': 'application/json' },
             }
           )
-        )
-      ) as typeof fetch;
-      global.fetch = fetchSpy;
+        );
+      });
 
       const result = await fetchCodexQuota(freeAccount.id);
-      const requestInit = fetchSpy.mock.calls[0]?.[1] as RequestInit | undefined;
-      const headers = new Headers(requestInit?.headers);
 
       expect(result.success).toBe(true);
-      expect(headers.get('ChatGPT-Account-Id')).toBe('workspace-free');
+      expect(managedCall?.header?.['ChatGPT-Account-Id']).toBe('workspace-free');
     });
 
     it('does not guess a duplicate-email Codex auth file when the registry entry is missing', async () => {
       createValidCodexAccount('kaidu.kd@gmail.com', 'workspace-team', 'codex-legacy-slot-a.json');
       createValidCodexAccount('kaidu.kd@gmail.com', 'workspace-free', 'codex-legacy-slot-b.json');
 
-      const fetchSpy = mock(() =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify({
-              plan_type: 'free',
-              rate_limit: {
-                primary_window: { used_percent: 10, reset_after_seconds: 3600 },
-              },
-            }),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            }
-          )
-        )
-      ) as typeof fetch;
-      global.fetch = fetchSpy;
+      const providerFetch = mock(() =>
+        Promise.resolve(new Response(JSON.stringify({ plan_type: 'free' }), { status: 200 }))
+      );
+      global.fetch = mockManagedCodex('kaidu.kd@gmail.com#04a0f049-team', providerFetch);
 
       const result = await fetchCodexQuota('kaidu.kd@gmail.com#04a0f049-team');
 
       expect(result.success).toBe(false);
-      expect(result.errorCode).toBe('auth_file_missing');
-      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(result.errorCode).toBe('missing_account_id');
+      expect(providerFetch).not.toHaveBeenCalled();
     });
 
     it('maps 403 responses to forbidden metadata', async () => {
       createValidCodexAccount('forbidden@example.com', 'workspace-forbidden');
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedCodex('forbidden@example.com', () =>
         Promise.resolve(
           new Response(JSON.stringify({ detail: { code: 'quota_api_forbidden' } }), {
             status: 403,
@@ -721,7 +742,7 @@ describe('Codex Quota Fetcher', () => {
     it('maps 429 responses to retryable rate-limit metadata', async () => {
       createValidCodexAccount('rate-limit@example.com', 'workspace-rate-limit');
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedCodex('rate-limit@example.com', () =>
         Promise.resolve(
           new Response(JSON.stringify({ detail: { code: 'rate_limited' } }), {
             status: 429,
@@ -742,7 +763,7 @@ describe('Codex Quota Fetcher', () => {
     it('maps 5xx responses to retryable provider-unavailable metadata', async () => {
       createValidCodexAccount('outage@example.com', 'workspace-outage');
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedCodex('outage@example.com', () =>
         Promise.resolve(
           new Response(JSON.stringify({ detail: { code: 'upstream_failure' } }), {
             status: 503,
@@ -763,7 +784,7 @@ describe('Codex Quota Fetcher', () => {
     it('maps unknown upstream statuses to a non-retryable structured error', async () => {
       createValidCodexAccount('teapot@example.com', 'workspace-teapot');
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedCodex('teapot@example.com', () =>
         Promise.resolve(
           new Response('{"message":"Strange upstream response"}', {
             status: 418,
@@ -786,7 +807,7 @@ describe('Codex Quota Fetcher', () => {
       const leakedToken = 'secret-token-value-123';
       const oversizedMessage = 'x'.repeat(400);
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedCodex('sanitized@example.com', () =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -814,7 +835,7 @@ describe('Codex Quota Fetcher', () => {
     it('omits raw HTML upstream bodies from the returned error detail', async () => {
       createValidCodexAccount('html@example.com', 'workspace-html');
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedCodex('html@example.com', () =>
         Promise.resolve(
           new Response('<html><body>bad gateway</body></html>', {
             status: 503,
@@ -827,6 +848,32 @@ describe('Codex Quota Fetcher', () => {
 
       expect(result.success).toBe(false);
       expect(result.errorDetail).toBe('[HTML error response omitted]');
+    });
+
+    it('maps CLIProxy outage to retryable service failure without reauth', async () => {
+      createValidCodexAccount('outage@example.com', 'workspace-outage');
+
+      global.fetch = mock(() => Promise.reject(new Error('connect ECONNREFUSED'))) as typeof fetch;
+
+      const result = await fetchCodexQuota('outage@example.com');
+
+      expect(result.success).toBe(false);
+      expect(result.needsReauth).toBeUndefined();
+      expect(result.errorCode).toBe('cliproxy_unavailable');
+      expect(result.retryable).toBe(true);
+    });
+
+    it('reports managed auth missing without reauth', async () => {
+      createValidCodexAccount('unloaded@example.com', 'workspace-unloaded');
+
+      global.fetch = mock(() => Promise.resolve(Response.json({ files: [] }))) as typeof fetch;
+
+      const result = await fetchCodexQuota('unloaded@example.com');
+
+      expect(result.success).toBe(false);
+      expect(result.needsReauth).toBeUndefined();
+      expect(result.errorCode).toBe('managed_auth_missing');
+      expect(result.retryable).toBe(false);
     });
   });
 });

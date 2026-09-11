@@ -174,7 +174,18 @@ export function barAuthMiddleware(req: Request, res: Response, next: NextFunctio
     return;
   }
   const requestPath = req.originalUrl;
-  if (!nonce || !proof || !isMatchingBarAuthProof(getOrCreateBarAuthToken(), 'request', req.method, requestPath, nonce, proof)) {
+  if (
+    !nonce ||
+    !proof ||
+    !isMatchingBarAuthProof(
+      getOrCreateBarAuthToken(),
+      'request',
+      req.method,
+      requestPath,
+      nonce,
+      proof
+    )
+  ) {
     res.status(403).json({ error: 'Invalid CCS Bar authentication proof' });
     return;
   }
@@ -183,7 +194,10 @@ export function barAuthMiddleware(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  res.setHeader(BAR_AUTH_TOKEN_HEADER, createBarAuthProof(getOrCreateBarAuthToken(), 'response', req.method, requestPath, nonce));
+  res.setHeader(
+    BAR_AUTH_TOKEN_HEADER,
+    createBarAuthProof(getOrCreateBarAuthToken(), 'response', req.method, requestPath, nonce)
+  );
   barAuthenticatedRequests.add(req);
   next();
 }

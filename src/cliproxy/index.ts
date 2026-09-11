@@ -108,11 +108,7 @@ export {
 } from './ai-providers/codex-plan-compatibility';
 
 // Executor
-export {
-  startCLIProxy,
-  isPortAvailable,
-  findAvailablePort,
-} from './executor';
+export { startCLIProxy, isPortAvailable, findAvailablePort } from './executor';
 
 // Authentication
 export type { AuthStatus } from './auth/auth-handler';

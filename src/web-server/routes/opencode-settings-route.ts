@@ -26,6 +26,69 @@ export function buildOpenCodeModel(modelId: string): Record<string, unknown> {
   };
 }
 
+export function normalizeOpenCodeModels(
+  values: unknown,
+  activeValue: unknown
+): { models: string[]; activeModel: string } {
+  const source = Array.isArray(values) ? values : typeof values === 'string' ? [values] : [];
+  const models = [
+    ...new Set(
+      source
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter(Boolean)
+    ),
+  ];
+  const activeModel =
+    typeof activeValue === 'string' && models.includes(activeValue.trim())
+      ? activeValue.trim()
+      : models[0] || '';
+  return { models, activeModel };
+}
+
+interface OpenCodeSettingsInput {
+  baseUrl: string;
+  apiKey: string;
+  models: string[];
+  activeModel: string;
+  subagentModel?: string;
+}
+
+export function buildOpenCodeSettings(
+  existing: Record<string, unknown>,
+  input: OpenCodeSettingsInput
+): Record<string, unknown> {
+  const subagentModel = input.subagentModel?.trim() || input.activeModel;
+  const modelIds = [...new Set([...input.models, subagentModel].filter(Boolean))];
+  const providers =
+    existing.provider && typeof existing.provider === 'object'
+      ? { ...(existing.provider as Record<string, unknown>) }
+      : {};
+  providers.ccs = {
+    npm: '@ai-sdk/openai-compatible',
+    name: 'CCS',
+    options: { baseURL: input.baseUrl, apiKey: input.apiKey },
+    models: Object.fromEntries(modelIds.map((modelId) => [modelId, buildOpenCodeModel(modelId)])),
+  };
+
+  const agent =
+    existing.agent && typeof existing.agent === 'object'
+      ? { ...(existing.agent as Record<string, unknown>) }
+      : {};
+  agent.explorer = {
+    description: 'Fast explorer subagent for codebase navigation',
+    mode: 'subagent',
+    model: `ccs/${subagentModel}`,
+  };
+
+  return {
+    ...existing,
+    provider: providers,
+    model: `ccs/${input.activeModel}`,
+    agent,
+  };
+}
+
 // ==================== Helpers ====================
 
 function expandHome(filePath: string): string {
@@ -80,6 +143,10 @@ router.get('/', async (_req: Request, res: Response) => {
     const provider = (config.provider as Record<string, unknown>) || {};
     const ccsProvider = provider.ccs as Record<string, unknown> | undefined;
     const options = (ccsProvider?.options as Record<string, string>) || {};
+    const models =
+      ccsProvider?.models && typeof ccsProvider.models === 'object'
+        ? Object.keys(ccsProvider.models as Record<string, unknown>)
+        : [];
 
     const activeModel = (config.model as string) || '';
     const configured = Boolean(options.baseURL);
@@ -97,6 +164,7 @@ router.get('/', async (_req: Request, res: Response) => {
       config: {
         baseUrl: options.baseURL || '',
         apiKey: options.apiKey || '',
+        models,
         model: activeModel.replace(/^ccs\//, ''),
         subagentModel: subagentModel.replace(/^ccs\//, ''),
       },
@@ -114,7 +182,7 @@ router.get('/', async (_req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     const { env: rawEnv } = req.body;
-    let { model, baseUrl, apiKey, subagentModel } = req.body;
+    let { model, models, activeModel, baseUrl, apiKey, subagentModel } = req.body;
 
     // Handle env object format (from some integrations)
     if (rawEnv && typeof rawEnv === 'object') {
@@ -122,6 +190,7 @@ router.post('/', async (req: Request, res: Response) => {
       apiKey = rawEnv.OPENCODE_API_KEY || '';
       model = rawEnv.OPENCODE_MODEL || '';
       subagentModel = rawEnv.OPENCODE_SUB_AGENT_MODEL || '';
+      models = req.body.models;
     }
 
     // Handle model object format (from frontend: { model: { OPENCODE_BASE_URL, OPENCODE_API_KEY, ... } })
@@ -129,11 +198,13 @@ router.post('/', async (req: Request, res: Response) => {
       baseUrl = baseUrl || model.OPENCODE_BASE_URL || '';
       apiKey = apiKey || model.OPENCODE_API_KEY || '';
       subagentModel = subagentModel || model.OPENCODE_SUB_AGENT_MODEL || '';
+      models = models || req.body.models;
       model = model.OPENCODE_MODEL || '';
     }
 
-    if (!model) {
-      res.status(400).json({ error: 'model is required' });
+    const normalized = normalizeOpenCodeModels(models || model, activeModel || model);
+    if (normalized.models.length === 0) {
+      res.status(400).json({ error: 'at least one model is required' });
       return;
     }
 
@@ -142,48 +213,29 @@ router.post('/', async (req: Request, res: Response) => {
 
     const effectiveBaseUrl = baseUrl || 'http://127.0.0.1:8317/v1';
 
-    // Build native OpenCode config format
-    if (!existing.provider || typeof existing.provider !== 'object') {
-      existing.provider = {}
-    }
-    const providers = existing.provider as Record<string, unknown>;
+    const effectiveSubagentModel = subagentModel || normalized.activeModel;
+    const next = buildOpenCodeSettings(existing, {
+      baseUrl: effectiveBaseUrl,
+      apiKey: apiKey || 'sk-dummy',
+      models: normalized.models,
+      activeModel: normalized.activeModel,
+      subagentModel: effectiveSubagentModel,
+    });
 
-    providers.ccs = {
-      npm: '@ai-sdk/openai-compatible',
-      name: 'CCS',
-      options: {
-        baseURL: effectiveBaseUrl,
-        apiKey: apiKey || 'sk-dummy',
-      },
-      models: {
-        [model]: buildOpenCodeModel(model),
-        ...(subagentModel && subagentModel !== model ? { [subagentModel]: buildOpenCodeModel(subagentModel) } : {}),
-      },
-    };
-
-    // Set active model (prefixed with provider name)
-    existing.model = `ccs/${model}`;
-
-    // Set sub-agent config (prefixed with provider name)
-    if (subagentModel) {
-      if (!existing.agent || typeof existing.agent !== 'object') {
-        existing.agent = {};
-      }
-      const agent = existing.agent as Record<string, unknown>;
-      agent.explorer = {
-        description: 'Fast explorer subagent for codebase navigation',
-        mode: 'subagent',
-        model: `ccs/${subagentModel}`,
-      };
-    }
-
-    writeJsonFile(configPath, existing);
+    writeJsonFile(configPath, next);
 
     // Return simple format for frontend
     res.json({
       success: true,
       configPath,
-      config: { baseUrl: effectiveBaseUrl, apiKey: apiKey || 'sk-dummy', model, subagentModel: subagentModel || '' },
+      config: {
+        baseUrl: effectiveBaseUrl,
+        apiKey: apiKey || 'sk-dummy',
+        models: normalized.models,
+        activeModel: normalized.activeModel,
+        model: normalized.activeModel,
+        subagentModel: effectiveSubagentModel,
+      },
     });
   } catch (error) {
     console.error('[opencode-settings] POST error:', (error as Error).message);

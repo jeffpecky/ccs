@@ -9,7 +9,7 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2, Code2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useCliproxyModels } from '@/hooks/use-cliproxy';
+import { useCliproxyModels, useAiProviderModels } from '@/hooks/use-cliproxy';
 import { useCodexEditor } from './use-codex-editor';
 import { CLIRawEditorSection } from './cli-raw-editor-section';
 import { CLIProviderInfoTab } from './cli-provider-info-tab';
@@ -106,13 +106,26 @@ export function CodexEditor({
   } = useCodexEditor(provider, catalog, toolId, port);
 
   const { data: modelsData } = useCliproxyModels();
+  const { data: nvidiaModels } = useAiProviderModels('nvidia-api-key');
+  const { data: cloudflareModels } = useAiProviderModels('cloudflare-api-key');
+  const { data: openrouterModels } = useAiProviderModels('openrouter-api-key');
   const providerModels = useMemo(() => {
-    if (!modelsData?.models) return [];
-    return modelsData.models.map((m) => ({
-      id: m.id,
-      owned_by: m.owned_by,
-    }));
-  }, [modelsData]);
+    const base = modelsData?.models ?? [];
+    const extra = [
+      ...(nvidiaModels?.models ?? []),
+      ...(cloudflareModels?.models ?? []),
+      ...(openrouterModels?.models ?? []),
+    ];
+    const seen = new Set(base.map((m) => m.id));
+    const merged = [...base];
+    for (const m of extra) {
+      if (!seen.has(m.id)) {
+        seen.add(m.id);
+        merged.push({ id: m.id, owned_by: m.owned_by, object: 'model', created: 0 });
+      }
+    }
+    return merged.map((m) => ({ id: m.id, owned_by: m.owned_by }));
+  }, [modelsData, nvidiaModels, cloudflareModels, openrouterModels]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">

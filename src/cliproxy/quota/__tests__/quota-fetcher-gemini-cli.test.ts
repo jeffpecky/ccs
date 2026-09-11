@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { getCapturedFetchRequests, mockFetch, restoreFetch } from '../../../../tests/mocks';
+import type { CapturedRequest, MockFetchHandler } from '../../../../tests/mocks/types';
 
 describe('Gemini CLI Quota Fetcher', () => {
   const GEMINI_QUOTA_URL = 'https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota';
@@ -24,6 +24,102 @@ describe('Gemini CLI Quota Fetcher', () => {
   let resolveGeminiCliProjectId: typeof import('../quota-fetcher-gemini-cli').resolveGeminiCliProjectId;
   let geminiTestExports: typeof import('../quota-fetcher-gemini-cli').__testExports;
   let getProviderAuthDir: typeof import('../../config/config-generator').getProviderAuthDir;
+  let originalFetch: typeof fetch;
+  let capturedRequests: CapturedRequest[] = [];
+
+  function responseFor(handler: MockFetchHandler): Response {
+    const headers = new Headers(handler.headers ?? {});
+    const body =
+      handler.response === null
+        ? null
+        : typeof handler.response === 'object'
+          ? JSON.stringify(handler.response)
+          : String(handler.response);
+    return new Response(body, { status: handler.status ?? 200, headers });
+  }
+
+  function matches(handler: MockFetchHandler, url: string, method: string): boolean {
+    return (
+      (!handler.method || handler.method === method) &&
+      (typeof handler.url === 'string' ? handler.url === url : handler.url.test(url))
+    );
+  }
+
+  function mockFetch(handlers: MockFetchHandler[]): void {
+    capturedRequests = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+      const headers = Object.fromEntries(new Headers(init?.headers).entries());
+      const body = typeof init?.body === 'string' ? init.body : null;
+      capturedRequests.push({ url, method, headers, body });
+
+      const explicit = handlers.find((handler) => matches(handler, url, method));
+      if (explicit && (url === MANAGEMENT_AUTH_FILES_URL || url === MANAGEMENT_API_CALL_URL)) {
+        explicit.onRequest?.(new Request(url, init));
+        return responseFor(explicit);
+      }
+
+      if (url === MANAGEMENT_AUTH_FILES_URL) {
+        const files = fs
+          .readdirSync(getProviderAuthDir('gemini'))
+          .map((name) => {
+            try {
+              const data = JSON.parse(
+                fs.readFileSync(path.join(getProviderAuthDir('gemini'), name), 'utf8')
+              ) as Record<string, unknown>;
+              return {
+                id: data.email,
+                auth_index: data.email,
+                provider: 'gemini',
+                email: data.email,
+                name,
+              };
+            } catch {
+              return null;
+            }
+          })
+          .filter((file) => file !== null);
+        return Response.json({ files });
+      }
+
+      if (url === MANAGEMENT_API_CALL_URL && body) {
+        const call = JSON.parse(body) as { method?: string; url?: string };
+        const providerHandler = handlers.find((handler) =>
+          matches(handler, call.url ?? '', call.method ?? 'GET')
+        );
+        if (!providerHandler) {
+          return Response.json({ status_code: 404, body: '' });
+        }
+        providerHandler.onRequest?.(new Request(call.url ?? '', { method: call.method ?? 'GET' }));
+        const providerBody =
+          providerHandler.response === null
+            ? ''
+            : typeof providerHandler.response === 'object'
+              ? JSON.stringify(providerHandler.response)
+              : String(providerHandler.response);
+        return Response.json({
+          status_code: providerHandler.status ?? 200,
+          header: providerHandler.headers ?? {},
+          body: providerBody,
+        });
+      }
+
+      return Response.json(
+        { error: 'Direct provider request attempted', url, method },
+        { status: 500 }
+      );
+    }) as typeof fetch;
+  }
+
+  function getCapturedFetchRequests(): CapturedRequest[] {
+    return capturedRequests;
+  }
+
+  function restoreFetch(): void {
+    globalThis.fetch = originalFetch;
+    capturedRequests = [];
+  }
 
   function writeGeminiToken(token: Record<string, unknown>, filename = 'gemini-test.json'): string {
     const authDir = getProviderAuthDir('gemini');
@@ -52,6 +148,7 @@ describe('Gemini CLI Quota Fetcher', () => {
 
   beforeEach(async () => {
     moduleVersion += 1;
+    originalFetch = globalThis.fetch;
     tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-gemini-refresh-'));
     originalCcsHome = process.env.CCS_HOME;
     originalCcsDir = process.env.CCS_DIR;
@@ -405,9 +502,15 @@ describe('Gemini CLI Quota Fetcher', () => {
       expect(flashBucket?.remainingAmount).toBe(82);
       expect(flashBucket?.resetTime).toBe('2026-01-30T14:00:00Z');
 
-      const requestUrls = getCapturedFetchRequests().map((request) => request.url);
-      expect(requestUrls).toContain(GEMINI_QUOTA_URL);
-      expect(requestUrls).toContain(GEMINI_CODE_ASSIST_URL);
+      const requests = getCapturedFetchRequests();
+      expect(requests.every((request) => !request.url.startsWith('https://cloudcode-pa.'))).toBe(
+        true
+      );
+      const managedTargets = requests
+        .filter((request) => request.url === MANAGEMENT_API_CALL_URL && request.body)
+        .map((request) => JSON.parse(request.body as string).url);
+      expect(managedTargets).toContain(GEMINI_QUOTA_URL);
+      expect(managedTargets).toContain(GEMINI_CODE_ASSIST_URL);
     });
 
     it('keeps base quota success when supplementary metadata fails', async () => {
@@ -457,8 +560,11 @@ describe('Gemini CLI Quota Fetcher', () => {
       globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const url =
           typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-        if (url === GEMINI_CODE_ASSIST_URL) {
-          throw new TypeError('supplementary network down');
+        if (url === MANAGEMENT_API_CALL_URL) {
+          const call = JSON.parse(String(init?.body ?? '{}')) as { url?: string };
+          if (call.url === GEMINI_CODE_ASSIST_URL) {
+            throw new TypeError('supplementary network down');
+          }
         }
         return mockedFetch(input, init);
       }) as typeof fetch;
@@ -482,12 +588,6 @@ describe('Gemini CLI Quota Fetcher', () => {
       writeActiveGeminiAccount('reauth@example.com');
 
       mockFetch([
-        {
-          url: MANAGEMENT_AUTH_FILES_URL,
-          response: {
-            files: [],
-          },
-        },
         {
           url: GEMINI_QUOTA_URL,
           method: 'POST',
@@ -714,15 +814,19 @@ describe('Gemini CLI Quota Fetcher', () => {
 
       expect(result.success).toBe(true);
 
-      const [, managedLookupRequest, managedQuotaRequest] = getCapturedFetchRequests();
-      expect(managedLookupRequest.url).toBe(MANAGEMENT_AUTH_FILES_URL);
-      expect(managedQuotaRequest.url).toBe(MANAGEMENT_API_CALL_URL);
-      expect(managedQuotaRequest.body).toContain('"auth_index":"target-auth-index"');
-      expect(managedQuotaRequest.body).toContain('"Authorization":"Bearer $TOKEN$"');
-      expect(managedQuotaRequest.body).not.toContain('default-refresh-token');
+      const requests = getCapturedFetchRequests();
+      expect(requests[0].url).toBe(MANAGEMENT_AUTH_FILES_URL);
+      const managedQuotaRequest = requests.find(
+        (request) =>
+          request.url === MANAGEMENT_API_CALL_URL && request.body?.includes(GEMINI_QUOTA_URL)
+      );
+      expect(managedQuotaRequest?.body).toContain('"auth_index":"target-auth-index"');
+      expect(managedQuotaRequest?.body).toContain('"Authorization":"Bearer $TOKEN$"');
+      expect(managedQuotaRequest?.body).not.toContain('default-refresh-token');
+      expect(requests.some((request) => request.url === GEMINI_QUOTA_URL)).toBe(false);
     });
 
-    it('retries a 401 quota failure through the management API instead of refreshing locally', async () => {
+    it('uses management API only and never sends file access tokens directly', async () => {
       writeGeminiToken(
         {
           type: 'gemini',
@@ -821,9 +925,9 @@ describe('Gemini CLI Quota Fetcher', () => {
         const result = await fetchGeminiCliQuota('retry@example.com');
 
         expect(result.success).toBe(true);
-        expect(quotaAttempt).toBe(1);
+        expect(quotaAttempt).toBe(0);
         expect(managedLookupAttempt).toBe(1);
-        expect(managedRequestAttempt).toBe(1);
+        expect(managedRequestAttempt).toBe(2);
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -896,8 +1000,8 @@ describe('Gemini CLI Quota Fetcher', () => {
         expect(result.success).toBe(false);
         expect(result.needsReauth).toBeUndefined();
         expect(result.retryable).toBe(true);
-        expect(result.errorCode).toBe('managed_auth_unavailable');
-        expect(directQuotaAttempt).toBe(1);
+        expect(result.errorCode).toBe('cliproxy_unavailable');
+        expect(directQuotaAttempt).toBe(0);
         expect(managedLookupAttempt).toBe(1);
         expect(managedRequestAttempt).toBe(0);
       } finally {

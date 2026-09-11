@@ -11,6 +11,7 @@ import { Loader2, Code2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   useCliproxyModels,
+  useAiProviderModels,
   usePresets,
   useCreatePreset,
   useDeletePreset,
@@ -46,6 +47,9 @@ export function CLIProviderEditor({
   const { t } = useTranslation();
 
   const { data: modelsData } = useCliproxyModels();
+  const { data: nvidiaModels } = useAiProviderModels('nvidia-api-key');
+  const { data: cloudflareModels } = useAiProviderModels('cloudflare-api-key');
+  const { data: openrouterModels } = useAiProviderModels('openrouter-api-key');
   const { data: presetsData } = usePresets(provider);
   const createPresetMutation = useCreatePreset();
   const deletePresetMutation = useDeletePreset();
@@ -67,14 +71,22 @@ export function CLIProviderEditor({
   }, [isAgyProvider, presetsData?.presets]);
 
   const providerModels = useMemo(() => {
-    if (!modelsData?.models) return [];
-    // Return ALL models with original IDs + owned_by for grouping
-    // Catalog resolution requires original IDs (without provider prefix)
-    return modelsData.models.map((m) => ({
-      id: m.id,
-      owned_by: m.owned_by,
-    }));
-  }, [modelsData]);
+    const base = modelsData?.models ?? [];
+    const extra = [
+      ...(nvidiaModels?.models ?? []),
+      ...(cloudflareModels?.models ?? []),
+      ...(openrouterModels?.models ?? []),
+    ];
+    const seen = new Set(base.map((m) => m.id));
+    const merged = [...base];
+    for (const m of extra) {
+      if (!seen.has(m.id)) {
+        seen.add(m.id);
+        merged.push({ id: m.id, owned_by: m.owned_by, object: 'model', created: 0 });
+      }
+    }
+    return merged.map((m) => ({ id: m.id, owned_by: m.owned_by }));
+  }, [modelsData, nvidiaModels, cloudflareModels, openrouterModels]);
 
   const providerRoute = (baseProvider || provider).toLowerCase();
 

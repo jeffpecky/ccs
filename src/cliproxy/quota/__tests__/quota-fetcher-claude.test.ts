@@ -12,6 +12,7 @@ import {
   buildClaudeQuotaWindows,
   buildClaudeCoreUsageSummary,
   fetchClaudeQuota,
+  fetchClaudeQuotaWithToken,
   fetchAllClaudeQuotas,
 } from '../quota-fetcher-claude';
 import { sanitizeEmail } from '../../auth/auth-utils';
@@ -19,6 +20,44 @@ import { sanitizeEmail } from '../../auth/auth-utils';
 let tmpDir: string;
 let originalCcsHome: string | undefined;
 let originalFetch: typeof fetch;
+
+function mockManagedClaude(
+  accountId: string,
+  providerFetch: (url: string, options?: RequestInit) => Promise<Response>
+): typeof fetch {
+  return mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url.endsWith('/v0/management/auth-files')) {
+      return Response.json({
+        files: [
+          {
+            id: accountId,
+            auth_index: `claude-${accountId}`,
+            provider: 'claude',
+            email: accountId,
+          },
+        ],
+      });
+    }
+    expect(url).toContain('/v0/management/api-call');
+    const call = JSON.parse(String(init?.body ?? '{}')) as {
+      method?: string;
+      url: string;
+      header?: Record<string, string>;
+    };
+    expect(call.header?.Authorization).toBe('Bearer $TOKEN$');
+    const response = await providerFetch(call.url, {
+      method: call.method,
+      headers: call.header,
+      signal: init?.signal,
+    });
+    return Response.json({
+      status_code: response.status,
+      header: Object.fromEntries(response.headers.entries()),
+      body: await response.text(),
+    });
+  }) as typeof fetch;
+}
 
 function createClaudeAccount(
   accountId: string,
@@ -342,35 +381,38 @@ describe('Claude Quota Fetcher', () => {
         type: 'claude',
       });
 
-      global.fetch = mock((url: string, options?: RequestInit) => {
-        expect(url).toBe('https://api.anthropic.com/api/oauth/usage');
-        expect(options?.method).toBe('GET');
-        expect(options?.headers).toMatchObject({
-          Authorization: 'Bearer claude-token',
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'anthropic-beta': 'oauth-2025-04-20',
-        });
+      global.fetch = mockManagedClaude(
+        'claude-main@example.com',
+        (url: string, options?: RequestInit) => {
+          expect(url).toBe('https://api.anthropic.com/api/oauth/usage');
+          expect(options?.method).toBe('GET');
+          expect(options?.headers).toMatchObject({
+            Authorization: 'Bearer $TOKEN$',
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'anthropic-beta': 'oauth-2025-04-20',
+          });
 
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              five_hour: {
-                utilization: 39,
-                resets_at: '2026-03-01T01:00:00Z',
-              },
-              seven_day: {
-                utilization: 75,
-                resets_at: '2026-03-07T01:00:00Z',
-              },
-            }),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            }
-          )
-        );
-      }) as typeof fetch;
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                five_hour: {
+                  utilization: 39,
+                  resets_at: '2026-03-01T01:00:00Z',
+                },
+                seven_day: {
+                  utilization: 75,
+                  resets_at: '2026-03-07T01:00:00Z',
+                },
+              }),
+              {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }
+            )
+          );
+        }
+      );
 
       const result = await fetchClaudeQuota('claude-main@example.com');
 
@@ -397,7 +439,9 @@ describe('Claude Quota Fetcher', () => {
         'anthropic'
       );
 
-      global.fetch = mock(() => Promise.resolve(new Response('', { status: 401 }))) as typeof fetch;
+      global.fetch = mockManagedClaude('claude-auth@example.com', () =>
+        Promise.resolve(new Response('', { status: 401 }))
+      );
 
       const result = await fetchClaudeQuota('claude-auth@example.com');
 
@@ -417,7 +461,7 @@ describe('Claude Quota Fetcher', () => {
         'claude'
       );
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedClaude('claude-oauth-nested-message@example.com', () =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -430,7 +474,7 @@ describe('Claude Quota Fetcher', () => {
             { status: 401, headers: { 'Content-Type': 'application/json' } }
           )
         )
-      ) as typeof fetch;
+      );
 
       const result = await fetchClaudeQuota('claude-oauth-nested-message@example.com');
 
@@ -446,7 +490,7 @@ describe('Claude Quota Fetcher', () => {
         type: 'claude',
       });
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedClaude('claude-oauth-root-message@example.com', () =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -455,7 +499,7 @@ describe('Claude Quota Fetcher', () => {
             { status: 401, headers: { 'Content-Type': 'application/json' } }
           )
         )
-      ) as typeof fetch;
+      );
 
       const result = await fetchClaudeQuota('claude-oauth-root-message@example.com');
 
@@ -471,9 +515,9 @@ describe('Claude Quota Fetcher', () => {
         type: 'claude',
       });
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedClaude('claude-oauth-plaintext@example.com', () =>
         Promise.resolve(new Response('OAuth session expired.', { status: 401 }))
-      ) as typeof fetch;
+      );
 
       const result = await fetchClaudeQuota('claude-oauth-plaintext@example.com');
 
@@ -489,7 +533,7 @@ describe('Claude Quota Fetcher', () => {
         type: 'claude',
       });
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedClaude('claude-auth-other-401@example.com', () =>
         Promise.resolve(
           new Response(
             JSON.stringify({
@@ -501,7 +545,7 @@ describe('Claude Quota Fetcher', () => {
             { status: 401, headers: { 'Content-Type': 'application/json' } }
           )
         )
-      ) as typeof fetch;
+      );
 
       const result = await fetchClaudeQuota('claude-auth-other-401@example.com');
 
@@ -517,7 +561,9 @@ describe('Claude Quota Fetcher', () => {
         type: 'claude',
       });
 
-      global.fetch = mock(() => Promise.resolve(new Response('', { status: 404 }))) as typeof fetch;
+      global.fetch = mockManagedClaude('claude-usage-404@example.com', () =>
+        Promise.resolve(new Response('', { status: 404 }))
+      );
 
       const result = await fetchClaudeQuota('claude-usage-404@example.com');
 
@@ -525,21 +571,50 @@ describe('Claude Quota Fetcher', () => {
       expect(result.error).toContain('not found');
     });
 
-    it('fails fast when auth file has no token', async () => {
+    it('maps CLIProxy outage to retryable service failure', async () => {
+      createClaudeAccount('claude-outage@example.com', {
+        access_token: 'file-token-must-not-be-used',
+        type: 'claude',
+      });
+      global.fetch = mock(() => Promise.reject(new Error('connect ECONNREFUSED'))) as typeof fetch;
+
+      const result = await fetchClaudeQuota('claude-outage@example.com');
+
+      expect(result.success).toBe(false);
+      expect(result.needsReauth).toBe(false);
+      expect(result.errorCode).toBe('cliproxy_unavailable');
+      expect(result.retryable).toBe(true);
+    });
+
+    it('reports managed auth missing without reauth', async () => {
+      createClaudeAccount('claude-unloaded@example.com', {
+        access_token: 'file-token-must-not-be-used',
+        type: 'claude',
+      });
+      global.fetch = mock(() => Promise.resolve(Response.json({ files: [] }))) as typeof fetch;
+
+      const result = await fetchClaudeQuota('claude-unloaded@example.com');
+
+      expect(result.success).toBe(false);
+      expect(result.needsReauth).toBe(false);
+      expect(result.errorCode).toBe('managed_auth_missing');
+      expect(result.retryable).toBeUndefined();
+    });
+
+    it('does not require file access token for managed quota', async () => {
       createClaudeAccount('claude-missing@example.com', {
         access_token: '   ',
         expired: '2099-01-01T00:00:00.000Z',
         type: 'claude',
       });
 
-      const fetchMock = mock(() => Promise.resolve(new Response('', { status: 200 })));
-      global.fetch = fetchMock as typeof fetch;
+      global.fetch = mockManagedClaude('claude-missing@example.com', () =>
+        Promise.resolve(Response.json({}))
+      );
 
       const result = await fetchClaudeQuota('claude-missing@example.com');
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Auth file not found');
-      expect(fetchMock).toHaveBeenCalledTimes(0);
+      expect(result.success).toBe(true);
     });
 
     it('treats missing expiry as not expired', async () => {
@@ -548,14 +623,14 @@ describe('Claude Quota Fetcher', () => {
         type: 'claude',
       });
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedClaude('claude-no-expiry@example.com', () =>
         Promise.resolve(
           new Response(JSON.stringify({}), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           })
         )
-      ) as typeof fetch;
+      );
 
       const result = await fetchClaudeQuota('claude-no-expiry@example.com');
 
@@ -570,7 +645,7 @@ describe('Claude Quota Fetcher', () => {
         type: 'claude',
       });
 
-      global.fetch = mock(() =>
+      global.fetch = mockManagedClaude('claude-large-error@example.com', () =>
         Promise.resolve(
           new Response('x'.repeat(9000), {
             status: 400,
@@ -580,7 +655,7 @@ describe('Claude Quota Fetcher', () => {
             },
           })
         )
-      ) as typeof fetch;
+      );
 
       const result = await fetchClaudeQuota('claude-large-error@example.com');
 
@@ -596,7 +671,7 @@ describe('Claude Quota Fetcher', () => {
       });
 
       let attempt = 0;
-      global.fetch = mock(() => {
+      global.fetch = mockManagedClaude('claude-retry@example.com', () => {
         attempt += 1;
         if (attempt === 1) {
           return Promise.resolve(new Response('', { status: 500 }));
@@ -613,7 +688,7 @@ describe('Claude Quota Fetcher', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } }
           )
         );
-      }) as typeof fetch;
+      });
 
       const result = await fetchClaudeQuota('claude-retry@example.com');
 
@@ -633,12 +708,12 @@ describe('Claude Quota Fetcher', () => {
       });
 
       let attempt = 0;
-      global.fetch = mock(() => {
+      global.fetch = mockManagedClaude('claude-429@example.com', () => {
         attempt += 1;
         return Promise.resolve(
           new Response('', { status: 429, headers: { 'Retry-After': '120' } })
         );
-      }) as typeof fetch;
+      });
 
       const result = await fetchClaudeQuota('claude-429@example.com');
 
@@ -675,7 +750,7 @@ describe('Claude Quota Fetcher', () => {
       }) as typeof clearTimeout);
 
       let attempt = 0;
-      global.fetch = mock(() => {
+      global.fetch = mockManagedClaude('claude-retry-timeout@example.com', () => {
         attempt += 1;
         if (attempt === 1) {
           return Promise.resolve(new Response('', { status: 500 }));
@@ -692,7 +767,7 @@ describe('Claude Quota Fetcher', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } }
           )
         );
-      }) as typeof fetch;
+      });
 
       try {
         const result = await fetchClaudeQuota('claude-retry-timeout@example.com');
@@ -708,13 +783,7 @@ describe('Claude Quota Fetcher', () => {
       }
     });
 
-    it('retries once after AbortError and succeeds', async () => {
-      createClaudeAccount('claude-timeout@example.com', {
-        access_token: 'timeout-token',
-        expired: '2099-01-01T00:00:00.000Z',
-        type: 'claude',
-      });
-
+    it('keeps native Claude token retries independent from CLIProxy', async () => {
       let attempt = 0;
       global.fetch = mock(() => {
         attempt += 1;
@@ -736,14 +805,14 @@ describe('Claude Quota Fetcher', () => {
         );
       }) as typeof fetch;
 
-      const result = await fetchClaudeQuota('claude-timeout@example.com');
+      const result = await fetchClaudeQuotaWithToken('timeout-token', 'claude-timeout@example.com');
 
       expect(result.success).toBe(true);
       expect(attempt).toBe(2);
       expect(result.coreUsage?.weekly?.remainingPercent).toBe(70);
     });
 
-    it('falls back to alternate auth file when preferred file is invalid JSON', async () => {
+    it('ignores local auth file validity for managed quota', async () => {
       const accountId = 'claude-fallback@example.com';
       const cliproxyDir = path.join(tmpDir, '.ccs', 'cliproxy');
       const authDir = path.join(cliproxyDir, 'auth');
@@ -787,9 +856,9 @@ describe('Claude Quota Fetcher', () => {
         )
       );
 
-      global.fetch = mock((_url: string, options?: RequestInit) => {
+      global.fetch = mockManagedClaude(accountId, (_url, options) => {
         expect(options?.headers).toMatchObject({
-          Authorization: 'Bearer valid-anthropic-token',
+          Authorization: 'Bearer $TOKEN$',
         });
         return Promise.resolve(
           new Response(JSON.stringify({}), {
@@ -797,7 +866,7 @@ describe('Claude Quota Fetcher', () => {
             headers: { 'Content-Type': 'application/json' },
           })
         );
-      }) as typeof fetch;
+      });
 
       const result = await fetchClaudeQuota(accountId);
       expect(result.success).toBe(true);

@@ -132,9 +132,8 @@ router.post('/', async (req: Request, res: Response) => {
     // Set or remove env vars based on provided values
     if (baseUrl !== undefined) {
       if (baseUrl) {
-        // Ensure /v1 suffix
-        const url = baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`;
-        env.ANTHROPIC_BASE_URL = url;
+        // Claude Code's Anthropic SDK appends /v1/messages itself.
+        env.ANTHROPIC_BASE_URL = baseUrl.replace(/\/v1\/?$/, '');
       } else {
         delete env.ANTHROPIC_BASE_URL;
       }

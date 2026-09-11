@@ -6,6 +6,7 @@
  */
 
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as yaml from 'js-yaml';
 import { getCliproxyConfigPath } from '../config/config-generator';
 import { generateSyncPayload } from './profile-mapper';
@@ -17,12 +18,12 @@ import type { ClaudeKey } from '../management/management-api-types';
  *
  * @returns Object with success status and synced count
  */
-export function syncToLocalConfig(): {
+export async function syncToLocalConfig(): Promise<{
   success: boolean;
   syncedCount: number;
   configPath: string;
   error?: string;
-} {
+}> {
   const configPath = getCliproxyConfigPath();
 
   try {
@@ -38,25 +39,17 @@ export function syncToLocalConfig(): {
     }
 
     // Read existing config
-    if (!fs.existsSync(configPath)) {
-      return {
-        success: false,
-        syncedCount: 0,
-        configPath,
-        error: 'CLIProxy config not found. Run diagnostics from the dashboard settings to generate.',
-      };
-    }
-
     let configContent: string;
     try {
-      configContent = fs.readFileSync(configPath, 'utf8');
+      configContent = await fsp.readFile(configPath, 'utf8');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return {
           success: false,
           syncedCount: 0,
           configPath,
-          error: 'CLIProxy config deleted during sync. Run diagnostics from the dashboard settings to regenerate.',
+          error:
+            'CLIProxy config not found. Run diagnostics from the dashboard settings to generate.',
         };
       }
       throw error;
@@ -82,16 +75,14 @@ export function syncToLocalConfig(): {
     // Atomic write with cleanup on failure
     const tempPath = configPath + '.tmp';
     try {
-      fs.writeFileSync(tempPath, newContent, { mode: 0o600 });
-      fs.renameSync(tempPath, configPath);
+      await fsp.writeFile(tempPath, newContent, { mode: 0o600 });
+      await fsp.rename(tempPath, configPath);
     } catch (writeError) {
       // Clean up temp file if it exists
-      if (fs.existsSync(tempPath)) {
-        try {
-          fs.unlinkSync(tempPath);
-        } catch {
-          // Ignore cleanup errors
-        }
+      try {
+        await fsp.unlink(tempPath);
+      } catch {
+        // Ignore cleanup errors
       }
       throw writeError;
     }

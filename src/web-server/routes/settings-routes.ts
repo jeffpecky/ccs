@@ -20,9 +20,7 @@ import {
 import { regenerateConfig } from '../../cliproxy/config/config-generator';
 import { resolveCliproxyBridgeMetadata } from '../../api/services';
 
-import {
-  requireLocalAccessWhenAuthDisabled,
-} from '../middleware/auth-middleware';
+import { requireLocalAccessWhenAuthDisabled } from '../middleware/auth-middleware';
 import type { Settings } from '../../types/config';
 import type { CLIProxyProvider } from '../../cliproxy/types';
 import { mapExternalProviderName } from '../../cliproxy/provider-capabilities';
@@ -34,11 +32,7 @@ import {
   getDeniedModelIdReasonForProvider,
 } from '../../cliproxy/ai-providers/model-id-normalizer';
 import { createRouteErrorHelpers } from './route-helpers';
-import {
-  getCcsDir,
-  loadConfigSafe,
-  loadSettings,
-} from '../../config/config-loader-facade';
+import { getCcsDir, loadConfigSafe, loadSettings } from '../../config/config-loader-facade';
 
 const router = Router();
 const MODEL_ENV_KEYS = [

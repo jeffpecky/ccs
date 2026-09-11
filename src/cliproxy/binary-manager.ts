@@ -363,10 +363,7 @@ export async function installCliproxyVersion(
 
   if (manager.isBinaryInstalled()) {
     const label = effectiveBackend === 'plus' ? 'CLIProxy Plus' : 'CLIProxy';
-    if (verbose)
-      console.log(
-        formatInfo(`Removing existing ${label} v${installedVersion}`)
-      );
+    if (verbose) console.log(formatInfo(`Removing existing ${label} v${installedVersion}`));
     manager.deleteBinary();
   }
   await manager.ensureBinary();

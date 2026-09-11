@@ -257,7 +257,9 @@ export function warnCrossProviderDuplicates(provider: CLIProxyProvider): boolean
   console.error(
     '    Same Google account across Gemini + Antigravity is a known suspension/ban risk (ref: #509).'
   );
-  console.error('    This risk applies to both CLI sessions and accounts added from the dashboard.');
+  console.error(
+    '    This risk applies to both CLI sessions and accounts added from the dashboard.'
+  );
   console.error(
     '    If provider requests start returning 403/Forbidden, treat it as a possible account disable/ban.'
   );
@@ -294,12 +296,8 @@ export function warnNewAccountConflict(
   console.error(
     `    ${maskEmail(email)} is also registered under: ${conflictingProviders.join(', ')}`
   );
-  console.error(
-    '    Reusing one Google account between Gemini and Antigravity can trigger bans.'
-  );
-  console.error(
-    '    This applies to both CLI auth and dashboard auth for these providers.'
-  );
+  console.error('    Reusing one Google account between Gemini and Antigravity can trigger bans.');
+  console.error('    This applies to both CLI auth and dashboard auth for these providers.');
   console.error('    403/Forbidden responses can be an early sign of account disablement.');
   console.error(
     '    If you want to keep Google AI access, do not continue with this shared-account setup.'
@@ -334,9 +332,7 @@ export function warnOAuthBanRisk(provider: CLIProxyProvider): void {
       '    Antigravity-specific warning: OAuth usage can still trigger suspension/ban patterns.'
     );
   }
-  console.error(
-    '    This risk applies whether auth was done from CLI or from the dashboard.'
-  );
+  console.error('    This risk applies whether auth was done from CLI or from the dashboard.');
   console.error(
     '    If you want to keep Google AI access, do not continue with this shared-account setup.'
   );

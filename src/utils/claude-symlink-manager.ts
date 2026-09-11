@@ -212,7 +212,7 @@ export class ClaudeSymlinkManager {
       }
       if (!silent) {
         console.log(ok(`Copied ${item.target} (symlink unavailable)`));
-        console.log(info("Sync from the dashboard settings after CCS updates to refresh"));
+        console.log(info('Sync from the dashboard settings after CCS updates to refresh'));
       }
       return true;
     } catch (copyErr) {
@@ -372,10 +372,14 @@ export class ClaudeSymlinkManager {
         // On Windows, copied files are valid (symlink fallback)
         if (process.platform === 'win32' && this.isCopiedItem(targetPath, sourcePath, item.type)) {
           // Copied file is valid on Windows, but note it's not a symlink
-          issues.push(`${item.target} is a copy (not symlink) - sync from the dashboard settings after updates`);
+          issues.push(
+            `${item.target} is a copy (not symlink) - sync from the dashboard settings after updates`
+          );
           // Still healthy, just a warning
         } else {
-          issues.push(`Not a CCS symlink: ${item.target} (sync from the dashboard settings to fix)`);
+          issues.push(
+            `Not a CCS symlink: ${item.target} (sync from the dashboard settings to fix)`
+          );
           healthy = false;
         }
       }

@@ -4,17 +4,19 @@
  * Fetches OAuth usage windows from Claude API and normalizes 5h + weekly windows.
  */
 
-import * as path from 'node:path';
-import * as fsp from 'node:fs/promises';
-import { getAuthDir } from '../config/config-generator';
-import { getPausedDir, getProviderAccounts } from '../accounts/account-manager';
-import { sanitizeEmail, isTokenExpired } from '../auth/auth-utils';
+import { getProviderAccounts } from '../accounts/account-manager';
 import type { ClaudeQuotaResult } from './quota-types';
 import {
   buildClaudeQuotaWindows,
   buildClaudeCoreUsageSummary,
 } from './quota-fetcher-claude-normalizer';
 import { createLogger } from '../../services/logging';
+import {
+  callProviderQuotaApi,
+  CLIProxyManagementUnavailableError,
+  resolveCLIProxyAuth,
+} from './cli-proxy-auth-resolver';
+import type { CLIProxyAuthReference } from './cli-proxy-auth-resolver';
 
 const logger = createLogger('cliproxy:quota:claude');
 
@@ -26,11 +28,6 @@ const CLAUDE_QUOTA_MAX_ATTEMPTS = 2;
 const CLAUDE_OAUTH_BETA_HEADER = 'oauth-2025-04-20';
 const CLAUDE_QUOTA_ERROR_BODY_MAX_BYTES = 8192;
 
-interface ClaudeAuthData {
-  accessToken: string;
-  isExpired: boolean;
-}
-
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
@@ -38,35 +35,6 @@ function asString(value: unknown): string | null {
 function toObject(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function extractAccessToken(data: Record<string, unknown>): string | null {
-  const direct = asString(data['access_token']);
-  if (direct) return direct;
-
-  const nested = toObject(data['token']);
-  if (nested) {
-    const nestedToken = asString(nested['access_token']);
-    if (nestedToken) return nestedToken;
-  }
-
-  return null;
-}
-
-function extractExpiry(data: Record<string, unknown>): string | null {
-  const direct = asString(data['expired']);
-  if (direct) return direct;
-
-  const nested = toObject(data['token']);
-  if (nested) {
-    return asString(nested['expiry']);
-  }
-
-  return null;
-}
-
-function isAuthExpired(expiry: string | null): boolean {
-  return expiry ? isTokenExpired(expiry) : false;
 }
 
 function extractErrorMessage(payload: unknown): string | null {
@@ -124,86 +92,6 @@ async function readResponseErrorMessage(response: Response): Promise<string | nu
   }
 }
 
-async function readJsonFile(filePath: string): Promise<Record<string, unknown> | null> {
-  try {
-    const raw = await fsp.readFile(filePath, 'utf-8');
-    const parsed = JSON.parse(raw) as unknown;
-    return toObject(parsed);
-  } catch {
-    return null;
-  }
-}
-
-async function readAuthCandidate(filePath: string): Promise<ClaudeAuthData | null> {
-  const data = await readJsonFile(filePath);
-  if (!data) return null;
-
-  const accessToken = extractAccessToken(data);
-  if (!accessToken) return null;
-
-  const expiry = extractExpiry(data);
-  return {
-    accessToken,
-    isExpired: isAuthExpired(expiry),
-  };
-}
-
-async function readClaudeAuthData(accountId: string): Promise<ClaudeAuthData | null> {
-  const authDirs = [getAuthDir(), getPausedDir()];
-  const sanitizedId = sanitizeEmail(accountId);
-  const expectedFiles = [`claude-${sanitizedId}.json`, `anthropic-${sanitizedId}.json`];
-
-  for (const authDir of authDirs) {
-    for (const expectedFile of expectedFiles) {
-      const filePath = path.join(authDir, expectedFile);
-      const authData = await readAuthCandidate(filePath);
-      if (authData) {
-        return authData;
-      }
-    }
-
-    let files: string[];
-    try {
-      files = await fsp.readdir(authDir);
-    } catch {
-      continue;
-    }
-
-    for (const file of files) {
-      if (
-        !file.endsWith('.json') ||
-        (!file.startsWith('claude-') && !file.startsWith('anthropic-'))
-      ) {
-        continue;
-      }
-
-      const filePath = path.join(authDir, file);
-      const data = await readJsonFile(filePath);
-      if (!data) continue;
-
-      const accessToken = extractAccessToken(data);
-      if (!accessToken) continue;
-
-      const fileEmail = asString(data['email']);
-      const typeValue = asString(data['type']);
-      const isClaudeType =
-        typeValue === null || typeValue === 'claude' || typeValue === 'anthropic';
-      const matchesEmail = fileEmail === accountId;
-      const matchesFile = file.includes(sanitizedId);
-
-      if ((matchesEmail || matchesFile) && isClaudeType) {
-        const expiry = extractExpiry(data);
-        return {
-          accessToken,
-          isExpired: isAuthExpired(expiry),
-        };
-      }
-    }
-  }
-
-  return null;
-}
-
 function buildEmptyResult(
   error: string,
   accountId: string,
@@ -232,7 +120,8 @@ function buildEmptyResult(
 async function runClaudeUsageFetch(
   accessToken: string,
   accountId: string,
-  verbose: boolean
+  verbose: boolean,
+  managedAuth?: CLIProxyAuthReference
 ): Promise<ClaudeQuotaResult> {
   let lastError = 'Unknown error';
 
@@ -241,16 +130,24 @@ async function runClaudeUsageFetch(
     const timeoutId = setTimeout(() => controller.abort(), CLAUDE_QUOTA_TIMEOUT_MS);
 
     try {
-      const response = await fetch(CLAUDE_OAUTH_USAGE_URL, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'anthropic-beta': CLAUDE_OAUTH_BETA_HEADER,
-        },
-      });
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'anthropic-beta': CLAUDE_OAUTH_BETA_HEADER,
+      };
+
+      let response: Response;
+      if (managedAuth) {
+        headers.Authorization = 'Bearer $TOKEN$';
+        response = await callProviderQuotaApi(managedAuth, CLAUDE_OAUTH_USAGE_URL, headers);
+      } else {
+        headers.Authorization = `Bearer ${accessToken}`;
+        response = await fetch(CLAUDE_OAUTH_USAGE_URL, {
+          method: 'GET',
+          signal: controller.signal,
+          headers,
+        });
+      }
 
       if (verbose) {
         logger.info('quota.fetch.status', `Claude OAuth usage status: ${response.status}`, {
@@ -277,7 +174,7 @@ async function runClaudeUsageFetch(
 
       if (response.status === 403) {
         clearTimeout(timeoutId);
-        return buildEmptyResult('Not authorized for Claude OAuth usage', accountId);
+        return buildEmptyResult('Not authorized for Claude OAuth usage', accountId, true);
       }
 
       if (!response.ok) {
@@ -341,6 +238,7 @@ async function runClaudeUsageFetch(
       };
     } catch (error) {
       clearTimeout(timeoutId);
+      if (error instanceof CLIProxyManagementUnavailableError) throw error;
       lastError =
         error instanceof Error && error.name === 'AbortError'
           ? 'Claude OAuth usage request timeout'
@@ -393,26 +291,43 @@ export async function fetchClaudeQuotaWithToken(
 }
 
 /**
- * Fetch quota for a single Claude account.
+ * Fetch quota for a single CLIProxy-managed Claude account.
  */
 export async function fetchClaudeQuota(
   accountId: string,
   verbose = false
 ): Promise<ClaudeQuotaResult> {
-  const authData = await readClaudeAuthData(accountId);
-  if (!authData) {
-    return buildEmptyResult('Auth file not found for Claude account', accountId);
+  let managedAuth: Awaited<ReturnType<typeof resolveCLIProxyAuth>>;
+  try {
+    managedAuth = await resolveCLIProxyAuth('claude', accountId);
+  } catch {
+    return {
+      ...buildEmptyResult('CLIProxy is temporarily unavailable', accountId),
+      errorCode: 'cliproxy_unavailable',
+      retryable: true,
+    };
   }
 
-  if (authData.isExpired) {
-    return buildEmptyResult(
-      'Token expired - re-authenticate with ccs cliproxy auth claude',
-      accountId,
-      true
-    );
+  if (!managedAuth) {
+    return {
+      ...buildEmptyResult('Claude account is not loaded by CLIProxy', accountId),
+      errorCode: 'managed_auth_missing',
+    };
   }
 
-  return runClaudeUsageFetch(authData.accessToken, accountId, verbose);
+  try {
+    return await runClaudeUsageFetch('', accountId, verbose, managedAuth);
+  } catch (error) {
+    if (error instanceof CLIProxyManagementUnavailableError) {
+      return {
+        ...buildEmptyResult('CLIProxy is temporarily unavailable', accountId),
+        errorCode: 'cliproxy_unavailable',
+        errorDetail: error.message,
+        retryable: true,
+      };
+    }
+    throw error;
+  }
 }
 
 /**

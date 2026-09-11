@@ -24,10 +24,11 @@ import {
 } from '../auth/provider-entitlement-evidence';
 import type { ProviderEntitlementEvidence } from '../auth/provider-entitlement-types';
 import {
-  buildManagementHeaders,
-  buildProxyUrl,
-  getProxyTarget,
-} from '../proxy/proxy-target-resolver';
+  callCLIProxyManagementApi,
+  CLIProxyManagementUnavailableError,
+  resolveCLIProxyAuth,
+  type CLIProxyAuthReference,
+} from './cli-proxy-auth-resolver';
 
 /** Individual model quota info */
 export interface ModelQuota {
@@ -89,8 +90,6 @@ const ANTIGRAVITY_LOADCODEASSIST_BASE_URLS = [
   ANTIGRAVITY_DAILY_API_BASE,
   ANTIGRAVITY_API_BASE,
 ] as const;
-const MANAGEMENT_API_TIMEOUT_MS = 5000;
-
 /** Headers for loadCodeAssist (matches current CLIProxyAPIPlus control-plane requests) */
 const LOADCODEASSIST_HEADERS = {
   'Content-Type': 'application/json',
@@ -104,22 +103,16 @@ const FETCHMODELS_HEADERS = {
   'User-Agent': 'antigravity/1.104.0 darwin/arm64',
 };
 
-/** Auth file structure */
+/** Auth file structure (non-secret fields only) */
 interface AntigravityAuthFile {
-  access_token: string;
-  refresh_token?: string;
   email?: string;
   expired?: string;
-  expires_in?: number;
-  timestamp?: number;
   type?: string;
   project_id?: string;
 }
 
-/** Auth data returned from file */
+/** Non-secret auth metadata returned from file */
 interface AuthData {
-  accessToken: string;
-  refreshToken: string | null;
   projectId: string | null;
   isExpired: boolean;
   expiresAt: string | null;
@@ -165,19 +158,6 @@ interface AvailableModel {
 /** fetchAvailableModels response */
 interface FetchAvailableModelsResponse {
   models?: Record<string, AvailableModel>;
-}
-
-interface ManagementAuthFile {
-  auth_index?: string | number;
-  provider?: string;
-  type?: string;
-  email?: string;
-  name?: string;
-}
-
-interface ManagementApiCallResponse {
-  status_code?: number;
-  body?: string;
 }
 
 interface ManagedResponse {
@@ -381,174 +361,32 @@ function mergeAntigravityTierEvidence(
   });
 }
 
-async function readManagedResponse(
-  response: Response,
-  viaManagement: boolean
+async function performAntigravityRequest(
+  managedAuth: CLIProxyAuthReference,
+  url: string,
+  headers: Record<string, string>,
+  body: string
 ): Promise<ManagedResponse> {
+  const response = await callCLIProxyManagementApi(managedAuth.authIndex, {
+    method: 'POST',
+    url,
+    header: {
+      ...headers,
+      Authorization: 'Bearer $TOKEN$',
+    },
+    data: body,
+  });
   const bodyText = await response.text();
   return {
     status: response.status,
     bodyText,
     json: safeParseJson(bodyText),
-    viaManagement,
+    viaManagement: true,
   };
 }
 
-function isAntigravityAuthFileForAccount(file: ManagementAuthFile, accountId: string): boolean {
-  const provider = (file.provider || file.type || '').trim().toLowerCase();
-  if (provider !== 'antigravity' && provider !== 'agy') {
-    return false;
-  }
-
-  const normalizedAccount = accountId.trim().toLowerCase();
-  const normalizedEmail = file.email?.trim().toLowerCase();
-  if (normalizedEmail && normalizedEmail === normalizedAccount) {
-    return true;
-  }
-
-  const normalizedName = file.name?.trim().toLowerCase();
-  if (!normalizedName) {
-    return false;
-  }
-
-  const sanitizedAccount = sanitizeEmail(accountId).toLowerCase();
-  return (
-    normalizedName === `antigravity-${sanitizedAccount}.json` ||
-    normalizedName === `agy-${sanitizedAccount}.json`
-  );
-}
-
-async function findManagedAntigravityAuthIndex(accountId: string): Promise<string | number | null> {
-  const target = getProxyTarget();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), MANAGEMENT_API_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(buildProxyUrl(target, '/v0/management/auth-files'), {
-      signal: controller.signal,
-      headers: buildManagementHeaders(target),
-    });
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = (await response.json()) as { files?: ManagementAuthFile[] };
-    const match = data.files?.find((file) => isAntigravityAuthFileForAccount(file, accountId));
-    return match?.auth_index ?? null;
-  } catch {
-    clearTimeout(timeoutId);
-    return null;
-  }
-}
-
-async function performManagedAntigravityRequest(
-  accountId: string,
-  url: string,
-  headers: Record<string, string>,
-  body: string
-): Promise<ManagedResponse | null> {
-  const authIndex = await findManagedAntigravityAuthIndex(accountId);
-  if (authIndex === null || authIndex === undefined) {
-    return null;
-  }
-
-  const target = getProxyTarget();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), MANAGEMENT_API_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(buildProxyUrl(target, '/v0/management/api-call'), {
-      method: 'POST',
-      signal: controller.signal,
-      headers: buildManagementHeaders(target, {
-        'Content-Type': 'application/json',
-      }),
-      body: JSON.stringify({
-        auth_index: authIndex,
-        method: 'POST',
-        url,
-        header: {
-          ...headers,
-          Authorization: 'Bearer $TOKEN$',
-        },
-        data: body,
-      }),
-    });
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const apiResponse = (await response.json()) as ManagementApiCallResponse;
-    const bodyText = typeof apiResponse.body === 'string' ? apiResponse.body : '';
-    return {
-      status: typeof apiResponse.status_code === 'number' ? apiResponse.status_code : 500,
-      bodyText,
-      json: safeParseJson(bodyText),
-      viaManagement: true,
-    };
-  } catch {
-    clearTimeout(timeoutId);
-    return null;
-  }
-}
-
-async function performAntigravityRequest(
-  accountId: string,
-  accessToken: string,
-  url: string,
-  headers: Record<string, string>,
-  body: string
-): Promise<ManagedResponse> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), MANAGEMENT_API_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        ...headers,
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body,
-    });
-    clearTimeout(timeoutId);
-
-    const directResult = await readManagedResponse(response, false);
-    if (directResult.status !== 401) {
-      return directResult;
-    }
-
-    const managedResult = await performManagedAntigravityRequest(accountId, url, headers, body);
-    return managedResult ?? directResult;
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err instanceof Error && err.name === 'AbortError') {
-      return {
-        status: 408,
-        bodyText: '',
-        json: null,
-        viaManagement: false,
-      };
-    }
-
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return {
-      status: 503,
-      bodyText: message,
-      json: null,
-      viaManagement: false,
-    };
-  }
-}
-
 async function performAntigravityRequestWithBaseUrlFallback(
-  accountId: string,
-  accessToken: string,
+  managedAuth: CLIProxyAuthReference,
   baseUrls: readonly string[],
   apiPath: string,
   headers: Record<string, string>,
@@ -558,8 +396,7 @@ async function performAntigravityRequestWithBaseUrlFallback(
 
   for (const baseUrl of baseUrls) {
     const response = await performAntigravityRequest(
-      accountId,
-      accessToken,
+      managedAuth,
       `${baseUrl}/${apiPath}`,
       headers,
       body
@@ -581,7 +418,8 @@ async function performAntigravityRequestWithBaseUrlFallback(
 }
 
 /**
- * Read auth data from auth file (access token, project_id, expiry status)
+ * Read non-secret auth metadata (project ID, expiry status) from auth file.
+ * Never reads or returns access tokens; OAuth refresh stays inside CLIProxy.
  */
 function readAuthData(provider: CLIProxyProvider, accountId: string): AuthData | null {
   // Check both active and paused auth directories (quota needed for paused accounts too)
@@ -602,10 +440,7 @@ function readAuthData(provider: CLIProxyProvider, accountId: string): AuthData |
       try {
         const content = fs.readFileSync(filePath, 'utf-8');
         const data = JSON.parse(content) as AntigravityAuthFile;
-        if (!data.access_token) continue;
         return {
-          accessToken: data.access_token,
-          refreshToken: data.refresh_token || null,
           projectId: data.project_id || null,
           isExpired: isTokenExpired(data.expired),
           expiresAt: data.expired || null,
@@ -624,10 +459,8 @@ function readAuthData(provider: CLIProxyProvider, accountId: string): AuthData |
           const content = fs.readFileSync(candidatePath, 'utf-8');
           const data = JSON.parse(content) as AntigravityAuthFile;
           // Match by email field inside the auth file
-          if (data.email === accountId && data.access_token) {
+          if (data.email === accountId) {
             return {
-              accessToken: data.access_token,
-              refreshToken: data.refresh_token || null,
               projectId: data.project_id || null,
               isExpired: isTokenExpired(data.expired),
               expiresAt: data.expired || null,
@@ -652,7 +485,7 @@ function readAuthData(provider: CLIProxyProvider, accountId: string): AuthData |
  * Get project ID and tier via loadCodeAssist endpoint
  * Uses paidTier.id for accurate tier detection (g1-ultra-tier, g1-pro-tier)
  */
-async function getProjectId(accountId: string, accessToken: string): Promise<ProjectLookupResult> {
+async function getProjectId(managedAuth: CLIProxyAuthReference): Promise<ProjectLookupResult> {
   const body = JSON.stringify({
     metadata: {
       ide_name: 'antigravity',
@@ -661,8 +494,7 @@ async function getProjectId(accountId: string, accessToken: string): Promise<Pro
     },
   });
   const response = await performAntigravityRequestWithBaseUrlFallback(
-    accountId,
-    accessToken,
+    managedAuth,
     ANTIGRAVITY_LOADCODEASSIST_BASE_URLS,
     `${ANTIGRAVITY_API_VERSION}:loadCodeAssist`,
     LOADCODEASSIST_HEADERS,
@@ -737,15 +569,10 @@ async function getProjectId(accountId: string, accessToken: string): Promise<Pro
  * Note: projectId is kept for potential future use but not sent in body
  * (CLIProxyAPI sends empty {} body for this endpoint)
  */
-async function fetchAvailableModels(
-  accountId: string,
-  accessToken: string,
-  _projectId: string
-): Promise<QuotaResult> {
+async function fetchAvailableModels(managedAuth: CLIProxyAuthReference): Promise<QuotaResult> {
   const url = `${ANTIGRAVITY_API_BASE}/${ANTIGRAVITY_API_VERSION}:fetchAvailableModels`;
   const response = await performAntigravityRequest(
-    accountId,
-    accessToken,
+    managedAuth,
     url,
     FETCHMODELS_HEADERS,
     JSON.stringify({})
@@ -847,22 +674,40 @@ export async function fetchAccountQuota(
     };
   }
 
-  // Read auth data from auth file (checks both active and paused directories)
-  const authData = readAuthData(provider, accountId);
-  if (!authData) {
-    const error = 'Auth file not found for account';
-    if (verbose) console.error(`[!] Error: ${error}`);
+  // File is optional and supplies non-secret metadata only.
+  const authData = readAuthData(provider, accountId) ?? {
+    projectId: null,
+    isExpired: false,
+    expiresAt: null,
+  };
+
+  let managedAuth: Awaited<ReturnType<typeof resolveCLIProxyAuth>>;
+  try {
+    managedAuth = await resolveCLIProxyAuth('antigravity', accountId);
+  } catch (error) {
     return {
       success: false,
       models: [],
       lastUpdated: Date.now(),
-      error,
-      errorCode: 'auth_file_missing',
-      actionHint: 'Reconnect this account so CCS can read a current auth token.',
+      error: 'CLIProxy is temporarily unavailable',
+      errorCode: 'cliproxy_unavailable',
+      errorDetail: error instanceof Error ? error.message : undefined,
+      actionHint: 'Start CLIProxy and retry the quota check.',
+      retryable: true,
+    };
+  }
+  if (!managedAuth) {
+    return {
+      success: false,
+      models: [],
+      lastUpdated: Date.now(),
+      error: 'Antigravity account is not loaded by CLIProxy',
+      errorCode: 'managed_auth_missing',
+      actionHint: 'Load this Antigravity account in CLIProxy and retry.',
+      retryable: false,
     };
   }
 
-  const accessToken = authData.accessToken;
   if (verbose) {
     const expiryState = authData.isExpired
       ? 'expired'
@@ -878,9 +723,26 @@ export async function fetchAccountQuota(
   let rawTierId: string | null = null;
   let rawTierLabel: string | null = null;
 
-  // Always call loadCodeAssist to get accurate tier from API.
-  // If the file token is stale, the helper retries through CLIProxy management auth.
-  const lastProjectResult = await getProjectId(accountId, accessToken);
+  // Always call loadCodeAssist to get accurate tier from API, through
+  // CLIProxy management auth only ($TOKEN$ substitution inside CLIProxy).
+  let lastProjectResult: ProjectLookupResult;
+  try {
+    lastProjectResult = await getProjectId(managedAuth);
+  } catch (error) {
+    if (error instanceof CLIProxyManagementUnavailableError) {
+      return {
+        success: false,
+        models: [],
+        lastUpdated: Date.now(),
+        error: 'CLIProxy is temporarily unavailable',
+        errorCode: 'cliproxy_unavailable',
+        errorDetail: error.message,
+        actionHint: 'Start CLIProxy and retry the quota check.',
+        retryable: true,
+      };
+    }
+    throw error;
+  }
 
   if (!lastProjectResult.projectId && !projectId) {
     const error = lastProjectResult.error || 'Failed to retrieve project ID';
@@ -912,7 +774,24 @@ export async function fetchAccountQuota(
   if (verbose) console.error(`[i] Project ID: ${projectId || 'not found'}`);
 
   // Fetch models with quota
-  const result = await fetchAvailableModels(accountId, accessToken, projectId as string);
+  let result: QuotaResult;
+  try {
+    result = await fetchAvailableModels(managedAuth);
+  } catch (error) {
+    if (error instanceof CLIProxyManagementUnavailableError) {
+      return {
+        success: false,
+        models: [],
+        lastUpdated: Date.now(),
+        error: 'CLIProxy is temporarily unavailable',
+        errorCode: 'cliproxy_unavailable',
+        errorDetail: error.message,
+        actionHint: 'Start CLIProxy and retry the quota check.',
+        retryable: true,
+      };
+    }
+    throw error;
+  }
 
   if (verbose) console.error(`[i] Models found: ${result.models.length}`);
   result.accountId = accountId;

@@ -112,20 +112,20 @@ export async function startCLIProxy(
     log,
   });
 
-  const {
-    browserLaunchOverride,
-    parseFailed: browserLaunchParseFailed,
-  } = resolveBrowserLaunchFlags(proxyResolution.argsWithoutProxy);
+  const { browserLaunchOverride, parseFailed: browserLaunchParseFailed } =
+    resolveBrowserLaunchFlags(proxyResolution.argsWithoutProxy);
   if (browserLaunchParseFailed) return;
 
-  const { proxyConfig, useRemoteProxy, localBackend, binaryPath } =
-    await resolveExecutorProxy(proxyResolution, {
+  const { proxyConfig, useRemoteProxy, localBackend, binaryPath } = await resolveExecutorProxy(
+    proxyResolution,
+    {
       unifiedConfig,
       allProviders,
       verbose,
       cfg,
       log,
-    });
+    }
+  );
 
   const providerConfig = getProviderConfig(provider);
   log(`Provider: ${providerConfig.displayName}`);
@@ -278,23 +278,22 @@ export async function startCLIProxy(
     log(`Config written: ${configPath}`);
 
     // 6a. Check or join existing proxy
-    const { shouldSpawn } = await checkOrJoinProxy(
-      cfg.port,
-      cfg.timeout,
-      verbose
-    );
+    const { shouldSpawn } = await checkOrJoinProxy(cfg.port, cfg.timeout, verbose);
 
     // 6b. Spawn new proxy if needed
     if (shouldSpawn && binaryPath) {
-      proxy = spawnProxy(binaryPath, configPath, verbose);
+      const spawnResult = spawnProxy(binaryPath, configPath, verbose);
+      proxy = spawnResult.process;
 
-      // 7. Wait for proxy readiness
+      // 7. Wait for proxy readiness (monitors for early exit)
       await waitForProxyReadyWithSpinner(
         cfg.port,
         cfg.timeout,
         cfg.pollInterval,
         localBackend,
-        configPath
+        configPath,
+        spawnResult.process,
+        spawnResult.stderrChunks
       );
 
       // Register session

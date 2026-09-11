@@ -14,12 +14,16 @@ import type { CodexQuotaResult, CodexQuotaWindow, CodexCoreUsageSummary } from '
 import { sanitizeCodexFeatureLabel } from './quota-label-sanitizer';
 import { extractCanonicalEmailFromAccountId } from '../accounts/email-account-identity';
 import { createLogger } from '../../services/logging';
+import {
+  callProviderQuotaApi,
+  CLIProxyManagementUnavailableError,
+  resolveCLIProxyAuth,
+} from './cli-proxy-auth-resolver';
 
 const logger = createLogger('cliproxy:quota:codex');
 
 /** ChatGPT backend API base URL */
 const CODEX_API_BASE = 'https://chatgpt.com/backend-api';
-const CODEX_QUOTA_TIMEOUT_MS = 12000;
 const CODEX_QUOTA_MAX_ATTEMPTS = 2;
 const CODEX_ERROR_DETAIL_MAX_LENGTH = 240;
 
@@ -234,7 +238,7 @@ function readCodexAuthFile(filePath: string): CodexAuthData | null {
   }
 }
 
-function readCodexAuthData(accountId: string): CodexAuthData | null {
+export function readCodexAuthData(accountId: string): CodexAuthData | null {
   const authDirs = [getAuthDir(), getPausedDir()];
   const registryAccount = getAccount('codex', accountId);
   const canonicalEmail = extractCanonicalEmailFromAccountId(accountId);
@@ -634,39 +638,32 @@ export async function fetchCodexQuota(
   if (verbose)
     logger.info('quota.fetch.start', 'Fetching Codex quota for account', { provider: 'codex' });
 
-  const authData = readCodexAuthData(accountId);
-  if (!authData) {
-    const error = 'Auth file not found for Codex account';
-    if (verbose)
-      logger.warn('quota.fetch.auth_missing', error, {
-        provider: 'codex',
-        errorCode: 'auth_file_missing',
-      });
+  let managedAuth: Awaited<ReturnType<typeof resolveCLIProxyAuth>>;
+  try {
+    managedAuth = await resolveCLIProxyAuth('codex', accountId);
+  } catch (error) {
     return buildCodexFailureResult(accountId, {
-      error,
-      errorCode: 'auth_file_missing',
-      actionHint: 'Remove the stale account or authenticate again with ccs cliproxy auth codex.',
+      error: 'CLIProxy is temporarily unavailable',
+      errorCode: 'cliproxy_unavailable',
+      errorDetail: error instanceof Error ? error.message : undefined,
+      actionHint: 'Start CLIProxy and retry the quota check.',
+      retryable: true,
+    });
+  }
+
+  if (!managedAuth) {
+    return buildCodexFailureResult(accountId, {
+      error: 'Codex account is not loaded by CLIProxy',
+      errorCode: 'managed_auth_missing',
+      actionHint: 'Restart CLIProxy or reconnect this Codex account.',
       retryable: false,
     });
   }
 
-  if (authData.isExpired) {
-    const error = 'Token expired - re-authenticate with ccs cliproxy auth codex';
-    if (verbose)
-      logger.warn('quota.fetch.token_expired', error, {
-        provider: 'codex',
-        errorCode: 'token_expired',
-      });
-    return buildCodexFailureResult(accountId, {
-      error,
-      errorCode: 'token_expired',
-      actionHint: 'Run ccs cliproxy auth codex to refresh the token for this account.',
-      needsReauth: true,
-      retryable: false,
-    });
-  }
+  const fileAuth = readCodexAuthData(accountId);
+  const accountIdValue = managedAuth.account || fileAuth?.accountId || '';
 
-  if (!authData.accountId) {
+  if (!accountIdValue) {
     const error = 'Missing ChatGPT-Account-Id in auth file';
     if (verbose)
       logger.warn('quota.fetch.missing_account_id', error, {
@@ -685,21 +682,13 @@ export async function fetchCodexQuota(
   let lastErrorMsg = 'Unknown error';
 
   for (let attempt = 1; attempt <= CODEX_QUOTA_MAX_ATTEMPTS; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), CODEX_QUOTA_TIMEOUT_MS);
-
     try {
-      const response = await fetch(url, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${authData.accessToken}`,
-          'ChatGPT-Account-Id': authData.accountId,
-          'User-Agent': USER_AGENT,
-        },
+      // CLIProxy checks refresh eligibility, substitutes $TOKEN$, and retries one final 401/403.
+      const response = await callProviderQuotaApi(managedAuth, url, {
+        Authorization: 'Bearer $TOKEN$',
+        'ChatGPT-Account-Id': accountIdValue,
+        'User-Agent': USER_AGENT,
       });
-
-      clearTimeout(timeoutId);
 
       if (verbose)
         logger.info('quota.fetch.status', `Codex API status: ${response.status}`, {
@@ -754,13 +743,8 @@ export async function fetchCodexQuota(
         accountId,
       };
     } catch (err) {
-      clearTimeout(timeoutId);
-      const isAbortError = err instanceof Error && err.name === 'AbortError';
-      lastErrorMsg = isAbortError
-        ? 'Request timeout'
-        : err instanceof Error
-          ? err.message
-          : 'Unknown error';
+      lastErrorMsg = err instanceof Error ? err.message : 'Unknown error';
+      const managementUnavailable = err instanceof CLIProxyManagementUnavailableError;
 
       if (verbose) {
         logger.warn(
@@ -769,7 +753,7 @@ export async function fetchCodexQuota(
           {
             provider: 'codex',
             attempt,
-            errorCode: isAbortError ? 'network_timeout' : 'network_error',
+            errorCode: managementUnavailable ? 'cliproxy_unavailable' : 'network_error',
             err:
               err instanceof Error
                 ? { name: err.name, message: err.message }
@@ -778,24 +762,15 @@ export async function fetchCodexQuota(
         );
       }
 
-      // Retry timeout once; other failures return immediately.
-      if (isAbortError && attempt < CODEX_QUOTA_MAX_ATTEMPTS) {
-        continue;
-      }
-
-      return {
-        success: false,
-        windows: [],
-        planType: null,
-        lastUpdated: Date.now(),
-        error: lastErrorMsg,
-        accountId,
-        errorCode: isAbortError ? 'network_timeout' : 'network_error',
-        actionHint: isAbortError
-          ? 'Retry later. The Codex quota endpoint timed out.'
+      return buildCodexFailureResult(accountId, {
+        error: managementUnavailable ? 'CLIProxy is temporarily unavailable' : lastErrorMsg,
+        errorCode: managementUnavailable ? 'cliproxy_unavailable' : 'network_error',
+        errorDetail: managementUnavailable ? lastErrorMsg : undefined,
+        actionHint: managementUnavailable
+          ? 'Start CLIProxy and retry the quota check.'
           : 'Retry later or inspect network connectivity.',
         retryable: true,
-      };
+      });
     }
   }
 
@@ -837,4 +812,4 @@ export async function fetchAllCodexQuotas(
 }
 
 // Export for testing
-export { readCodexAuthData, buildCodexQuotaWindows, getUnknownCodexWindowLabels };
+export { buildCodexQuotaWindows, getUnknownCodexWindowLabels };
