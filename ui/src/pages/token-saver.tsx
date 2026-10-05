@@ -226,36 +226,41 @@ export function TokenSaverPage() {
     }
   }, []);
 
-  const refresh = async (manual = false) => {
-    refreshController.current?.abort();
-    const controller = new AbortController();
-    refreshController.current = controller;
-    const sequence = ++refreshSequence.current;
-    if (manual) setRefreshing(true);
-    try {
-      const [configResponse, statusResponse] = await Promise.all([
-        fetch('/api/headroom/config', { signal: controller.signal }),
-        fetch('/api/headroom/status', {
-          headers: { 'Cache-Control': 'no-store' },
-          signal: controller.signal,
-        }),
-      ]);
-      if (!configResponse.ok || !statusResponse.ok) throw new Error('Unable to load Token Saver.');
-      if (sequence !== refreshSequence.current) return;
-      setConfig(((await configResponse.json()) as { config: TokenSaverConfig }).config);
-      if (sequence !== refreshSequence.current) return;
-      setStatus((await statusResponse.json()) as HeadroomStatus);
-      void refreshExtras();
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') return;
-      toast.error((error as Error).message);
-    } finally {
-      if (sequence === refreshSequence.current) {
-        setLoading(false);
-        if (manual) setRefreshing(false);
+  const refresh = useCallback(
+    async (manual = false) => {
+      refreshController.current?.abort();
+      const controller = new AbortController();
+      refreshController.current = controller;
+      const sequence = ++refreshSequence.current;
+      if (manual) setRefreshing(true);
+      try {
+        const [configResponse, statusResponse] = await Promise.all([
+          fetch('/api/headroom/config', { signal: controller.signal }),
+          fetch('/api/headroom/status', {
+            headers: { 'Cache-Control': 'no-store' },
+            signal: controller.signal,
+          }),
+        ]);
+        if (!configResponse.ok || !statusResponse.ok) {
+          throw new Error('Unable to load Token Saver.');
+        }
+        if (sequence !== refreshSequence.current) return;
+        setConfig(((await configResponse.json()) as { config: TokenSaverConfig }).config);
+        if (sequence !== refreshSequence.current) return;
+        setStatus((await statusResponse.json()) as HeadroomStatus);
+        void refreshExtras();
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') return;
+        toast.error((error as Error).message);
+      } finally {
+        if (sequence === refreshSequence.current) {
+          setLoading(false);
+          if (manual) setRefreshing(false);
+        }
       }
-    }
-  };
+    },
+    [refreshExtras]
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(), 0);
@@ -263,7 +268,7 @@ export function TokenSaverPage() {
       window.clearTimeout(timer);
       refreshController.current?.abort();
     };
-  }, []);
+  }, [refresh]);
 
   useEffect(() => {
     if (setupOpen) void refreshExtras();
@@ -297,21 +302,56 @@ export function TokenSaverPage() {
     }
   }, []);
 
+  const handlePersistResult = useCallback(
+    (current: TokenSaverConfig) => {
+      void persist(current).catch((error: unknown) => {
+        // A newer save supersedes this one; only surface real failures.
+        if ((error as Error)?.name === 'AbortError') return;
+        toast.error((error as Error)?.message ?? 'Unable to save Token Saver settings.');
+        // Resync so the optimistic value does not drift from the server.
+        void refresh();
+      });
+    },
+    [persist, refresh]
+  );
+
+  const deferredSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const updateConfig = useCallback(
-    (patch: Partial<TokenSaverConfig> | ((prev: TokenSaverConfig) => TokenSaverConfig)) => {
+    (
+      patch: Partial<TokenSaverConfig> | ((prev: TokenSaverConfig) => TokenSaverConfig),
+      options?: { defer?: boolean }
+    ) => {
       setConfig((prev) => {
         if (!prev) return prev;
         const next = typeof patch === 'function' ? patch(prev) : { ...prev, ...patch };
-        void persist(next);
+        if (options?.defer) {
+          if (deferredSaveTimer.current !== null) {
+            window.clearTimeout(deferredSaveTimer.current);
+          }
+          deferredSaveTimer.current = window.setTimeout(() => {
+            deferredSaveTimer.current = null;
+            handlePersistResult(next);
+          }, 600);
+        } else {
+          if (deferredSaveTimer.current !== null) {
+            window.clearTimeout(deferredSaveTimer.current);
+            deferredSaveTimer.current = null;
+          }
+          handlePersistResult(next);
+        }
         return next;
       });
     },
-    [persist]
+    [handlePersistResult]
   );
 
   const updateHeadroom = useCallback(
-    (patch: Partial<TokenSaverConfig['headroom']>) => {
-      updateConfig((prev) => ({ ...prev, headroom: { ...prev.headroom, ...patch } }));
+    (
+      patch: Partial<TokenSaverConfig['headroom']>,
+      options?: { defer?: boolean }
+    ) => {
+      updateConfig((prev) => ({ ...prev, headroom: { ...prev.headroom, ...patch } }), options);
     },
     [updateConfig]
   );
@@ -509,7 +549,8 @@ export function TokenSaverPage() {
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">Token Saver</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Choose independent compression stages. Enabled stages run before model routing.
+            Choose independent compression stages. Enabled stages run on every
+            provider request after model routing, right before dispatch.
           </p>
         </div>
         <div className="flex gap-2">
@@ -647,7 +688,7 @@ export function TokenSaverPage() {
                   id="headroom-url"
                   aria-label="Headroom URL"
                   value={config.headroom.url}
-                  onChange={(event) => updateHeadroom({ url: event.target.value })}
+                  onChange={(event) => updateHeadroom({ url: event.target.value }, { defer: true })}
                   disabled={mutating}
                 />
               </div>
@@ -660,7 +701,10 @@ export function TokenSaverPage() {
                   value={config.headroom.timeout_ms ?? 3000}
                   onChange={(event) => {
                     const val = parseInt(event.target.value, 10);
-                    updateHeadroom({ timeout_ms: Number.isNaN(val) ? 3000 : val });
+                    updateHeadroom(
+                      { timeout_ms: Number.isNaN(val) ? 3000 : val },
+                      { defer: true }
+                    );
                   }}
                   disabled={mutating}
                 />

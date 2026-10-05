@@ -47,8 +47,12 @@ export const CCS_CONTROL_PANEL_SECRET = 'mgmt-f078070e88eadc04ff2688da7797b8be';
  * v19: Persist backend-aware management panel repository from CCS unified config
  * v20: Pool-gated cooling/routing/retry-cap block; disable-cooling flips to false for pool users
  * v21: Persist token-saver controls and Headroom endpoint contract
+ * v22: Emit headroom code-aware/kompress (CLIProxy reads them at Headroom
+ *      spawn), drop dead proxy-token-env key (upstream has no token concept),
+ *      coerce caveman/ponytail levels to the upstream lite|full|ultra enum
+ *      (unknown levels silently inject nothing upstream)
  */
-export const CLIPROXY_CONFIG_VERSION = 21;
+export const CLIPROXY_CONFIG_VERSION = 22;
 
 export const ORIGINAL_MANAGEMENT_PANEL_REPOSITORY =
   'https://github.com/router-for-me/Cli-Proxy-API-Management-Center';
@@ -244,6 +248,18 @@ function getSessionAffinityTtl(): string {
   return ttl && GO_DURATION_PATTERN.test(ttl) && hasPositiveDuration(ttl) ? ttl : '1h';
 }
 
+/**
+ * Upstream prompt levels (CLIProxyAPIPlus internal/tokensaver/prompts.go):
+ * cavemanPrompt()/ponytailPrompt() return "" for anything outside
+ * lite|full|ultra, and injectCaveman()/injectPonytail() silently no-op on an
+ * empty prompt — so an unknown level is a dead saver, not an error.
+ */
+const PROMPT_LEVELS = new Set(['lite', 'full', 'ultra']);
+
+function normalizePromptLevel(level: string | undefined): string {
+  return level !== undefined && PROMPT_LEVELS.has(level) ? level : 'full';
+}
+
 function generateTokenSaverBlock(override?: CLIProxyTokenSaverConfig): string {
   const tokenSaver = override ?? loadOrCreateUnifiedConfig().cliproxy.token_saver;
   const caveman = tokenSaver?.caveman;
@@ -251,21 +267,29 @@ function generateTokenSaverBlock(override?: CLIProxyTokenSaverConfig): string {
   const headroom = tokenSaver?.headroom;
   const pxpipe = tokenSaver?.pxpipe;
 
+  // Contract mirrors upstream config.TokenSaverHeadroomConfig (config_types.go):
+  // enabled, url, timeout-ms, compress-user-messages, code-aware, kompress.
+  // code-aware/kompress are read by the management Headroom start handler and
+  // passed as --code-aware / --disable-kompress spawn flags. There is no
+  // proxy-token-env upstream — headroom auth is URL-embedded or none — so no
+  // token key is emitted. headroom.mode is a CCS-only concept (derived from
+  // the URL for lifecycle gating) and must not be emitted.
   return `token-saver:
   enabled: ${tokenSaver?.enabled ?? false}
   rtk: ${tokenSaver?.rtk ?? false}
   caveman:
     enabled: ${caveman?.enabled ?? false}
-    level: ${quoteYamlString(caveman?.level ?? 'full')}
+    level: ${quoteYamlString(normalizePromptLevel(caveman?.level))}
   ponytail:
     enabled: ${ponytail?.enabled ?? false}
-    level: ${quoteYamlString(ponytail?.level ?? 'full')}
+    level: ${quoteYamlString(normalizePromptLevel(ponytail?.level))}
   headroom:
     enabled: ${headroom?.enabled ?? false}
     url: ${quoteYamlString(headroom?.url ?? 'http://127.0.0.1:8787')}
     timeout-ms: ${headroom?.timeout_ms ?? 3000}
     compress-user-messages: ${headroom?.compress_user_messages ?? false}
-    proxy-token-env: "HEADROOM_PROXY_TOKEN"
+    code-aware: ${headroom?.code_aware ?? false}
+    kompress: ${headroom?.kompress ?? true}
   pxpipe:
     enabled: ${pxpipe?.enabled ?? false}
     min-chars: ${pxpipe?.min_chars ?? 25000}

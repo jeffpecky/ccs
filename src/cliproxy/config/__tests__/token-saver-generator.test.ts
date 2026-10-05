@@ -57,7 +57,7 @@ cliproxy:
   token_saver:
     enabled: true
     rtk: true
-    caveman: { enabled: true, level: terse }
+    caveman: { enabled: true, level: ultra }
     ponytail: { enabled: true, level: standard }
     headroom:
       enabled: true
@@ -78,21 +78,27 @@ cliproxy:
     const yaml = fs.readFileSync(outputPath, 'utf8');
     const parsed = load(yaml) as Record<string, any>;
 
-    expect(CLIPROXY_CONFIG_VERSION).toBeGreaterThan(20);
+    expect(CLIPROXY_CONFIG_VERSION).toBeGreaterThan(21);
     expect(parsed['token-saver']).toEqual({
       enabled: true,
       rtk: true,
-      caveman: { enabled: true, level: 'terse' },
-      ponytail: { enabled: true, level: 'standard' },
+      caveman: { enabled: true, level: 'ultra' },
+      // Legacy/unknown levels are coerced: upstream skips unknown levels
+      // silently, which would make the saver a no-op.
+      ponytail: { enabled: true, level: 'full' },
       headroom: {
         enabled: true,
         url: 'https://headroom.example.test',
         'timeout-ms': 4500,
         'compress-user-messages': true,
-        'proxy-token-env': 'HEADROOM_PROXY_TOKEN',
+        'code-aware': true,
+        kompress: false,
       },
       pxpipe: { enabled: false, 'min-chars': 30000, 'timeout-ms': 12000 },
     });
+    // Upstream has no proxy token concept — never emit the dead key or a
+    // secret value, regardless of stored token_env.
+    expect(yaml).not.toContain('proxy-token-env');
     expect(yaml).not.toContain('must-not-appear');
     delete process.env.HEADROOM_TEST_SECRET;
   });

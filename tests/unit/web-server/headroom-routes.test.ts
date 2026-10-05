@@ -8,14 +8,15 @@ import * as path from 'path';
 import { load } from 'js-yaml';
 import { regenerateConfigWithRollback } from '../../../src/cliproxy/config/generator';
 import { createHeadroomRouter } from '../../../src/web-server/routes/headroom-routes';
+import type { ManagementProxy } from '../../../src/web-server/routes/headroom-routes';
 
 const servers: http.Server[] = [];
 const TOKEN_ENV = 'HEADROOM_PROXY_TOKEN';
 const baseConfig = {
   enabled: true,
   rtk: true,
-  caveman: { enabled: false, level: 'standard' },
-  ponytail: { enabled: false, level: 'standard' },
+  caveman: { enabled: false, level: 'full' },
+  ponytail: { enabled: false, level: 'full' },
   headroom: {
     enabled: true,
     url: 'http://127.0.0.1:8787',
@@ -51,11 +52,22 @@ describe('Headroom fixed-purpose routes', () => {
       access?: boolean;
       regenerate?: (config: any) => void | (() => void) | Promise<void | (() => void)>;
       save?: (config: any) => void | Promise<void>;
+      management?: (method: string, path: string) => { status: number; data: any };
     } = {}
   ) {
     let config = options.config ?? structuredClone(baseConfig);
     let persisted: any;
-    const statusCalls: string[] = [];
+    const proxyCalls: string[] = [];
+    const proxyManagement: ManagementProxy = async (method, managementPath) => {
+      proxyCalls.push(`${method} ${managementPath}`);
+      if (options.management) return options.management(method, managementPath);
+      return {
+        status: 200,
+        data: managementPath.endsWith('/status')
+          ? { installed: true, running: true, healthy: true, managed: true }
+          : { success: true },
+      };
+    };
     const app = express();
     app.use(express.json());
     app.use(
@@ -76,20 +88,15 @@ describe('Headroom fixed-purpose routes', () => {
             config = next;
           }),
         regenerateConfig: options.regenerate ?? (() => undefined),
-        getStatus: async (url) => {
-          statusCalls.push(url);
-          return { running: false, healthy: false };
-        },
-        start: async () => ({ success: true }),
-        stop: async () => ({ success: true }),
-        restart: async () => ({ success: true }),
+        proxyManagement,
+        headroomRestartDelayMs: 0,
       })
     );
     const port = await listen(http.createServer(app));
     return {
       baseUrl: `http://127.0.0.1:${port}/api/headroom`,
       persisted: () => persisted,
-      statusCalls,
+      proxyCalls,
     };
   }
 
@@ -101,49 +108,50 @@ describe('Headroom fixed-purpose routes', () => {
     expect((await fetch(`${app.baseUrl}/proxy/anything`, { method: 'POST' })).status).toBe(404);
   });
 
-  it('status invokes one fixed health operation against configured base', async () => {
-    const config = structuredClone(baseConfig);
-    const app = await setup({ config });
-    expect((await fetch(`${app.baseUrl}/status`)).status).toBe(200);
-    expect(app.statusCalls).toEqual(['http://127.0.0.1:8787']);
-  });
-
-  it('does not call status service for invalid imported local URL', async () => {
-    const config = structuredClone(baseConfig);
-    config.headroom.url = 'https://attacker.example.test/base';
-    const app = await setup({ config });
+  it('proxies status through the management API and passes the result through', async () => {
+    const app = await setup();
     const response = await fetch(`${app.baseUrl}/status`);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      configured: true,
-      external: false,
-      local: true,
-      managed: false,
+      installed: true,
+      running: true,
+      healthy: true,
+      managed: true,
+    });
+    expect(app.proxyCalls).toEqual(['GET /v0/management/headroom/status']);
+  });
+
+  it('returns offline status when the management API is unreachable', async () => {
+    const app = await setup({
+      management: () => {
+        throw new Error('connection refused');
+      },
+    });
+    const response = await fetch(`${app.baseUrl}/status`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      installed: false,
       running: false,
       healthy: false,
-      health: 'invalid-config',
-      error: 'Invalid local Headroom URL.',
+      managed: false,
+      url: '',
     });
-    expect(app.statusCalls).toEqual([]);
   });
 
-  it('does not probe or forward token for external status', async () => {
+  it('still proxies status for external endpoints (upstream owns the health probe)', async () => {
     const config = structuredClone(baseConfig);
-    config.headroom.mode = 'external';
+    config.headroom.mode = 'local';
     config.headroom.url = 'https://headroom.example.test/base';
-    const app = await setup({ config });
+    const app = await setup({
+      config,
+      management: () => ({
+        status: 200,
+        data: { installed: true, running: false, healthy: false, managed: false },
+      }),
+    });
     const response = await fetch(`${app.baseUrl}/status`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      configured: true,
-      external: true,
-      local: false,
-      managed: false,
-      running: false,
-      healthy: null,
-      health: 'unknown',
-    });
-    expect(app.statusCalls).toEqual([]);
+    expect(app.proxyCalls).toEqual(['GET /v0/management/headroom/status']);
   });
 
   it('pins token environment and rejects arbitrary selectors', async () => {
@@ -309,10 +317,81 @@ describe('Headroom fixed-purpose routes', () => {
 
   it('rejects lifecycle control for external Headroom', async () => {
     const config = structuredClone(baseConfig);
-    config.headroom.mode = 'external';
+    config.headroom.mode = 'local';
     config.headroom.url = 'https://headroom.example.test/base';
     const app = await setup({ config });
     expect((await fetch(`${app.baseUrl}/start`, { method: 'POST' })).status).toBe(400);
+    expect((await fetch(`${app.baseUrl}/stop`, { method: 'POST' })).status).toBe(400);
+    expect((await fetch(`${app.baseUrl}/restart`, { method: 'POST' })).status).toBe(400);
+    expect(app.proxyCalls).toEqual([]);
+  });
+
+  it('proxies lifecycle control for loopback Headroom', async () => {
+    const app = await setup();
+    expect((await fetch(`${app.baseUrl}/start`, { method: 'POST' })).status).toBe(200);
+    expect(app.proxyCalls).toEqual(['POST /v0/management/headroom/start']);
+  });
+
+  it('derives Headroom mode from the URL instead of trusting the stored field', async () => {
+    const externalStored = structuredClone(baseConfig);
+    externalStored.headroom.mode = 'local';
+    externalStored.headroom.url = 'https://headroom.example.test/base';
+    const externalApp = await setup({ config: externalStored });
+    const external = await (await fetch(`${externalApp.baseUrl}/config`)).json();
+    expect(external.config.headroom.mode).toBe('external');
+
+    const localStored = structuredClone(baseConfig);
+    localStored.headroom.mode = 'external';
+    localStored.headroom.url = 'http://127.0.0.1:8787';
+    const localApp = await setup({ config: localStored });
+    const local = await (await fetch(`${localApp.baseUrl}/config`)).json();
+    expect(local.config.headroom.mode).toBe('local');
+  });
+
+  it('coerces unknown compression levels to the upstream enum on save', async () => {
+    const app = await setup();
+    const next = structuredClone(baseConfig);
+    next.caveman = { enabled: true, level: 'standard' as any };
+    next.ponytail = { enabled: true, level: 'terse' as any };
+    expect((await put(app.baseUrl, next)).status).toBe(200);
+    expect(app.persisted().caveman.level).toBe('full');
+    expect(app.persisted().ponytail.level).toBe('full');
+    expect(app.proxyCalls).toEqual([]);
+  });
+
+  it('restarts a running managed Headroom when spawn flags change', async () => {
+    const app = await setup();
+    const next = structuredClone(baseConfig);
+    next.headroom.code_aware = true;
+    const response = await put(app.baseUrl, next);
+    expect(response.status).toBe(200);
+    expect((await response.json()).headroomRestarted).toBe(true);
+    expect(app.proxyCalls).toEqual([
+      'GET /v0/management/headroom/status',
+      'POST /v0/management/headroom/restart',
+    ]);
+  });
+
+  it('does not restart Headroom when spawn flags change but it is not running', async () => {
+    const app = await setup({
+      management: () => ({
+        status: 200,
+        data: { installed: true, running: false, healthy: false, managed: false },
+      }),
+    });
+    const next = structuredClone(baseConfig);
+    next.headroom.kompress = false;
+    const response = await put(app.baseUrl, next);
+    expect(response.status).toBe(200);
+    expect((await response.json()).headroomRestarted).toBeUndefined();
+    expect(app.proxyCalls).toEqual(['GET /v0/management/headroom/status']);
+  });
+
+  it('does not touch the management API for non-spawn-flag changes', async () => {
+    const app = await setup();
+    expect((await put(app.baseUrl, { ...baseConfig, rtk: false })).status).toBe(200);
+    expect((await put(app.baseUrl, { ...baseConfig, rtk: true })).status).toBe(200);
+    expect(app.proxyCalls).toEqual([]);
   });
 });
 
