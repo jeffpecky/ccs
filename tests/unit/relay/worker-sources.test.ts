@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,7 +14,10 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'relay-worker-'));
   fetchSpy = spyOn(globalThis, 'fetch');
 });
-afterEach(() => { fetchSpy.mockRestore(); });
+afterEach(() => {
+  fetchSpy.mockRestore();
+  rmSync(dir, { recursive: true, force: true });
+});
 
 async function importEsm(source: string, file: string) {
   const path = join(dir, file);
@@ -110,16 +113,21 @@ describe('cloudflare relay worker', () => {
 });
 
 describe('deno relay worker', () => {
-  it('captures the Deno.serve handler and relays (400 + happy path)', async () => {
+  /** Imports the Deno worker with a stubbed Deno.serve, returns the captured handler. */
+  const loadDenoHandler = async (file: string) => {
     const captured: Array<(req: Request) => Promise<Response>> = [];
     (globalThis as Record<string, unknown>).Deno = { serve: (fn: never) => captured.push(fn) };
     try {
-      await importEsm(DENO_RELAY_WORKER, 'deno.mjs');
+      await importEsm(DENO_RELAY_WORKER, file);
     } finally {
       delete (globalThis as Record<string, unknown>).Deno;
     }
     expect(captured.length).toBe(1);
-    const handler = captured[0];
+    return captured[0];
+  };
+
+  it('captures the Deno.serve handler and relays (400 + happy path)', async () => {
+    const handler = await loadDenoHandler('deno.mjs');
     expect((await handler(new Request('https://relay.example.com'))).status).toBe(400);
     fetchSpy.mockImplementation(async () => echoUpstream());
     const res = await handler(new Request('https://relay.example.com', {
@@ -128,6 +136,16 @@ describe('deno relay worker', () => {
     expect(res.status).toBe(200);
     const [url] = fetchSpy.mock.calls[0];
     expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models');
+  });
+
+  it('returns 502 JSON when upstream throws', async () => {
+    const handler = await loadDenoHandler('deno-502.mjs');
+    fetchSpy.mockImplementation(async () => { throw new Error('deno boom'); });
+    const res = await handler(new Request('https://relay.example.com', {
+      headers: { 'x-relay-target': 'https://api.anthropic.com' },
+    }));
+    expect(res.status).toBe(502);
+    expect((await res.json() as { error: string }).error).toContain('deno boom');
   });
 });
 
