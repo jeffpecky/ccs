@@ -121,7 +121,7 @@ export function getThinkingConfig(): ThinkingConfig {
  */
 export function getRelayConfig(): RelayConfig {
   const config = getConfig();
-  return config.relay ?? { ...DEFAULT_RELAY_CONFIG };
+  return config.relay ?? structuredClone(DEFAULT_RELAY_CONFIG);
 }
 
 /**

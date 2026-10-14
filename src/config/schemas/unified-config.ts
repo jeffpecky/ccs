@@ -135,7 +135,7 @@ export function createEmptyUnifiedConfig(): UnifiedConfig {
     quota_management: { ...DEFAULT_QUOTA_MANAGEMENT_CONFIG },
     thinking: { ...DEFAULT_THINKING_CONFIG },
     dashboard_auth: { ...DEFAULT_DASHBOARD_AUTH_CONFIG },
-    relay: { ...DEFAULT_RELAY_CONFIG },
+    relay: structuredClone(DEFAULT_RELAY_CONFIG),
     browser: {
       claude: { ...DEFAULT_BROWSER_CONFIG.claude },
       codex: { ...DEFAULT_BROWSER_CONFIG.codex },

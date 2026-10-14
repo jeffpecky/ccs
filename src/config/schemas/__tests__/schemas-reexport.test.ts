@@ -98,6 +98,7 @@ describe('config schemas backward compatibility', () => {
     'DEFAULT_CURSOR_CONFIG',
     'DEFAULT_CLIPROXY_SERVER_CONFIG',
     'DEFAULT_OPENAI_COMPAT_PROXY_CONFIG',
+    'DEFAULT_RELAY_CONFIG',
     'DEFAULT_GLOBAL_ENV',
   ] as const;
 
@@ -127,6 +128,7 @@ describe('config schemas backward compatibility', () => {
     expect(config.browser).toBeDefined();
     expect(config.quota_management).toBeDefined();
     expect(config.thinking).toBeDefined();
+    expect(config.relay).toBeDefined();
     expect(config.channels).toBeDefined();
     expect(config.dashboard_auth).toBeDefined();
     expect(config.copilot).toBeDefined();
@@ -156,6 +158,7 @@ describe('config schemas backward compatibility', () => {
     'CLIPROXY_SUPPORTED_PROVIDERS',
     'createEmptyUnifiedConfig',
     'isUnifiedConfig',
+    'isRelayConfig',
     'DEFAULT_CLIPROXY_SAFETY_CONFIG',
     'DEFAULT_LOGGING_CONFIG',
     'DEFAULT_OFFICIAL_CHANNELS_CONFIG',
@@ -167,6 +170,7 @@ describe('config schemas backward compatibility', () => {
     'DEFAULT_QUOTA_MANAGEMENT_CONFIG',
     'DEFAULT_THINKING_TIER_DEFAULTS',
     'DEFAULT_THINKING_CONFIG',
+    'DEFAULT_RELAY_CONFIG',
     'DEFAULT_COPILOT_CONFIG',
     'DEFAULT_CURSOR_CONFIG',
     'DEFAULT_CLIPROXY_SERVER_CONFIG',

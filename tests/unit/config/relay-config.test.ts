@@ -1,35 +1,72 @@
 import { describe, expect, it } from 'bun:test';
+import * as yaml from 'js-yaml';
 import { DEFAULT_RELAY_CONFIG, isRelayConfig, type RelayConfig } from '../../../src/config/schemas/relay';
+import { UNIFIED_CONFIG_VERSION } from '../../../src/config/unified-config-types';
 import { getRelayConfig } from '../../../src/config/loader/config-getters';
+import { mergeWithDefaults } from '../../../src/config/loader/defaults-merger';
 import { loadOrCreateUnifiedConfig } from '../../../src/config/unified-config-loader';
 import { generateYamlWithComments } from '../../../src/config/loader/yaml-serializer';
+
+const RELAY_ENTRY = {
+  id: 'r1',
+  name: 'my-relay',
+  platform: 'cloudflare',
+  url: 'https://my.workers.dev',
+  createdAt: '2026-10-14T00:00:00.000Z',
+  testStatus: 'untested',
+} as const;
 
 describe('relay config schema', () => {
   it('provides defaults and a type guard', () => {
     expect(DEFAULT_RELAY_CONFIG).toEqual({ relays: [], activeId: null });
     expect(isRelayConfig({ relays: [], activeId: null })).toBe(true);
-    expect(isRelayConfig({ relays: [] })).toBe(false);
+    // activeId may be omitted in hand-edited sections (filled in by the merger)
+    expect(isRelayConfig({ relays: [] })).toBe(true);
+    expect(isRelayConfig({ relays: [], activeId: undefined })).toBe(true);
     expect(isRelayConfig('nope')).toBe(false);
   });
 
-  it('getRelayConfig returns a well-formed default on a pristine config', () => {
+  it('rejects malformed relay entries', () => {
+    expect(isRelayConfig({ relays: [42], activeId: null })).toBe(false);
+    expect(isRelayConfig({ relays: [{ ...RELAY_ENTRY, url: undefined }], activeId: null })).toBe(
+      false
+    );
+    expect(
+      isRelayConfig({ relays: [{ ...RELAY_ENTRY, platform: 'spaceship' }], activeId: null })
+    ).toBe(false);
+  });
+
+  it('getRelayConfig returns defaults on a pristine config', () => {
     // On the fresh temp-CCS_HOME test environment there is no relay section,
     // so the getter must fall back to defaults.
-    const relay = getRelayConfig();
-    expect(Array.isArray(relay.relays)).toBe(true);
-    expect(relay.activeId === null || typeof relay.activeId === 'string').toBe(true);
+    expect(getRelayConfig()).toEqual(DEFAULT_RELAY_CONFIG);
+  });
+
+  it('does not alias the module default relay list', () => {
+    const first = getRelayConfig();
+    first.relays.push({ ...RELAY_ENTRY, id: 'poison' });
+    const second = getRelayConfig();
+    expect(second.relays).toHaveLength(0);
+    expect(second).toEqual(DEFAULT_RELAY_CONFIG);
+  });
+
+  it('preserves a relay section through mergeWithDefaults', () => {
+    const relay: RelayConfig = { relays: [{ ...RELAY_ENTRY }], activeId: 'r1' };
+    const merged = mergeWithDefaults({ version: UNIFIED_CONFIG_VERSION, relay });
+    expect(merged.relay).toEqual(relay);
+  });
+
+  it('fills in activeId when a hand-edited section omits it', () => {
+    const handEdited = { relays: [{ ...RELAY_ENTRY }] } as unknown as RelayConfig;
+    const merged = mergeWithDefaults({ version: UNIFIED_CONFIG_VERSION, relay: handEdited });
+    expect(merged.relay).toEqual({ relays: [{ ...RELAY_ENTRY }], activeId: null });
   });
 
   it('round-trips a relay entry through yaml serialization', () => {
     const config = loadOrCreateUnifiedConfig();
-    const relay: RelayConfig = {
-      relays: [{ id: 'r1', name: 'my-relay', platform: 'cloudflare', url: 'https://my.workers.dev', createdAt: '2026-10-14T00:00:00.000Z', testStatus: 'untested' }],
-      activeId: 'r1',
-    };
+    const relay: RelayConfig = { relays: [{ ...RELAY_ENTRY }], activeId: 'r1' };
     (config as Record<string, unknown>).relay = relay;
-    const yaml = generateYamlWithComments(config);
-    expect(yaml).toContain('relay');
-    expect(yaml).toContain('https://my.workers.dev');
-    expect(yaml).toContain('r1');
+    const reparsed = yaml.load(generateYamlWithComments(config)) as Record<string, unknown>;
+    expect(reparsed.relay).toEqual(relay);
   });
 });

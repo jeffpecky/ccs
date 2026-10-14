@@ -52,12 +52,40 @@ export interface RelayConfig {
  */
 export const DEFAULT_RELAY_CONFIG: RelayConfig = { relays: [], activeId: null };
 
+const RELAY_PLATFORMS: readonly RelayPlatform[] = [
+  'vercel',
+  'cloudflare',
+  'deno',
+  'netlify',
+];
+
+/**
+ * Minimal per-entry validation: an object with string id, string url,
+ * and a known deployment platform.
+ */
+function isRelayEntry(value: unknown): value is RelayEntry {
+  if (typeof value !== 'object' || value === null) return false;
+  const entry = value as Partial<RelayEntry>;
+  return (
+    typeof entry.id === 'string' &&
+    typeof entry.url === 'string' &&
+    typeof entry.platform === 'string' &&
+    RELAY_PLATFORMS.includes(entry.platform as RelayPlatform)
+  );
+}
+
 /**
  * Type guard for RelayConfig.
+ * activeId may be omitted in hand-edited sections (the merger fills in null).
  */
 export function isRelayConfig(value: unknown): value is RelayConfig {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Partial<RelayConfig>;
-  return Array.isArray(candidate.relays)
-    && (candidate.activeId === null || typeof candidate.activeId === 'string');
+  return (
+    Array.isArray(candidate.relays) &&
+    candidate.relays.every(isRelayEntry) &&
+    (candidate.activeId === null ||
+      candidate.activeId === undefined ||
+      typeof candidate.activeId === 'string')
+  );
 }

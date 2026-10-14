@@ -327,7 +327,8 @@ export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfi
     browser: canonicalizeBrowserConfig(partial.browser),
   };
 
-  // Relay config - optional, validate shape before preserving entries
+  // Relay config - only preserved when present so existing configs without the
+  // section stay untouched (fresh installs get defaults via createEmptyUnifiedConfig)
   if (partial.relay !== undefined && isRelayConfig(partial.relay)) {
     merged.relay = {
       relays: partial.relay.relays,
