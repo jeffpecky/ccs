@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 interface RelayEntry {
   id: string;
@@ -63,9 +64,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
+function formatTestedAt(value?: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString();
+}
+
 export function RelayPage() {
   const [config, setConfig] = useState<RelayConfig>();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [platform, setPlatform] = useState<RelayEntry['platform']>('cloudflare');
   const [name, setName] = useState('');
   const [token, setToken] = useState('');
@@ -78,8 +88,11 @@ export function RelayPage() {
   const reload = useCallback(async () => {
     try {
       setConfig(await request<RelayConfig>(''));
+      setLoadError(null);
     } catch (error) {
-      toast.error((error as Error).message);
+      const message = (error as Error).message;
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -88,6 +101,20 @@ export function RelayPage() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  const retry = () => {
+    setLoading(true);
+    void reload();
+  };
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await reload();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const deploy = async () => {
     setDeploying(true);
@@ -156,7 +183,7 @@ export function RelayPage() {
     }
   };
 
-  if (loading || !config) {
+  if (loading) {
     return (
       <div
         role="status"
@@ -169,7 +196,31 @@ export function RelayPage() {
     );
   }
 
+  if (!config) {
+    return (
+      <div className="mx-auto w-full max-w-4xl space-y-4 p-4 md:p-6">
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-8 text-center"
+        >
+          <p className="text-sm font-medium text-destructive">Unable to load relays</p>
+          <p className="mt-1 text-xs text-muted-foreground">{loadError ?? 'The request failed.'}</p>
+        </div>
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={retry}>
+            <RefreshCw className="mr-2 h-4 w-4" /> Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   const busy = busyId !== null;
+  const deployDisabled =
+    deploying ||
+    !token.trim() ||
+    (platform === 'cloudflare' && !accountId.trim()) ||
+    (platform === 'deno' && !orgDomain.trim());
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-4 md:p-6">
@@ -178,7 +229,7 @@ export function RelayPage() {
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             <Network className="h-4 w-4" /> Edge egress
           </div>
-          <CardTitle className="text-2xl tracking-tight">Relay</CardTitle>
+          <h1 className="text-2xl font-semibold tracking-tight">Relay</h1>
           <CardDescription className="max-w-2xl text-sm">
             <span className="block">
               A relay deploys a small proxy worker on an edge platform. Provider requests are
@@ -194,13 +245,19 @@ export function RelayPage() {
         <CardContent className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            onClick={() => void reload()}
-            disabled={busy || deploying}
+            onClick={() => void refresh()}
+            disabled={busy || deploying || refreshing}
             aria-label="Refresh relays"
           >
-            <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+            <RefreshCw className={cn('mr-2 h-4 w-4', refreshing && 'animate-spin')} /> Refresh
           </Button>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog
+            open={dialogOpen}
+            onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) setToken('');
+            }}
+          >
             <DialogTrigger asChild>
               <Button disabled={busy}>
                 <Plus className="mr-2 h-4 w-4" /> Deploy relay
@@ -221,7 +278,11 @@ export function RelayPage() {
                     value={platform}
                     onValueChange={(value) => setPlatform(value as RelayEntry['platform'])}
                   >
-                    <SelectTrigger id="relay-platform" className="w-full">
+                    <SelectTrigger
+                      id="relay-platform"
+                      aria-describedby="relay-platform-hint"
+                      className="w-full"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -232,7 +293,9 @@ export function RelayPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">{PLATFORM_HINTS[platform]}</p>
+                  <p id="relay-platform-hint" className="text-xs text-muted-foreground">
+                    {PLATFORM_HINTS[platform]}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="relay-name">Name (optional)</Label>
@@ -245,11 +308,11 @@ export function RelayPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="relay-token">API token</Label>
+                  <Label htmlFor="relay-token">API token (required)</Label>
                   <Input
                     id="relay-token"
                     type="password"
-                    autoComplete="off"
+                    autoComplete="new-password"
                     value={token}
                     onChange={(event) => setToken(event.target.value)}
                     disabled={deploying}
@@ -257,7 +320,7 @@ export function RelayPage() {
                 </div>
                 {platform === 'cloudflare' && (
                   <div className="space-y-2">
-                    <Label htmlFor="relay-account-id">Account ID</Label>
+                    <Label htmlFor="relay-account-id">Account ID (required)</Label>
                     <Input
                       id="relay-account-id"
                       value={accountId}
@@ -268,7 +331,7 @@ export function RelayPage() {
                 )}
                 {platform === 'deno' && (
                   <div className="space-y-2">
-                    <Label htmlFor="relay-org-domain">Organization domain</Label>
+                    <Label htmlFor="relay-org-domain">Organization domain (required)</Label>
                     <Input
                       id="relay-org-domain"
                       value={orgDomain}
@@ -277,7 +340,11 @@ export function RelayPage() {
                     />
                   </div>
                 )}
-                <Button className="w-full" onClick={() => void deploy()} disabled={deploying}>
+                <Button
+                  className="w-full"
+                  onClick={() => void deploy()}
+                  disabled={deployDisabled}
+                >
                   {deploying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {deploying ? 'Deploying…' : 'Deploy'}
                 </Button>
@@ -286,6 +353,10 @@ export function RelayPage() {
           </Dialog>
         </CardContent>
       </Card>
+
+      <div role="status" aria-live="polite" className="sr-only">
+        {busy || deploying ? 'Working on relay action…' : 'Relay page ready'}
+      </div>
 
       {config.relays.length === 0 ? (
         <div className="rounded-lg border border-dashed px-4 py-10 text-center">
@@ -298,6 +369,7 @@ export function RelayPage() {
         <div className="space-y-4">
           {config.relays.map((relay) => {
             const isActive = relay.id === config.activeId;
+            const testedAt = formatTestedAt(relay.lastTestedAt);
             const statusVariant =
               relay.testStatus === 'ok'
                 ? 'default'
@@ -315,22 +387,31 @@ export function RelayPage() {
                 <CardContent className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-sm font-semibold">{relay.name}</h2>
-                    <Badge variant="outline">{relay.platform}</Badge>
+                    <Badge variant="outline">{PLATFORM_LABELS[relay.platform]}</Badge>
                     {isActive && <Badge>Active</Badge>}
                     <Badge variant={statusVariant} className="ml-auto">
                       {statusLabel}
                     </Badge>
                   </div>
-                  <a
-                    href={relay.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block break-all text-sm text-primary underline-offset-4 hover:underline"
-                  >
-                    {relay.url} <ExternalLink className="inline h-3 w-3" />
-                  </a>
+                  {/^https?:\/\//.test(relay.url) ? (
+                    <a
+                      href={relay.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block break-all text-sm text-primary underline-offset-4 hover:underline"
+                    >
+                      {relay.url} <ExternalLink className="inline h-3 w-3" />
+                    </a>
+                  ) : (
+                    <span className="block break-all text-sm text-muted-foreground">
+                      {relay.url}
+                    </span>
+                  )}
                   {relay.testStatus === 'fail' && relay.lastError && (
                     <p className="text-xs text-destructive">{relay.lastError}</p>
+                  )}
+                  {testedAt && (
+                    <p className="text-xs text-muted-foreground">Last tested {testedAt}</p>
                   )}
                   {relay.platform === 'netlify' && (
                     <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
