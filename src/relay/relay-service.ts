@@ -51,9 +51,14 @@ export function updateRelayConfig(update: (current: RelayConfig) => RelayConfig)
   });
 }
 
-/** Public URL of the active relay, or null when none is active. */
-export function getActiveRelayUrl(): string | null {
-  const { relays, activeId } = getRelayConfig();
+/**
+ * Public URL of the active relay, or null when none is active.
+ *
+ * Accepts an optional config snapshot so callers (and tests) can resolve
+ * against an already-loaded config; no-arg calls read the live config.
+ */
+export function getActiveRelayUrl(config: RelayConfig = getRelayConfig()): string | null {
+  const { relays, activeId } = config;
   if (!activeId) return null;
   return relays.find((relay) => relay.id === activeId)?.url ?? null;
 }

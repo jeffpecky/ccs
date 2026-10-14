@@ -1,21 +1,9 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import * as http from 'http';
 import type { AddressInfo } from 'net';
 
-import type { RelayConfig, RelayEntry } from '../../../src/config/schemas/relay';
-
-// Bun's mock.module patches persist across files in a worker: keep every real
-// facade export and only override the getter, so later suites that import the
-// facade are unaffected.
-const actualFacade = await import('../../../src/config/config-loader-facade');
-
-let relayConfig: RelayConfig = { relays: [], activeId: null };
-mock.module('../../../src/config/config-loader-facade', () => ({
-  ...actualFacade,
-  getRelayConfig: () => structuredClone(relayConfig),
-}));
-
-const { getActiveRelayUrl, testRelay } = await import('../../../src/relay/relay-service');
+import type { RelayEntry } from '../../../src/config/schemas/relay';
+import { getActiveRelayUrl, testRelay } from '../../../src/relay/relay-service';
 
 const servers: http.Server[] = [];
 
@@ -47,24 +35,24 @@ function makeRelay(id: string, url: string): RelayEntry {
 
 describe('getActiveRelayUrl', () => {
   it('returns null when no relay is active', () => {
-    relayConfig = { relays: [makeRelay('r1', 'https://r1.example.test')], activeId: null };
-    expect(getActiveRelayUrl()).toBeNull();
+    const config = { relays: [makeRelay('r1', 'https://r1.example.test')], activeId: null };
+    expect(getActiveRelayUrl(config)).toBeNull();
   });
 
   it('returns null when the active relay is missing from the list', () => {
-    relayConfig = { relays: [], activeId: 'ghost' };
-    expect(getActiveRelayUrl()).toBeNull();
+    const config = { relays: [], activeId: 'ghost' };
+    expect(getActiveRelayUrl(config)).toBeNull();
   });
 
   it('returns the URL of the active relay', () => {
-    relayConfig = {
+    const config = {
       relays: [
         makeRelay('r1', 'https://r1.example.test'),
         makeRelay('r2', 'https://r2.example.test'),
       ],
       activeId: 'r2',
     };
-    expect(getActiveRelayUrl()).toBe('https://r2.example.test');
+    expect(getActiveRelayUrl(config)).toBe('https://r2.example.test');
   });
 });
 
