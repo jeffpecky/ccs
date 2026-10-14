@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { load } from 'js-yaml';
 
 import { invalidateConfigCache, mutateConfig } from '../../../config/config-loader-facade';
-import { regenerateConfig } from '../generator';
+import { regenerateConfig, CLIPROXY_CONFIG_VERSION } from '../generator';
 
 let home: string;
 let previousHome: string | undefined;
@@ -43,7 +44,15 @@ describe('relay-url generation', () => {
     regenerateConfig(8317, { configPath, authDir: path.join(home, 'auth') });
     const yaml = fs.readFileSync(configPath, 'utf8');
 
-    expect(yaml).toContain('relay-url: "https://my.workers.dev"');
+    // Parse-based: a commented-out `# relay-url:` line must not satisfy this.
+    const parsed = load(yaml) as Record<string, unknown>;
+    expect(parsed['relay-url']).toBe('https://my.workers.dev');
+    // Placement: Server Settings, right after the token-saver block and
+    // before the Logging section.
+    expect(yaml.indexOf('relay-url:')).toBeGreaterThan(yaml.indexOf('token-saver:'));
+    expect(yaml.indexOf('relay-url:')).toBeLessThan(yaml.indexOf('# Logging'));
+    // Mirrors the >21 guard in token-saver-generator.test.ts.
+    expect(CLIPROXY_CONFIG_VERSION).toBe(23);
   });
 
   it('emits an empty relay-url when no relay is active', () => {
@@ -55,10 +64,25 @@ describe('relay-url generation', () => {
     regenerateConfig(8317, { configPath, authDir: path.join(home, 'auth') });
     const yaml = fs.readFileSync(configPath, 'utf8');
 
-    // Inactive must serialize as an EMPTY YAML string (the generator's
-    // quoteYamlString is JSON.stringify, so `""`) — never a stale URL —
+    // Inactive must serialize as an EMPTY YAML string — never a stale URL —
     // so the Go side reads it as "no relay".
-    expect(yaml).toContain('relay-url: ""');
+    const parsed = load(yaml) as Record<string, unknown>;
+    expect(parsed['relay-url']).toBe('');
     expect(yaml).not.toContain('my.workers.dev');
+  });
+
+  it('emits an empty relay-url when activeId points at no deployed relay', () => {
+    // Dangling activeId (e.g. relay deleted after activation) must degrade
+    // to empty, never a phantom URL — exercises relay-service's `?? null`.
+    mutateConfig((config) => {
+      config.relay = { relays: [], activeId: 'ghost' };
+    });
+
+    const configPath = path.join(home, 'runtime.yaml');
+    regenerateConfig(8317, { configPath, authDir: path.join(home, 'auth') });
+    const yaml = fs.readFileSync(configPath, 'utf8');
+
+    const parsed = load(yaml) as Record<string, unknown>;
+    expect(parsed['relay-url']).toBe('');
   });
 });

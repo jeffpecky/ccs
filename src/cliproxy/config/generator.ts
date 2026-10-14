@@ -52,7 +52,7 @@ export const CCS_CONTROL_PANEL_SECRET = 'mgmt-f078070e88eadc04ff2688da7797b8be';
  *      spawn), drop dead proxy-token-env key (upstream has no token concept),
  *      coerce caveman/ponytail levels to the upstream lite|full|ultra enum
  *      (unknown levels silently inject nothing upstream)
- * v23: + relay-url (active edge relay egress URL; empty = direct)
+ * v23: Emit relay-url (active edge relay egress URL; empty = direct)
  */
 export const CLIPROXY_CONFIG_VERSION = 23;
 
@@ -300,7 +300,8 @@ function generateTokenSaverBlock(override?: CLIProxyTokenSaverConfig): string {
 
 function generateRelayBlock(): string {
   // Active relay URL flows from the dashboard toggle into the proxy config.
-  // CLIProxyAPIPlus hot-reloads this key via its fsnotify watcher.
+  // Hot-reload takes effect once CLIProxyAPIPlus gains the relay-url key
+  // on the Go side and watches it via fsnotify.
   const url = getActiveRelayUrl() ?? '';
   return `# Edge relay egress URL (managed by the CCS dashboard; empty = direct).
 relay-url: ${quoteYamlString(url)}`;
