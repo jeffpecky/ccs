@@ -1,7 +1,7 @@
+import { relayFetch } from '../../relay/relay-fetch';
+
 const CODEX_RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
 const CODEX_RESET_CREDITS_CONSUME_URL = `${CODEX_RESET_CREDITS_URL}/consume`;
-
-import { relayFetch } from '../../relay/relay-fetch';
 
 // Structural fetch type (NOT `typeof fetch`, which carries Bun's static
 // `preconnect` property and rejects plain functions / adapter arrows).

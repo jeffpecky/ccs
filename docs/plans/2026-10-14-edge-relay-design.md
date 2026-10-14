@@ -76,7 +76,7 @@ Activating writes `relay-url: <url>` into the generated CLIProxyAPIPlus `config.
 
 ### CCS outbound consumption
 
-`src/relay/relay-fetch.ts`: `relayFetch(url, init)` — when an active relay exists, rewrite to relay origin, set both headers, forward; otherwise plain `fetch`. Applied to credentialed/high-value outbound first: live quota fetchers, OAuth token exchanges, connection tests. CCS loopback calls never go through the relay.
+`src/relay/relay-fetch.ts`: `relayFetch(url, init)` — when an active relay exists, rewrite to the relay base URL (stored URL: origin, or origin + function path for Netlify), set both headers, forward; otherwise plain `fetch`. Applied to credentialed/high-value outbound first: live quota fetchers, OAuth token exchanges, connection tests. CCS loopback calls never go through the relay.
 
 ## Go Components (CLIProxyAPIPlus)
 

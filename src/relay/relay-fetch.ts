@@ -1,12 +1,9 @@
 import { getActiveRelayUrl } from './relay-service';
 
 function isLoopback(hostname: string): boolean {
-  return (
-    hostname === 'localhost' ||
-    hostname === '::1' ||
-    hostname.startsWith('127.') ||
-    hostname.startsWith('[::1')
-  );
+  // hostname always carries brackets for IPv6 ('[::1]'); anchored so public
+  // domains like '127.example.com' are not misclassified as loopback.
+  return /^(?:localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[::1\])$/.test(hostname);
 }
 
 /**
@@ -38,12 +35,29 @@ export async function relayFetch(
   if (!relayUrl || target.protocol !== 'https:' || isLoopback(target.hostname)) {
     return fetch(input, init);
   }
-  const relay = new URL(relayUrl);
+  let relay: URL;
+  try {
+    relay = new URL(relayUrl);
+  } catch {
+    throw new Error(
+      `Active relay URL is invalid ("${relayUrl}") — fix or deactivate the relay in the dashboard`
+    );
+  }
   if (relay.host === target.host) {
     return fetch(input, init);
   }
   const headers = new Headers(init?.headers);
   headers.set('x-relay-target', target.origin);
   headers.set('x-relay-path', target.pathname + target.search);
-  return fetch(`${relay.origin}${target.pathname}${target.search}`, { ...init, headers });
+  // Stored URL is origin for vercel/cloudflare/deno, origin + function path
+  // for netlify — preserve the stored path so the worker is actually reached.
+  const relayBase = relayUrl.replace(/\/+$/, '');
+  // redirect: 'error' — the worker follows upstream redirects server-side, so
+  // a 3xx here always means relay-infra misconfig; never follow it with the
+  // x-relay-* headers attached.
+  return fetch(`${relayBase}${target.pathname}${target.search}`, {
+    ...init,
+    headers,
+    redirect: 'error',
+  });
 }
