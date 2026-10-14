@@ -41,6 +41,7 @@ const CliToolsPage = lazy(() =>
 const TokenSaverPage = lazy(() =>
   import('@/pages/token-saver').then((m) => ({ default: m.TokenSaverPage }))
 );
+const RelayPage = lazy(() => import('@/pages/relay').then((m) => ({ default: m.RelayPage })));
 
 // Loading fallback for lazy components
 function PageLoader() {
@@ -165,6 +166,14 @@ export default function App() {
                       element={
                         <Suspense fallback={<PageLoader />}>
                           <TokenSaverPage />
+                        </Suspense>
+                      }
+                    />
+                    <Route
+                      path="/relay"
+                      element={
+                        <Suspense fallback={<PageLoader />}>
+                          <RelayPage />
                         </Suspense>
                       }
                     />

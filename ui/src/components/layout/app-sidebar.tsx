@@ -10,6 +10,7 @@ import {
   Github,
   Terminal,
   Gauge,
+  Network,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -71,6 +72,7 @@ function buildNavGroups(t: (key: string) => string): SidebarGroupDef[] {
         { path: '/', icon: Home, label: t('nav.home') },
         { path: '/analytics', icon: BarChart3, label: t('nav.analytics') },
         { path: '/token-saver', icon: Gauge, label: 'Token Saver' },
+        { path: '/relay', icon: Network, label: 'Relay' },
       ],
     },
     {
