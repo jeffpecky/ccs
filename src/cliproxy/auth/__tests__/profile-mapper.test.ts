@@ -5,6 +5,10 @@
 
 import * as assert from 'assert';
 const fs = require('fs');
+const os = require('os');
+// expandPath() converts to native separators (backslashes on Windows), so all
+// path comparisons against the fixtures below must be separator-agnostic.
+const toPosix = (p: string) => p.replace(/\\/g, '/');
 
 describe('Profile Mapper', () => {
   const profileMapper = require('../../../../dist/cliproxy/sync/profile-mapper');
@@ -136,7 +140,7 @@ describe('Profile Mapper', () => {
       const originalExistsSync = fs.existsSync;
       const originalReadFileSync = fs.readFileSync;
 
-      const customSettingsPath = '/tmp/custom-sync-path.settings.json';
+      const customSettingsPath = `${toPosix(os.tmpdir())}/custom-sync-path.settings.json`;
       const readPaths: string[] = [];
 
       try {
@@ -153,7 +157,7 @@ describe('Profile Mapper', () => {
           variants: [],
         });
 
-        fs.existsSync = (filePath: string) => filePath === customSettingsPath;
+        fs.existsSync = (filePath: string) => toPosix(filePath) === customSettingsPath;
         fs.readFileSync = (filePath: string) => {
           readPaths.push(filePath);
           return JSON.stringify({
@@ -165,8 +169,8 @@ describe('Profile Mapper', () => {
 
         const result = profileMapper.loadSyncableProfiles();
         assert.strictEqual(result.length, 1);
-        assert.strictEqual(result[0].settingsPath, customSettingsPath);
-        assert.deepStrictEqual(readPaths, [customSettingsPath]);
+        assert.strictEqual(toPosix(result[0].settingsPath), customSettingsPath);
+        assert.deepStrictEqual(readPaths.map(toPosix), [customSettingsPath]);
       } finally {
         profileReader.listApiProfiles = originalListApiProfiles;
         fs.existsSync = originalExistsSync;
@@ -179,8 +183,8 @@ describe('Profile Mapper', () => {
       const originalExistsSync = fs.existsSync;
       const originalReadFileSync = fs.readFileSync;
 
-      const claudePath = '/tmp/claude-target.settings.json';
-      const droidPath = '/tmp/droid-target.settings.json';
+      const claudePath = `${toPosix(os.tmpdir())}/claude-target.settings.json`;
+      const droidPath = `${toPosix(os.tmpdir())}/droid-target.settings.json`;
       const readPaths: string[] = [];
 
       try {
@@ -204,7 +208,7 @@ describe('Profile Mapper', () => {
           variants: [],
         });
 
-        fs.existsSync = (filePath: string) => filePath === claudePath || filePath === droidPath;
+        fs.existsSync = (filePath: string) => [claudePath, droidPath].includes(toPosix(filePath));
         fs.readFileSync = (filePath: string) => {
           readPaths.push(filePath);
           return JSON.stringify({
@@ -217,7 +221,7 @@ describe('Profile Mapper', () => {
         const result = profileMapper.loadSyncableProfiles();
         assert.strictEqual(result.length, 1);
         assert.strictEqual(result[0].name, 'claude-profile');
-        assert.deepStrictEqual(readPaths, [claudePath]);
+        assert.deepStrictEqual(readPaths.map(toPosix), [claudePath]);
       } finally {
         profileReader.listApiProfiles = originalListApiProfiles;
         fs.existsSync = originalExistsSync;

@@ -151,9 +151,10 @@ describe('Antigravity Plus OAuth credential diagnostics', () => {
       `../oauth-handler?agy-auth-url-not-in-table=${Date.now()}`
     );
 
-    expect(getPlusAuthUrlCredentialError('agy', 'https://accounts.google.com/o/oauth2/v2/auth?client_id=&state=abc')).toBeNull();
+    expect(
+      getPlusAuthUrlCredentialError('agy', 'https://accounts.google.com/o/oauth2/v2/auth?client_id=&state=abc')
+    ).toBeNull();
   });
-});
 
   it('allows AGY auth URLs with client_id present', async () => {
     const { getPlusAuthUrlCredentialError } = await import(

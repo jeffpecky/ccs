@@ -24,10 +24,10 @@ describe('Auth Token Manager', () => {
       generateSecureToken = authTokenManager.generateSecureToken;
     });
 
-    it('generates token of correct length (base64url encoding)', () => {
+    it('generates token of correct length (hex encoding)', () => {
       const token = generateSecureToken(32);
-      // 32 bytes = 43 chars in base64url (without padding)
-      assert.strictEqual(token.length, 43);
+      // 32 bytes = 64 hex chars
+      assert.strictEqual(token.length, 64);
     });
 
     it('generates unique tokens each call', () => {
@@ -38,13 +38,11 @@ describe('Auth Token Manager', () => {
       assert.strictEqual(tokens.size, 100, 'All 100 tokens should be unique');
     });
 
-    it('uses base64url encoding (no +/= characters)', () => {
+    it('uses hex encoding (only 0-9a-f characters)', () => {
       // Generate many tokens to ensure we hit all character ranges
       for (let i = 0; i < 50; i++) {
         const token = generateSecureToken(32);
-        assert(!token.includes('+'), 'Should not contain +');
-        assert(!token.includes('/'), 'Should not contain /');
-        assert(!token.includes('='), 'Should not contain padding =');
+        assert(/^[0-9a-f]+$/.test(token), 'Should be lowercase hex');
       }
     });
 
@@ -52,9 +50,9 @@ describe('Auth Token Manager', () => {
       const short = generateSecureToken(16);
       const long = generateSecureToken(64);
 
-      // 16 bytes = 22 chars, 64 bytes = 86 chars in base64url
-      assert.strictEqual(short.length, 22);
-      assert.strictEqual(long.length, 86);
+      // 16 bytes = 32 chars, 64 bytes = 128 chars in hex
+      assert.strictEqual(short.length, 32);
+      assert.strictEqual(long.length, 128);
     });
 
     it('handles edge case: length = 0', () => {
@@ -64,7 +62,7 @@ describe('Auth Token Manager', () => {
 
     it('handles edge case: very large length', () => {
       const large = generateSecureToken(256);
-      assert.strictEqual(large.length, 342); // 256 bytes = 342 chars in base64url
+      assert.strictEqual(large.length, 512); // 256 bytes = 512 hex chars
     });
 
     it('uses cryptographically secure random bytes', () => {
@@ -415,11 +413,14 @@ describe('Auth Token Manager', () => {
     });
 
     it('default API key has expected value', () => {
-      assert.strictEqual(CCS_INTERNAL_API_KEY, 'ccs-internal-managed');
+      assert.strictEqual(
+        CCS_INTERNAL_API_KEY,
+        'sk-45c9e789d78326c6b25e11879fc81602edc7228a4c594339'
+      );
     });
 
     it('default secret has expected value', () => {
-      assert.strictEqual(CCS_CONTROL_PANEL_SECRET, 'ccs');
+      assert.strictEqual(CCS_CONTROL_PANEL_SECRET, 'mgmt-f078070e88eadc04ff2688da7797b8be');
     });
   });
 });

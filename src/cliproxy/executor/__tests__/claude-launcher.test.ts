@@ -54,12 +54,6 @@ mock.module('../../../utils/websearch-manager', () => ({
   getWebSearchHookEnv: jest.fn().mockReturnValue({}),
 }));
 
-mock.module('../../../utils/image-analysis', () => ({
-  appendThirdPartyImageAnalysisToolArgs: (args: string[]) => [...args, '--mcp-image-analysis'],
-  syncImageAnalysisMcpToConfigDir: jest.fn(),
-  ensureImageAnalysisMcpOrThrow: jest.fn().mockReturnValue(true),
-}));
-
 mock.module('../../../utils/browser', () => ({
   appendBrowserToolArgs: (args: string[]) => [...args, '--browser'],
 }));
@@ -155,12 +149,6 @@ describe('launchClaude', () => {
     await launchClaude(baseContext());
     const spawnOpts = mockSpawn.mock.calls[0][2] as { stdio: string };
     expect(spawnOpts.stdio).toBe('inherit');
-  });
-
-  it('appends image analysis args when imageAnalysisMcpReady=true', async () => {
-    await launchClaude(baseContext({ imageAnalysisMcpReady: true }));
-    const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
-    expect(spawnArgs).toContain('--mcp-image-analysis');
   });
 
   it('does not append image analysis args when imageAnalysisMcpReady=false', async () => {

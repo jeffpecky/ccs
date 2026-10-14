@@ -48,7 +48,9 @@ describe('Binary Downloader Proxy Support', () => {
         expect(getProxyUrl(true)).toBeUndefined();
       });
 
-      it('should prefer https_proxy (lowercase)', () => {
+      // On Windows, process.env is case-insensitive, so https_proxy and
+      // HTTPS_PROXY are the same variable and precedence is unobservable.
+      it.skipIf(process.platform === 'win32')('should prefer https_proxy (lowercase)', () => {
         process.env.https_proxy = 'http://proxy1:8080';
         process.env.HTTPS_PROXY = 'http://proxy2:8080';
         expect(getProxyUrl(true)).toBe('http://proxy1:8080');
@@ -81,7 +83,8 @@ describe('Binary Downloader Proxy Support', () => {
         expect(getProxyUrl(false)).toBeUndefined();
       });
 
-      it('should prefer http_proxy (lowercase)', () => {
+      // Windows env vars are case-insensitive; lowercase/uppercase collapse.
+      it.skipIf(process.platform === 'win32')('should prefer http_proxy (lowercase)', () => {
         process.env.http_proxy = 'http://proxy1:8080';
         process.env.HTTP_PROXY = 'http://proxy2:8080';
         expect(getProxyUrl(false)).toBe('http://proxy1:8080');
@@ -183,7 +186,8 @@ describe('Binary Downloader Proxy Support', () => {
         expect(shouldBypassProxy('example.com')).toBe(true);
       });
 
-      it('should prefer no_proxy over NO_PROXY', () => {
+      // Windows env vars are case-insensitive; lowercase/uppercase collapse.
+      it.skipIf(process.platform === 'win32')('should prefer no_proxy over NO_PROXY', () => {
         process.env.no_proxy = 'lower.com';
         process.env.NO_PROXY = 'upper.com';
         expect(shouldBypassProxy('lower.com')).toBe(true);

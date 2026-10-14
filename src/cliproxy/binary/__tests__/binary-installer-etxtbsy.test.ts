@@ -10,6 +10,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { deleteBinary } from '../installer';
+import { getExecutableName } from '../platform-detector';
 
 describe('deleteBinary ETXTBSY guard', () => {
   let tmpDir: string;
@@ -19,7 +20,7 @@ describe('deleteBinary ETXTBSY guard', () => {
     // Create a fake binary file that deleteBinary will target
     const binDir = path.join(tmpDir, 'plus');
     fs.mkdirSync(binDir, { recursive: true });
-    fs.writeFileSync(path.join(binDir, 'cli-proxy-api-plus'), 'fake-binary');
+    fs.writeFileSync(path.join(binDir, getExecutableName('plus')), 'fake-binary');
   });
 
   afterEach(() => {
@@ -28,7 +29,7 @@ describe('deleteBinary ETXTBSY guard', () => {
 
   it('deletes binary successfully when file is not in use', () => {
     const binDir = path.join(tmpDir, 'plus');
-    const binaryPath = path.join(binDir, 'cli-proxy-api-plus');
+    const binaryPath = path.join(binDir, getExecutableName('plus'));
     expect(fs.existsSync(binaryPath)).toBe(true);
 
     deleteBinary(binDir, false, 'plus');

@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { ensureProviderSettings, getEffectiveEnvVars } from '../env-builder';
+import { CCS_INTERNAL_API_KEY } from '../generator';
 
 interface EnvSettings {
   ANTHROPIC_BASE_URL: string;
@@ -353,7 +354,7 @@ describe('getEffectiveEnvVars local provider URL normalization', () => {
     const env = getEffectiveEnvVars('cursor');
 
     expect(env.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:8317/api/provider/cursor');
-    expect(env.ANTHROPIC_AUTH_TOKEN).toBe('ccs-internal-managed');
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe(CCS_INTERNAL_API_KEY);
     expect(env.ANTHROPIC_MODEL).toBe('claude-4-sonnet');
     expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('claude-4-opus');
     expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('cursor-small');
@@ -366,7 +367,7 @@ describe('getEffectiveEnvVars local provider URL normalization', () => {
       hooks?: Record<string, unknown>;
     };
     expect(migrated.env.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:8317/api/provider/cursor');
-    expect(migrated.env.ANTHROPIC_AUTH_TOKEN).toBe('ccs-internal-managed');
+    expect(migrated.env.ANTHROPIC_AUTH_TOKEN).toBe(CCS_INTERNAL_API_KEY);
     expect(migrated.env.ANTHROPIC_MODEL).toBe('claude-4-sonnet');
     expect(migrated.env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('claude-4-opus');
     expect(migrated.env.ANTHROPIC_SMALL_FAST_MODEL).toBe('cursor-small');

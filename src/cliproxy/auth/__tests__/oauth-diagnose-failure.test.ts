@@ -166,9 +166,10 @@ describe('formatErrorMessage', () => {
     expect(lines.length).toBeLessThanOrEqual(6);
   });
 
-  test('CALLBACK_NEVER_OBSERVED includes paste-callback hint with provider', () => {
+  test('CALLBACK_NEVER_OBSERVED includes firewall-port remediation with provider', () => {
     const lines = formatErrorMessage({ branchId: 'CALLBACK_NEVER_OBSERVED', data: {} }, baseOpts);
-    expect(lines.some((l) => l.includes('--no-browser'))).toBe(true);
+    expect(lines.some((l) => l.includes('allow TCP port 1455'))).toBe(true);
+    expect(lines.some((l) => l.includes('Authenticate codex from the dashboard'))).toBe(true);
   });
 
   test('CALLBACK_NEVER_OBSERVED on win32 appends netsh hint', () => {
@@ -209,7 +210,7 @@ describe('cross-profile OAuth failure matrix', () => {
         ev(OAuthTracePhase.BinarySpawn),
         ev(OAuthTracePhase.BinaryExit, { data: { code: 0 } }),
       ],
-      hint: '--verbose',
+      hint: 'from the dashboard with verbose logging',
     },
     {
       name: 'callback-not-observed',
@@ -219,7 +220,7 @@ describe('cross-profile OAuth failure matrix', () => {
         ev(OAuthTracePhase.BrowserOpened),
         ev(OAuthTracePhase.BinaryExit, { data: { code: 0 } }),
       ],
-      hint: '--no-browser',
+      hint: 'allow TCP port 1455',
     },
     {
       name: 'binary-error',
@@ -228,7 +229,7 @@ describe('cross-profile OAuth failure matrix', () => {
         ev(OAuthTracePhase.BinarySpawn),
         ev(OAuthTracePhase.BinaryExit, { data: { code: 2, stderrTail: 'boom' } }),
       ],
-      hint: '--verbose',
+      hint: 'from the dashboard',
     },
     {
       name: 'token-exchange-error',
@@ -239,7 +240,7 @@ describe('cross-profile OAuth failure matrix', () => {
           error: { code: 'CALLBACK_REJECTED', message: 'invalid_grant' },
         }),
       ],
-      hint: '--verbose',
+      hint: 'from the dashboard with verbose logging',
     },
     {
       name: 'session-expired',
@@ -248,7 +249,7 @@ describe('cross-profile OAuth failure matrix', () => {
         ev(OAuthTracePhase.PasteCallbackPrompted),
         ev(OAuthTracePhase.Timeout, { data: { timeoutMs: 600000 } }),
       ],
-      hint: '--auth',
+      hint: 'from the dashboard',
     },
     {
       name: 'token-file-missing',

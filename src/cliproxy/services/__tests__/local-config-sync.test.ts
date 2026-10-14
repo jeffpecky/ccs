@@ -12,16 +12,16 @@ describe('Local Config Sync', () => {
   const localConfigSync = require('../../../../dist/cliproxy/sync/local-config-sync');
 
   describe('syncToLocalConfig', () => {
-    it('returns success with zero count when no profiles', () => {
+    it('returns success with zero count when no profiles', async () => {
       // If no profiles are configured, sync should succeed with 0 count
-      const result = localConfigSync.syncToLocalConfig();
+      const result = await localConfigSync.syncToLocalConfig();
       assert.ok(typeof result === 'object');
       assert.ok(typeof result.success === 'boolean');
       assert.ok(typeof result.syncedCount === 'number');
       assert.ok(typeof result.configPath === 'string');
     });
 
-    it('returns error when config file not found', () => {
+    it('returns error when config file not found', async () => {
       // Set CCS_HOME to temp dir without config
       const originalHome = process.env.CCS_HOME;
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-test-'));
@@ -42,7 +42,7 @@ describe('Local Config Sync', () => {
 
         // Need to reload module to pick up new CCS_HOME
         // For this test, we just verify the function doesn't throw
-        const result = localConfigSync.syncToLocalConfig();
+        const result = await localConfigSync.syncToLocalConfig();
         assert.ok(typeof result === 'object');
       } finally {
         process.env.CCS_HOME = originalHome;
@@ -73,9 +73,9 @@ describe('Local Config Sync', () => {
     // Test the internal logic through integration
     // The replaceSectionInYaml function is not exported, so we test via syncToLocalConfig
 
-    it('preserves file permissions on sync', () => {
+    it('preserves file permissions on sync', async () => {
       // Verify atomic write behavior by checking syncToLocalConfig doesn't throw
-      const result = localConfigSync.syncToLocalConfig();
+      const result = await localConfigSync.syncToLocalConfig();
       assert.ok(typeof result === 'object');
     });
   });

@@ -41,7 +41,8 @@ describe('createFileSink', () => {
     expect(parsed1.provider).toBe('codex');
   });
 
-  test('file mode is 0600 (user-only)', () => {
+  // Windows does not apply POSIX file modes; the 0600 request is honored on macOS/Linux.
+  test.skipIf(process.platform === 'win32')('file mode is 0600 (user-only)', () => {
     const fixed = new Date(2026, 4, 10);
     const sink = createFileSink({ dir: tmpDir, now: () => fixed });
     sink.write(makeEvent());

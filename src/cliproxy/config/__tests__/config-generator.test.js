@@ -171,12 +171,14 @@ describe('Config Generator', () => {
   // =========================================================================
   describe('parseUserApiKeys', () => {
     let parseUserApiKeys;
+    let internalApiKey;
 
     beforeEach(() => {
       // Clear cache and reload module
       delete require.cache[require.resolve('../../../../dist/cliproxy/config/config-generator')];
       const configGenerator = require('../../../../dist/cliproxy/config/config-generator');
       parseUserApiKeys = configGenerator.parseUserApiKeys;
+      internalApiKey = configGenerator.CCS_INTERNAL_API_KEY;
     });
 
     it('extracts user-added API keys from config content', () => {
@@ -185,7 +187,7 @@ describe('Config Generator', () => {
 port: 8317
 
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
   - "user-custom-key-12345"
   - "another-user-key-abcde"
 
@@ -200,7 +202,7 @@ auth-dir: "/home/user/.ccs/cliproxy/auth"
     it('excludes the internal CCS key', () => {
       const configContent = `
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
   - "my-custom-key"
 
 auth-dir: "/test"
@@ -210,13 +212,13 @@ auth-dir: "/test"
 
       assert.strictEqual(userKeys.length, 1);
       assert.strictEqual(userKeys[0], 'my-custom-key');
-      assert(!userKeys.includes('ccs-internal-managed'), 'Should not include internal key');
+      assert(!userKeys.includes(internalApiKey), 'Should not include internal key');
     });
 
     it('returns empty array when only internal key exists', () => {
       const configContent = `
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 
 auth-dir: "/test"
 `;
@@ -241,7 +243,7 @@ auth-dir: "/test"
     it('handles single user key', () => {
       const configContent = `
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
   - "single-user-key"
 
 auth-dir: "/test"
@@ -255,7 +257,7 @@ auth-dir: "/test"
     it('handles multiple user keys', () => {
       const configContent = `
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
   - "key1"
   - "key2"
   - "key3"
@@ -273,7 +275,7 @@ auth-dir: "/test"
     it('handles keys with special characters', () => {
       const configContent = `
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
   - "sk_live_1234567890abcdef"
   - "api-key-with-dashes"
   - "key_with_underscores_123"
@@ -293,7 +295,7 @@ auth-dir: "/test"
     it('preserves key order', () => {
       const configContent = `
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
   - "zebra-key"
   - "alpha-key"
   - "middle-key"
@@ -309,7 +311,7 @@ auth-dir: "/test"
     it('handles empty string key (edge case)', () => {
       const configContent = `
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
   - ""
   - "valid-key"
 
@@ -326,7 +328,7 @@ auth-dir: "/test"
 
     it('handles config with Windows line endings', () => {
       const configContent =
-        'api-keys:\r\n  - "ccs-internal-managed"\r\n  - "user-key"\r\n\r\nauth-dir: "/test"\r\n';
+        'api-keys:\r\n  - "' + internalApiKey + '"\r\n  - "user-key"\r\n\r\nauth-dir: "/test"\r\n';
 
       const userKeys = parseUserApiKeys(configContent);
 
@@ -336,7 +338,7 @@ auth-dir: "/test"
     it('handles different indentation styles', () => {
       const configContent = `
 api-keys:
-    - "ccs-internal-managed"
+    - "${internalApiKey}"
     - "user-key-with-4-spaces"
 
 auth-dir: "/test"
@@ -349,7 +351,7 @@ auth-dir: "/test"
 
     it('handles tabs in indentation', () => {
       const configContent =
-        'api-keys:\n\t- "ccs-internal-managed"\n\t- "user-key-with-tab"\n\nauth-dir: "/test"';
+        'api-keys:\n\t- "' + internalApiKey + '"\n\t- "user-key-with-tab"\n\nauth-dir: "/test"';
 
       const userKeys = parseUserApiKeys(configContent);
 
@@ -366,6 +368,7 @@ auth-dir: "/test"
     let originalCcsHome;
     let regenerateConfig;
     let getCliproxyConfigPath;
+    let internalApiKey;
 
     beforeEach(() => {
       // Create a temporary test directory
@@ -379,6 +382,7 @@ auth-dir: "/test"
       const configGenerator = require('../../../../dist/cliproxy/config/config-generator');
       regenerateConfig = configGenerator.regenerateConfig;
       getCliproxyConfigPath = configGenerator.getCliproxyConfigPath;
+      internalApiKey = configGenerator.CCS_INTERNAL_API_KEY;
     });
 
     afterEach(() => {
@@ -400,7 +404,7 @@ auth-dir: "/test"
 port: 8317
 
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
   - "user-custom-key-12345"
   - "another-user-key"
 
@@ -417,7 +421,7 @@ auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
       // Verify user keys are preserved
       assert(newConfig.includes('user-custom-key-12345'), 'Should preserve first user key');
       assert(newConfig.includes('another-user-key'), 'Should preserve second user key');
-      assert(newConfig.includes('ccs-internal-managed'), 'Should include internal key');
+      assert(newConfig.includes(internalApiKey), 'Should include internal key');
     });
 
     it('preserves port setting during regeneration', () => {
@@ -429,7 +433,7 @@ auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 port: 9999
 
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 `;
@@ -453,7 +457,7 @@ auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 port: 8317
 
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 
@@ -494,7 +498,7 @@ openai-compatibility:
       assert(fs.existsSync(configPath), 'Config should be created');
 
       const config = fs.readFileSync(configPath, 'utf-8');
-      assert(config.includes('ccs-internal-managed'), 'Should include internal key');
+      assert(config.includes(internalApiKey), 'Should include internal key');
       assert(config.includes('port: 8317'), 'Should use default port');
     });
 
@@ -510,7 +514,7 @@ openai-compatibility:
 
       // Should create valid config
       const newConfig = fs.readFileSync(path.join(cliproxyDir, 'config.yaml'), 'utf-8');
-      assert(newConfig.includes('ccs-internal-managed'), 'Should create valid config');
+      assert(newConfig.includes(internalApiKey), 'Should create valid config');
     });
 
     it('handles empty config file gracefully', () => {
@@ -525,7 +529,7 @@ openai-compatibility:
 
       // Should create valid config with defaults
       const newConfig = fs.readFileSync(path.join(cliproxyDir, 'config.yaml'), 'utf-8');
-      assert(newConfig.includes('ccs-internal-managed'), 'Should create valid config');
+      assert(newConfig.includes(internalApiKey), 'Should create valid config');
       assert(newConfig.includes('port: 8317'), 'Should use default port');
     });
 
@@ -538,7 +542,7 @@ openai-compatibility:
 port: 8317
 
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
   - "key-first"
   - "key-second"
   - "key-third"
@@ -711,6 +715,7 @@ remote-management:
     let testDir;
     let originalCcsHome;
     let regenerateConfig;
+    let internalApiKey;
 
     beforeEach(() => {
       testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-test-fork-'));
@@ -721,6 +726,7 @@ remote-management:
       delete require.cache[require.resolve('../../../../dist/utils/config-manager')];
       const configGenerator = require('../../../../dist/cliproxy/config/config-generator');
       regenerateConfig = configGenerator.regenerateConfig;
+      internalApiKey = configGenerator.CCS_INTERNAL_API_KEY;
     });
 
     afterEach(() => {
@@ -835,7 +841,7 @@ remote-management:
       const initialConfig = `# CLIProxyAPI config generated by CCS v8
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -927,7 +933,7 @@ oauth-model-alias:
       const initialConfig = `# CLIProxyAPI config generated by CCS v12
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -982,7 +988,7 @@ ${buildGuessedRange('gemini-3-flash', 'flash')}
       const initialConfig = `# CLIProxyAPI config generated by CCS v12
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1031,7 +1037,7 @@ ${staleRange}
       const initialConfig = `# CLIProxyAPI config generated by CCS v12
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1082,7 +1088,7 @@ ${staleRange}
       const initialConfig = `# CLIProxyAPI config generated by CCS v12
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1108,7 +1114,7 @@ ${partialRange}
       const initialConfig = `# CLIProxyAPI config generated by CCS v12
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1143,7 +1149,7 @@ oauth-model-alias:
       const initialConfig = `# CLIProxyAPI config generated by CCS v12
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1184,7 +1190,7 @@ oauth-model-alias:
       const initialConfig = `# CLIProxyAPI config generated by CCS v12
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1209,7 +1215,7 @@ ${staleRange}
       const initialConfig = `# CLIProxyAPI config generated by CCS v12
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1260,7 +1266,7 @@ oauth-model-alias:
       const initialConfig = `# CLIProxyAPI config generated by CCS v12
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1303,7 +1309,7 @@ oauth-model-alias:
       const initialConfig = `# CLIProxyAPI config generated by CCS v16
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1340,7 +1346,7 @@ oauth-model-alias:
       const initialConfig = `# CLIProxyAPI config generated by CCS v6
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1375,7 +1381,7 @@ oauth-model-alias:
       const initialConfig = `# CLIProxyAPI config generated by CCS v9
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:
@@ -1405,7 +1411,7 @@ oauth-model-alias:
       const initialConfig = `# CLIProxyAPI config generated by CCS v11
 port: 8317
 api-keys:
-  - "ccs-internal-managed"
+  - "${internalApiKey}"
 auth-dir: "${cliproxyDir.replace(/\\/g, '/')}/auth"
 oauth-model-alias:
   antigravity:

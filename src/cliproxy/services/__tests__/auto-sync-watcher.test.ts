@@ -19,8 +19,8 @@ describe('Auto-Sync Watcher', () => {
   });
 
   describe('isAutoSyncEnabled', () => {
-    it('returns a boolean', () => {
-      const result = autoSyncWatcher.isAutoSyncEnabled();
+    it('returns a boolean', async () => {
+      const result = await autoSyncWatcher.isAutoSyncEnabled();
       assert.ok(typeof result === 'boolean');
     });
   });

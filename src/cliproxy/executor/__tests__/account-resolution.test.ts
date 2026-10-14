@@ -19,7 +19,7 @@ describe('resolveRuntimeQuotaMonitorProviders', () => {
   // Import the module under test directly (no heavy deps needed for this fn)
   it('returns empty array when provider is not managed', async () => {
     const { resolveRuntimeQuotaMonitorProviders } = await import('../account-resolution');
-    const result = resolveRuntimeQuotaMonitorProviders('kiro', []);
+    const result = resolveRuntimeQuotaMonitorProviders('cursor', []);
     expect(result).toEqual([]);
   });
 
@@ -32,17 +32,17 @@ describe('resolveRuntimeQuotaMonitorProviders', () => {
 
   it('returns composite providers that are managed, deduped', async () => {
     const { resolveRuntimeQuotaMonitorProviders } = await import('../account-resolution');
-    // agy is managed; kiro is not; duplicate agy should be deduped
-    const result = resolveRuntimeQuotaMonitorProviders('gemini', ['agy', 'kiro', 'agy']);
+    // agy is managed; cursor is not; duplicate agy should be deduped
+    const result = resolveRuntimeQuotaMonitorProviders('gemini', ['agy', 'cursor', 'agy']);
     expect(result).toContain('agy');
-    expect(result).not.toContain('kiro');
+    expect(result).not.toContain('cursor');
     expect(result.filter((p) => p === 'agy')).toHaveLength(1);
   });
 
   it('ignores base provider when compositeProviders is non-empty', async () => {
     const { resolveRuntimeQuotaMonitorProviders } = await import('../account-resolution');
-    // base provider is gemini (managed), but composite list contains only kiro (not managed)
-    const result = resolveRuntimeQuotaMonitorProviders('gemini', ['kiro']);
+    // base provider is gemini (managed), but composite list contains only cursor (not managed)
+    const result = resolveRuntimeQuotaMonitorProviders('gemini', ['cursor']);
     expect(result).toEqual([]);
   });
 });

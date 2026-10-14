@@ -95,7 +95,7 @@ describe('installCliproxyVersion', () => {
 
     expect(status.installed).toBe(true);
     expect(status.pinnedVersion).toBe('6.6.80-0');
-    expect(status.binaryPath).toContain('/plus/');
+    expect(status.binaryPath.replace(/\\/g, '/')).toContain('/plus/');
   });
 
   it('copies plus binary and pin state when legacy deleted upstream fallback is active', async () => {
@@ -130,7 +130,7 @@ describe('installCliproxyVersion', () => {
 
       expect(status.installed).toBe(true);
       expect(status.pinnedVersion).toBe('6.6.80-0');
-      expect(status.binaryPath).toContain('/original/');
+      expect(status.binaryPath.replace(/\\/g, '/')).toContain('/original/');
     } finally {
       plusConfig.repo = originalRepo;
     }

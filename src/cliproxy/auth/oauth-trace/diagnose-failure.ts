@@ -138,7 +138,9 @@ export function formatErrorMessage(result: DiagnosisResult, opts: FormatErrorOpt
         `Browser completed login but no callback reached localhost:${callbackPort ?? '?'}.`
       );
       lines.push('Common cause: firewall, antivirus, or browser on a different machine.');
-      lines.push(`Try paste-callback mode: ccs ${provider} --auth --no-browser`);
+      lines.push(
+        `Try: Authenticate ${provider} from the dashboard; allow TCP port ${callbackPort ?? '?'} through the firewall if it repeats.`
+      );
       if (platform === 'win32' && callbackPort) {
         lines.push('On Windows, try as Administrator:');
         lines.push(
@@ -191,7 +193,7 @@ export function formatErrorMessage(result: DiagnosisResult, opts: FormatErrorOpt
 
     case 'AGY_RESPONSIBILITY_DECLINED':
       lines.push('Antigravity responsibility prompt was declined.');
-      lines.push(`Re-run and accept to proceed: ccs ${provider} --auth`);
+      lines.push(`Re-run and accept to proceed: Authenticate ${provider} from the dashboard`);
       break;
 
     case 'UNKNOWN':

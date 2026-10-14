@@ -43,8 +43,8 @@ describe('Backend Selection', () => {
   });
 
   describe('DEFAULT_BACKEND', () => {
-    it('defaults to original backend', () => {
-      assert.strictEqual(platformDetector.DEFAULT_BACKEND, 'original');
+    it('defaults to plus backend', () => {
+      assert.strictEqual(platformDetector.DEFAULT_BACKEND, 'plus');
     });
   });
 
@@ -119,10 +119,9 @@ describe('Backend Selection', () => {
       });
     });
 
-    it('uses original backend by default', () => {
+    it('uses plus backend by default', () => {
       const info = platformDetector.detectPlatform();
-      assert(info.binaryName.startsWith('CLIProxyAPI_'));
-      assert(!info.binaryName.includes('CLIProxyAPIPlus'));
+      assert(info.binaryName.startsWith('CLIProxyAPIPlus_'));
     });
 
     it('uses fallback version when version not specified', () => {
@@ -151,9 +150,9 @@ describe('Backend Selection', () => {
       assert.strictEqual(name, expected);
     });
 
-    it('defaults to original backend', () => {
+    it('defaults to plus backend', () => {
       const name = platformDetector.getExecutableName();
-      const expected = isWindows ? 'cli-proxy-api.exe' : 'cli-proxy-api';
+      const expected = isWindows ? 'cli-proxy-api-plus.exe' : 'cli-proxy-api-plus';
       assert.strictEqual(name, expected);
     });
   });
@@ -170,10 +169,9 @@ describe('Backend Selection', () => {
       assert(url.includes('jeffpecky/CLIProxyAPIPlus/releases'));
     });
 
-    it('defaults to original backend', () => {
+    it('defaults to plus backend', () => {
       const url = platformDetector.getDownloadUrl();
-      assert(url.includes('router-for-me/CLIProxyAPI/releases'));
-      assert(!url.includes('CLIProxyAPIPlus'));
+      assert(url.includes('jeffpecky/CLIProxyAPIPlus/releases'));
     });
   });
 

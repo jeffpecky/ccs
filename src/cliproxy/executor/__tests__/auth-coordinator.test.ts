@@ -361,11 +361,11 @@ describe('runPreflightQuotaCheck', () => {
   });
 
   it('composite list → checks only managed providers from the list', async () => {
-    // Real MANAGED_QUOTA_PROVIDERS = ['agy','claude','codex','gemini','ghcp']
-    // 'gemini' and 'codex' are both managed; 'kiro' is not
-    await runPreflightQuotaCheck('agy', ['gemini', 'kiro']);
+    // Real MANAGED_QUOTA_PROVIDERS = ['agy','claude','codex','gemini','ghcp','kiro']
+    // 'gemini' is managed; 'cursor' is not
+    await runPreflightQuotaCheck('agy', ['gemini', 'cursor']);
     expect(mockHandleQuotaCheck).toHaveBeenCalledWith('gemini');
-    expect(mockHandleQuotaCheck).not.toHaveBeenCalledWith('kiro');
+    expect(mockHandleQuotaCheck).not.toHaveBeenCalledWith('cursor');
   });
 });
 

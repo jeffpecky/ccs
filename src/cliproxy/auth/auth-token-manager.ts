@@ -17,7 +17,7 @@ import { loadOrCreateUnifiedConfig, mutateConfig } from '../../config/config-loa
  * Uses CSPRNG (crypto.randomBytes) for proper entropy.
  *
  * @param length - Number of random bytes (default: 32 = 256-bit entropy)
- * @returns Base64URL-encoded token (43 chars for 32 bytes)
+ * @returns Hex-encoded token (64 chars for 32 bytes)
  */
 export function generateSecureToken(length = 32): string {
   return randomBytes(length).toString('hex');

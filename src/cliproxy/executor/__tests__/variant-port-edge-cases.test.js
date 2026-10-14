@@ -108,7 +108,7 @@ describe('Variant Port Edge Cases', function () {
         assert.fail('Should have thrown');
       } catch (err) {
         assert.ok(err.message.includes('100/100'));
-        assert.ok(err.message.includes('ccs cliproxy remove'));
+        assert.ok(err.message.includes('Delete unused variants from the dashboard'));
       }
     });
 
