@@ -15,6 +15,7 @@ import { getDeniedModelIdReasonForProvider } from '../ai-providers/model-id-norm
 import { getAuthDir, getProviderAuthDir, getConfigPathForPort } from './path-resolver';
 import { CLIPROXY_DEFAULT_PORT } from './port-manager';
 import { loadOrCreateUnifiedConfig } from '../../config/config-loader-facade';
+import { getActiveRelayUrl } from '../../relay/relay-service';
 import { getActiveDockerLegacyApiKeys } from '../../docker/docker-key-rotation';
 import type { CLIProxyTokenSaverConfig } from '../../config/unified-config-types';
 
@@ -51,8 +52,9 @@ export const CCS_CONTROL_PANEL_SECRET = 'mgmt-f078070e88eadc04ff2688da7797b8be';
  *      spawn), drop dead proxy-token-env key (upstream has no token concept),
  *      coerce caveman/ponytail levels to the upstream lite|full|ultra enum
  *      (unknown levels silently inject nothing upstream)
+ * v23: + relay-url (active edge relay egress URL; empty = direct)
  */
-export const CLIPROXY_CONFIG_VERSION = 22;
+export const CLIPROXY_CONFIG_VERSION = 23;
 
 export const ORIGINAL_MANAGEMENT_PANEL_REPOSITORY =
   'https://github.com/router-for-me/Cli-Proxy-API-Management-Center';
@@ -294,6 +296,14 @@ function generateTokenSaverBlock(override?: CLIProxyTokenSaverConfig): string {
     enabled: ${pxpipe?.enabled ?? false}
     min-chars: ${pxpipe?.min_chars ?? 25000}
     timeout-ms: ${pxpipe?.timeout_ms ?? 15000}`;
+}
+
+function generateRelayBlock(): string {
+  // Active relay URL flows from the dashboard toggle into the proxy config.
+  // CLIProxyAPIPlus hot-reloads this key via its fsnotify watcher.
+  const url = getActiveRelayUrl() ?? '';
+  return `# Edge relay egress URL (managed by the CCS dashboard; empty = direct).
+relay-url: ${quoteYamlString(url)}`;
 }
 
 function normalizeManagementPanelRepository(value: unknown): string | undefined {
@@ -819,6 +829,8 @@ debug: false
 
 # Optional independent request-body token saving transforms
 ${generateTokenSaverBlock(tokenSaverOverride)}
+
+${generateRelayBlock()}
 
 # =============================================================================
 # Logging
