@@ -9,6 +9,13 @@
  * Errors: platform HTTP failures throw `DeployError(message, upstreamStatus)`
  * so routes can surface the upstream status; network errors and poll timeouts
  * propagate as plain `Error`s for the route to map to 500s.
+ *
+ * Poll HTTP status: the Vercel and Netlify poll loops do not inspect HTTP
+ * status (nor guard `res.json()`), matching upstream — a token that expires
+ * mid-poll surfaces as a timeout error rather than an auth error; every flow
+ * proves its token on its first API call before polling begins. Known debt:
+ * no AbortSignal is threaded into the poll loops, so they are not
+ * cancellable and a route-level timeout cannot stop an in-flight poll.
  */
 
 import {
@@ -45,6 +52,10 @@ export class DeployError extends Error {
   }
 }
 
+function defaultName(): string {
+  return `relay-${Date.now().toString(36)}`;
+}
+
 const VERCEL_API = 'https://api.vercel.com';
 const DENO_V2_API = 'https://api.deno.com/v2';
 const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
@@ -58,7 +69,8 @@ interface VercelDeployment {
 }
 
 interface VercelDeploymentState {
-  readyState?: string;
+  /** Known states: 'READY' | 'ERROR' | 'CANCELED' (upstream also uses QUEUED/BUILDING). */
+  readyState?: 'READY' | 'ERROR' | 'CANCELED' | string;
   url?: string;
 }
 
@@ -87,8 +99,8 @@ async function pollVercelDeployment(
 }
 
 export async function deployVercel(input: DeployInput): Promise<DeployResult> {
-  const token = input.token;
-  const name = input.name?.trim() || `relay-${Date.now().toString(36)}`;
+  const token = input.token.trim();
+  const name = input.name?.trim() || defaultName();
 
   if (!token) {
     throw new DeployError('Vercel API token is required', 400);
@@ -136,7 +148,8 @@ export async function deployVercel(input: DeployInput): Promise<DeployResult> {
   const deployment = (await deployRes.json()) as VercelDeployment;
   const deploymentId = deployment.id || deployment.uid || '';
 
-  // Disable deployment protection (Vercel Authentication).
+  // Disable deployment protection (Vercel Authentication) — best-effort: the
+  // deployment already exists, so a failed PATCH must not fail the deploy.
   const projectId = deployment.projectId || name;
   await fetch(`${VERCEL_API}/v9/projects/${projectId}`, {
     method: 'PATCH',
@@ -145,7 +158,7 @@ export async function deployVercel(input: DeployInput): Promise<DeployResult> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ ssoProtection: null }),
-  });
+  }).catch(() => undefined);
 
   const ready = await pollVercelDeployment(deploymentId, token);
   return { url: `https://${ready.url}`, name };
@@ -163,8 +176,8 @@ interface CloudflareSubdomainBody {
 
 export async function deployCloudflare(input: DeployInput): Promise<DeployResult> {
   const accountId = input.accountId?.trim();
-  const token = input.token?.trim();
-  const name = input.name?.trim() || `relay-${Date.now().toString(36)}`;
+  const token = input.token.trim();
+  const name = input.name?.trim() || defaultName();
 
   if (!accountId || !token) {
     throw new DeployError('Cloudflare Account ID and API Token are required', 400);
@@ -268,10 +281,37 @@ interface DenoRevisionStatus {
   status: string;
 }
 
+async function deleteDenoAppBestEffort(appId: string, token: string): Promise<void> {
+  await fetch(`${DENO_V2_API}/apps/${appId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => undefined);
+}
+
+async function pollDenoRevision(revision: DenoRevision, token: string): Promise<string> {
+  let status = revision.status;
+  let attempts = 0;
+  const maxAttempts = 30; // 30 * 2s = 60s max
+  while (status === 'queued' || status === 'building') {
+    if (attempts >= maxAttempts) {
+      throw new Error('Deploy timed out after 60 seconds');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const statusRes = await fetch(`${DENO_V2_API}/revisions/${revision.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!statusRes.ok) break;
+    const statusData = (await statusRes.json()) as DenoRevisionStatus;
+    status = statusData.status;
+    attempts++;
+  }
+  return status;
+}
+
 export async function deployDeno(input: DeployInput): Promise<DeployResult> {
-  const token = input.token?.trim();
+  const token = input.token.trim();
   const orgDomain = input.orgDomain?.trim();
-  const name = input.name?.trim() || `relay-${Date.now().toString(36)}`;
+  const name = input.name?.trim() || defaultName();
 
   if (!orgDomain) {
     throw new DeployError('Organization domain is required', 400);
@@ -330,38 +370,23 @@ export async function deployDeno(input: DeployInput): Promise<DeployResult> {
 
   if (!deployRes.ok) {
     const text = await deployRes.text().catch(() => '');
-    await fetch(`${DENO_V2_API}/apps/${app.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => undefined);
+    await deleteDenoAppBestEffort(app.id, token);
     throw new DeployError(`Deploy failed (${deployRes.status}): ${text}`, deployRes.status);
   }
 
   const revision = (await deployRes.json()) as DenoRevision;
-  const revisionId = revision.id;
 
-  let status = revision.status;
-  let attempts = 0;
-  const maxAttempts = 30; // 30 * 2s = 60s max
-  while (status === 'queued' || status === 'building') {
-    if (attempts >= maxAttempts) {
-      throw new Error('Deploy timed out after 60 seconds');
-    }
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const statusRes = await fetch(`${DENO_V2_API}/revisions/${revisionId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!statusRes.ok) break;
-    const statusData = (await statusRes.json()) as DenoRevisionStatus;
-    status = statusData.status;
-    attempts++;
+  // Any poll exit other than `succeeded` — throw included — cleans up the app
+  // exactly once before propagating (closes upstream's orphan-on-timeout gap).
+  let status: string;
+  try {
+    status = await pollDenoRevision(revision, token);
+  } catch (error) {
+    await deleteDenoAppBestEffort(app.id, token);
+    throw error;
   }
-
   if (status !== 'succeeded') {
-    await fetch(`${DENO_V2_API}/apps/${app.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => undefined);
+    await deleteDenoAppBestEffort(app.id, token);
     throw new DeployError(`Deploy failed with status: ${status}`, 500);
   }
 
@@ -403,7 +428,7 @@ async function readError(res: Response, fallback: string): Promise<string> {
 }
 
 export async function deployNetlify(input: DeployInput): Promise<DeployResult> {
-  const token = input.token?.trim() ?? input.token;
+  const token = input.token.trim();
   const siteName = sanitizeSiteName(input.name);
 
   if (!token) {

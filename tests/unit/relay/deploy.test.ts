@@ -195,6 +195,35 @@ describe('deployVercel', () => {
     expect(err.message).toBe('Token revoked');
   });
 
+  it('rejects when the poll reaches the ERROR state', async () => {
+    installFetchMock([
+      {
+        method: 'POST',
+        url: 'https://api.vercel.com/v13/deployments',
+        status: 201,
+        json: { id: 'dpl_123', projectId: 'prj_456' },
+      },
+      {
+        method: 'PATCH',
+        url: 'https://api.vercel.com/v9/projects/prj_456',
+        json: { id: 'prj_456' },
+      },
+      {
+        method: 'GET',
+        url: 'https://api.vercel.com/v13/deployments/dpl_123',
+        json: { readyState: 'ERROR' },
+      },
+    ]);
+
+    const error = await deployVercel({ token: 'vc_token', name: 'relay-abc' }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DeployError);
+    expect((error as Error).message).toBe('Deployment failed: ERROR');
+  });
+
   it('rejects a missing token with a 400 DeployError before any request', async () => {
     installFetchMock([]);
 
@@ -464,6 +493,38 @@ describe('deployDeno', () => {
     expect(err.message).toBe('Deploy failed with status: failed');
     findRequest('DELETE', 'https://api.deno.com/v2/apps/app_1');
   });
+
+  it('deletes the app exactly once when the poll hits the 30-attempt timeout', async () => {
+    installFetchMock([
+      {
+        method: 'POST',
+        url: 'https://api.deno.com/v2/apps',
+        status: 201,
+        json: { id: 'app_1' },
+      },
+      {
+        method: 'POST',
+        url: 'https://api.deno.com/v2/apps/app_1/deploy',
+        status: 201,
+        json: { id: 'rev_1', status: 'queued' },
+      },
+      { method: 'GET', url: 'https://api.deno.com/v2/revisions/rev_1', json: { status: 'queued' } },
+      { method: 'DELETE', url: 'https://api.deno.com/v2/apps/app_1', json: { ok: true } },
+    ]);
+
+    const error = await withInstantTimers(() =>
+      deployDeno({ token: 'deno_t', orgDomain: 'myorg.deno.dev', name: 'myrelay' }).then(
+        () => null,
+        (e: unknown) => e,
+      ),
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(DeployError);
+    expect((error as Error).message).toBe('Deploy timed out after 60 seconds');
+    expect(captured.filter((r) => r.method === 'GET')).toHaveLength(30);
+    expect(captured.filter((r) => r.method === 'DELETE')).toHaveLength(1);
+    findRequest('DELETE', 'https://api.deno.com/v2/apps/app_1');
+  });
 });
 
 // ─── deployNetlify ─────────────────────────────────────────────────────
@@ -557,6 +618,35 @@ describe('deployNetlify', () => {
     expect(err.message).toBe(
       'A site with the same name already exists. Site name "taken-relay" is taken — choose a different name.',
     );
+  });
+
+  it('skips both uploads when the digest deploy requires nothing', async () => {
+    installFetchMock([
+      {
+        method: 'POST',
+        url: 'https://api.netlify.com/api/v1/sites',
+        status: 201,
+        json: { id: 'site1', ssl_url: 'https://myrelay.netlify.app' },
+      },
+      {
+        method: 'POST',
+        url: 'https://api.netlify.com/api/v1/sites/site1/deploys',
+        status: 201,
+        json: { id: 'dp1', required: [], required_functions: [] },
+      },
+      {
+        method: 'GET',
+        url: 'https://api.netlify.com/api/v1/deploys/dp1',
+        json: { state: 'ready' },
+      },
+    ]);
+
+    const result = await deployNetlify({ token: 'netlify_t', name: 'myrelay' });
+    expect(result).toEqual({
+      url: 'https://myrelay.netlify.app/.netlify/functions/relay',
+      name: 'myrelay',
+    });
+    expect(captured.filter((r) => r.method === 'PUT')).toHaveLength(0);
   });
 
   it('rejects a missing token with a 400 DeployError before any request', async () => {
