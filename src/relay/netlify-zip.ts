@@ -15,8 +15,9 @@
  * Manual digest deploys run no build step, so the function is served from its
  * default endpoint: <site>/.netlify/functions/relay (NETLIFY_FUNCTION_PATH).
  * The Lambda-compatible runtime requires the CommonJS single-file bundle
- * (`exports.handler(event)` with a string response body) — see the header of
- * worker-sources.ts for the live-verified failure modes of the alternatives.
+ * (`exports.handler(event)` with a string response body) — see the inline
+ * comment on the `NETLIFY_RELAY_FUNCTION` constant in worker-sources.ts for
+ * the live-verified failure modes of the alternatives.
  *
  * The function upload expects a stored (uncompressed) ZIP of that bundle; the
  * relay is ~1.5 KB so buildStoredZip writes CRC32 + headers by hand instead of
@@ -135,10 +136,13 @@ interface NetlifyDeployState {
   error_message?: string;
 }
 
+/** Injectable fetch signature for pollDeployReady (testability). */
+type FetchLike = typeof fetch;
+
 export async function pollDeployReady(
   deployId: string,
   token: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: FetchLike = fetch,
   maxMs = 120000,
   intervalMs = 3000,
 ): Promise<NetlifyDeployState> {
