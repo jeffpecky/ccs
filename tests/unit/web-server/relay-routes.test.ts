@@ -41,9 +41,11 @@ async function setup(
   options: {
     config?: RelayConfig;
     access?: boolean;
+    getConfig?: () => RelayConfig;
     deploy?: RelayRouterDeps['deployRelay'];
     test?: RelayRouterDeps['testRelay'];
     regenerate?: () => void;
+    throwOnUpdate?: boolean;
   } = {}
 ) {
   let config: RelayConfig = options.config ?? structuredClone(DEFAULT_RELAY_CONFIG);
@@ -62,11 +64,19 @@ async function setup(
         }
         return true;
       },
-      getRelayConfig: () => config,
+      getRelayConfig: options.getConfig ?? (() => structuredClone(config)),
       saveRelayConfig: (next) => {
         order.push('save');
         saved.push(structuredClone(next));
         config = next;
+      },
+      updateRelayConfig: (update) => {
+        if (options.throwOnUpdate) {
+          throw new Error('update failed');
+        }
+        order.push('update');
+        config = update(config);
+        saved.push(structuredClone(config));
       },
       regenerateConfig: () => {
         order.push('regenerate');
@@ -86,6 +96,11 @@ async function setup(
     order,
     regenerations: () => regenerations,
     currentConfig: () => config,
+    // Simulates a concurrent config writer (another request's deploy/activate)
+    // landing between the handler's own reads and writes.
+    mutate: (fn: (cfg: RelayConfig) => void) => {
+      fn(config);
+    },
   };
 }
 
@@ -157,8 +172,9 @@ describe('Relay routes', () => {
     expect(body.relay.testStatus).toBe('untested');
     expect(app.saved).toHaveLength(1);
     expect(app.saved[0].relays).toHaveLength(1);
-    // Deploying only appends the entry; the runtime config is regenerated on activate.
-    expect(app.order).toEqual(['save']);
+    // Deploying only appends the entry (locked read-modify-write update);
+    // the runtime config is regenerated on activate, not here.
+    expect(app.order).toEqual(['update']);
     expect(JSON.stringify(app.saved)).not.toContain('SECRET');
     expect(JSON.stringify(body)).not.toContain('SECRET');
   });
@@ -232,6 +248,54 @@ describe('Relay routes', () => {
     expect(saved.lastError).toBeNull();
   });
 
+  it('preserves concurrent config changes made while the probe is in flight', async () => {
+    let app: Awaited<ReturnType<typeof setup>> | undefined;
+    app = await setup({
+      config: { relays: [makeRelay('r1')], activeId: null },
+      test: async () => {
+        // A concurrent writer (e.g. another deploy) lands mid-probe; the
+        // probe result must not clobber it with a stale snapshot.
+        app!.mutate((cfg) => {
+          cfg.relays.push(makeRelay('injected'));
+        });
+        return { ok: true, status: 200, elapsedMs: 5 };
+      },
+    });
+    const response = await post(app.baseUrl, '/r1/test', {});
+    expect(response.status).toBe(200);
+    const relays = app.currentConfig().relays;
+    expect(relays.map((entry) => entry.id).sort()).toEqual(['injected', 'r1']);
+    expect(relays.find((entry) => entry.id === 'r1')?.testStatus).toBe('ok');
+    expect(relays.find((entry) => entry.id === 'injected')?.testStatus).toBe('untested');
+  });
+
+  it('does not resurrect a relay deleted while the probe is in flight', async () => {
+    let app: Awaited<ReturnType<typeof setup>> | undefined;
+    app = await setup({
+      config: { relays: [makeRelay('r1')], activeId: null },
+      test: async () => {
+        app!.mutate((cfg) => {
+          cfg.relays = cfg.relays.filter((entry) => entry.id !== 'r1');
+        });
+        return { ok: true, status: 200, elapsedMs: 5 };
+      },
+    });
+    const response = await post(app.baseUrl, '/r1/test', {});
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: 'Relay not found' });
+    expect(app.currentConfig().relays).toHaveLength(0);
+  });
+
+  it('responds 500 when the probe result cannot be persisted', async () => {
+    const app = await setup({
+      config: { relays: [makeRelay('r1')], activeId: null },
+      throwOnUpdate: true,
+    });
+    const response = await post(app.baseUrl, '/r1/test', {});
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'Failed to test relay' });
+  });
+
   it('rejects activation of unknown relays', async () => {
     const app = await setup({ config: { relays: [makeRelay('r1')], activeId: null } });
     expect((await post(app.baseUrl, '/missing/activate', {})).status).toBe(404);
@@ -243,7 +307,7 @@ describe('Relay routes', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       success: true,
-      relay: { relays: [makeRelay('r1')], activeId: 'r1' },
+      config: { relays: [makeRelay('r1')], activeId: 'r1' },
     });
     expect(app.regenerations()).toBe(1);
     expect(app.order).toEqual(['save', 'regenerate']);
@@ -267,11 +331,22 @@ describe('Relay routes', () => {
     expect(app.saved[app.saved.length - 1].activeId).toBeNull();
   });
 
+  it('responds 500 instead of hanging when the config read fails during activation', async () => {
+    const app = await setup({
+      getConfig: () => {
+        throw new Error('broken config.yaml');
+      },
+    });
+    const response = await post(app.baseUrl, '/r1/activate', {});
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Failed to activate relay: broken config.yaml',
+    });
+  });
+
   it('rejects deletion of unknown relays', async () => {
     const app = await setup({ config: { relays: [makeRelay('r1')], activeId: 'r1' } });
-    expect(
-      (await fetch(`${app.baseUrl}/missing`, { method: 'DELETE' })).status
-    ).toBe(404);
+    expect((await fetch(`${app.baseUrl}/missing`, { method: 'DELETE' })).status).toBe(404);
   });
 
   it('clears the active relay and regenerates exactly once', async () => {
@@ -280,7 +355,7 @@ describe('Relay routes', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       success: true,
-      relay: { relays: [], activeId: null },
+      config: { relays: [], activeId: null },
     });
     expect(app.regenerations()).toBe(1);
     expect(app.order).toEqual(['save', 'regenerate']);
@@ -308,10 +383,23 @@ describe('Relay routes', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       success: true,
-      relay: { relays: [makeRelay('r1')], activeId: 'r1' },
+      config: { relays: [makeRelay('r1')], activeId: 'r1' },
     });
     expect(app.regenerations()).toBe(0);
     expect(app.order).toEqual(['save']);
     expect(app.currentConfig()).toEqual({ relays: [makeRelay('r1')], activeId: 'r1' });
+  });
+
+  it('responds 500 instead of hanging when the config read fails during deletion', async () => {
+    const app = await setup({
+      getConfig: () => {
+        throw new Error('broken config.yaml');
+      },
+    });
+    const response = await fetch(`${app.baseUrl}/r1`, { method: 'DELETE' });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Failed to delete relay: broken config.yaml',
+    });
   });
 });

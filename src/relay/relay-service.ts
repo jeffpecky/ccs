@@ -11,16 +11,43 @@
 import { randomUUID } from 'node:crypto';
 
 import { getRelayConfig, mutateConfig } from '../config/config-loader-facade';
+import { DEFAULT_RELAY_CONFIG } from '../config/schemas/relay';
 import type { RelayConfig, RelayEntry, RelayPlatform } from '../config/schemas/relay';
 
 // Reuse the facade's getter (config-getters semantics: defaults when the
 // relay section is absent) instead of duplicating it here.
 export { getRelayConfig };
 
-/** Persist the relay section of the unified config. */
+/** Result of a relay connectivity probe. */
+export interface RelayTestResult {
+  ok: boolean;
+  status: number;
+  error?: string;
+  elapsedMs: number;
+}
+
+/**
+ * Persist the relay section of the unified config.
+ *
+ * Prefer updateRelayConfig for read-modify-write flows: this replaces the
+ * whole section with a snapshot the caller read earlier, so a concurrent
+ * writer between the read and this call is clobbered.
+ */
 export function saveRelayConfig(next: RelayConfig): void {
   mutateConfig((config) => {
     config.relay = next;
+  });
+}
+
+/**
+ * Atomically read-modify-write the relay section under the config loader's
+ * mutateConfig lock. The mutator sees the freshest config, so concurrent
+ * writers (deploys, tests, activations) are never clobbered by a stale
+ * snapshot.
+ */
+export function updateRelayConfig(update: (current: RelayConfig) => RelayConfig): void {
+  mutateConfig((config) => {
+    config.relay = update(config.relay ?? structuredClone(DEFAULT_RELAY_CONFIG));
   });
 }
 
@@ -56,7 +83,7 @@ export function createRelayEntry(
 export async function testRelay(
   url: string,
   timeoutMs = 10000
-): Promise<{ ok: boolean; status: number; error?: string; elapsedMs: number }> {
+): Promise<RelayTestResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const startedAt = Date.now();

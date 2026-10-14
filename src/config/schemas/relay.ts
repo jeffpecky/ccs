@@ -52,7 +52,8 @@ export interface RelayConfig {
  */
 export const DEFAULT_RELAY_CONFIG: RelayConfig = { relays: [], activeId: null };
 
-const RELAY_PLATFORMS: readonly RelayPlatform[] = [
+/** Deployment platforms accepted by the relay API routes. */
+export const RELAY_PLATFORMS: readonly RelayPlatform[] = [
   'vercel',
   'cloudflare',
   'deno',
