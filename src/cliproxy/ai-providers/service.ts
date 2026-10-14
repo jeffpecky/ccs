@@ -12,6 +12,7 @@ import {
   type UpsertAiProviderEntryInput,
 } from './types';
 import { getAiProvidersSourceSummary, readFamilyEntries, writeFamilyEntries } from './config-store';
+import { relayFetch } from '../../relay/relay-fetch';
 
 const OLLAMA_LOCAL_DEFAULT_BASE_URL = 'http://localhost:11434';
 
@@ -419,7 +420,7 @@ export async function testAiProviderConnection(
       reqHeaders['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    const response = await fetch(testUrl, {
+    const response = await relayFetch(testUrl, {
       method: 'GET',
       headers: reqHeaders,
       signal: controller.signal,
@@ -541,7 +542,7 @@ export async function fetchAiProviderModels(
       reqHeaders['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    const response = await fetch(url, {
+    const response = await relayFetch(url, {
       method: 'GET',
       headers: reqHeaders,
       signal: controller.signal,

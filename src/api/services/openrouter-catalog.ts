@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getCcsDir } from '../../config/config-loader-facade';
+import { relayFetch } from '../../relay/relay-fetch';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/models';
 function getCacheFile() {
@@ -67,7 +68,7 @@ export async function fetchOpenRouterModels(): Promise<OpenRouterModel[]> {
   if (cached) return cached;
 
   // Fetch from API
-  const response = await fetch(OPENROUTER_API_URL);
+  const response = await relayFetch(OPENROUTER_API_URL);
   if (!response.ok) {
     throw new Error(`Failed to fetch OpenRouter models: ${response.status}`);
   }

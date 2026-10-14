@@ -11,6 +11,7 @@ import {
   buildClaudeCoreUsageSummary,
 } from './quota-fetcher-claude-normalizer';
 import { createLogger } from '../../services/logging';
+import { relayFetch } from '../../relay/relay-fetch';
 import {
   callProviderQuotaApi,
   CLIProxyManagementUnavailableError,
@@ -142,7 +143,7 @@ async function runClaudeUsageFetch(
         response = await callProviderQuotaApi(managedAuth, CLAUDE_OAUTH_USAGE_URL, headers);
       } else {
         headers.Authorization = `Bearer ${accessToken}`;
-        response = await fetch(CLAUDE_OAUTH_USAGE_URL, {
+        response = await relayFetch(CLAUDE_OAUTH_USAGE_URL, {
           method: 'GET',
           signal: controller.signal,
           headers,

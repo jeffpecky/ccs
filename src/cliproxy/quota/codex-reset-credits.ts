@@ -1,7 +1,11 @@
 const CODEX_RESET_CREDITS_URL = 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits';
 const CODEX_RESET_CREDITS_CONSUME_URL = `${CODEX_RESET_CREDITS_URL}/consume`;
 
-type FetchLike = typeof fetch;
+import { relayFetch } from '../../relay/relay-fetch';
+
+// Structural fetch type (NOT `typeof fetch`, which carries Bun's static
+// `preconnect` property and rejects plain functions / adapter arrows).
+type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 export interface CodexResetCredit {
   id: string | null;
@@ -50,7 +54,7 @@ function authHeaders(accessToken: string): Record<string, string> {
 
 export async function fetchCodexResetCredits(
   accessToken: string,
-  fetcher: FetchLike = fetch
+  fetcher: FetchLike = relayFetch
 ): Promise<CodexResetCreditsResult> {
   const response = await fetcher(CODEX_RESET_CREDITS_URL, { headers: authHeaders(accessToken) });
   const data = await readJson(response);
@@ -78,7 +82,7 @@ export async function fetchCodexResetCredits(
 export async function consumeCodexResetCredit(
   accessToken: string,
   redeemRequestId: string,
-  fetcher: FetchLike = fetch
+  fetcher: FetchLike = relayFetch
 ): Promise<CodexResetConsumeResult> {
   const response = await fetcher(CODEX_RESET_CREDITS_CONSUME_URL, {
     method: 'POST',
