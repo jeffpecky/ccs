@@ -42,6 +42,7 @@ import codexSettingsRoutes from './codex-settings-route';
 import opencodeSettingsRoutes from './opencode-settings-route';
 import factoryDroidSettingsRoutes from './factory-droid-settings-route';
 import headroomRoutes from './headroom-routes';
+import relayRoutes from './relay-routes';
 
 // Create the main API router
 export const apiRoutes = Router();
@@ -152,6 +153,9 @@ apiRoutes.use('/cli-tools', cliToolsRoutes);
 
 // ==================== Token Saver / Headroom ====================
 apiRoutes.use('/headroom', headroomRoutes);
+
+// ==================== Edge Relay ====================
+apiRoutes.use('/relay', relayRoutes);
 
 // ==================== Misc (File API, Global Env) ====================
 apiRoutes.use('/', miscRoutes);
