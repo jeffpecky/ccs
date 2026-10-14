@@ -58,6 +58,10 @@ export type {
 export { DEFAULT_THINKING_TIER_DEFAULTS, DEFAULT_THINKING_CONFIG } from './thinking';
 export type { ThinkingMode, ThinkingTierDefaults, ThinkingConfig } from './thinking';
 
+// Edge relay types, defaults, and guard
+export { DEFAULT_RELAY_CONFIG, isRelayConfig } from './relay';
+export type { RelayPlatform, RelayEntry, RelayConfig } from './relay';
+
 // Browser automation types and defaults
 export { DEFAULT_BROWSER_CONFIG } from './browser';
 export type {

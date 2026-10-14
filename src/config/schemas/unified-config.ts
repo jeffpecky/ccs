@@ -35,6 +35,8 @@ import type { QuotaManagementConfig } from './quota';
 import { DEFAULT_QUOTA_MANAGEMENT_CONFIG } from './quota';
 import type { ThinkingConfig } from './thinking';
 import { DEFAULT_THINKING_CONFIG } from './thinking';
+import type { RelayConfig } from './relay';
+import { DEFAULT_RELAY_CONFIG } from './relay';
 import type { BrowserConfig } from './browser';
 import { DEFAULT_BROWSER_CONFIG } from './browser';
 
@@ -77,6 +79,8 @@ export interface UnifiedConfig {
   thinking?: ThinkingConfig;
   /** Dashboard authentication configuration (optional) */
   dashboard_auth?: DashboardAuthConfig;
+  /** Edge relay configuration (optional) */
+  relay?: RelayConfig;
   /** Browser automation configuration */
   browser?: BrowserConfig;
 }
@@ -131,6 +135,7 @@ export function createEmptyUnifiedConfig(): UnifiedConfig {
     quota_management: { ...DEFAULT_QUOTA_MANAGEMENT_CONFIG },
     thinking: { ...DEFAULT_THINKING_CONFIG },
     dashboard_auth: { ...DEFAULT_DASHBOARD_AUTH_CONFIG },
+    relay: { ...DEFAULT_RELAY_CONFIG },
     browser: {
       claude: { ...DEFAULT_BROWSER_CONFIG.claude },
       codex: { ...DEFAULT_BROWSER_CONFIG.codex },

@@ -15,6 +15,7 @@ import {
   DEFAULT_CURSOR_CONFIG,
   DEFAULT_GLOBAL_ENV,
   DEFAULT_LOGGING_CONFIG,
+  DEFAULT_RELAY_CONFIG,
   DEFAULT_THINKING_CONFIG,
 } from '../unified-config-types';
 import type {
@@ -24,6 +25,7 @@ import type {
   DashboardAuthConfig,
   GlobalEnvConfig,
   LoggingConfig,
+  RelayConfig,
   ThinkingConfig,
 } from '../unified-config-types';
 import { canonicalizeBrowserConfig } from './normalizers';
@@ -111,6 +113,15 @@ export function getThinkingConfig(): ThinkingConfig {
     provider_overrides: config.thinking?.provider_overrides,
     show_warnings: config.thinking?.show_warnings ?? DEFAULT_THINKING_CONFIG.show_warnings,
   };
+}
+
+/**
+ * Get relay configuration.
+ * Returns defaults if not configured.
+ */
+export function getRelayConfig(): RelayConfig {
+  const config = getConfig();
+  return config.relay ?? { ...DEFAULT_RELAY_CONFIG };
 }
 
 /**

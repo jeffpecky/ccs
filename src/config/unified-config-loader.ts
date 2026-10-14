@@ -94,6 +94,7 @@ export {
   getContinuityInheritanceMap,
   getCliproxySafetyConfig,
   getThinkingConfig,
+  getRelayConfig,
   isDashboardAuthEnabled,
   getDashboardAuthConfig,
   getBrowserConfig,

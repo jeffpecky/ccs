@@ -26,6 +26,7 @@ import {
   DEFAULT_DASHBOARD_AUTH_CONFIG,
   DEFAULT_LOGGING_CONFIG,
   DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG,
+  isRelayConfig,
 } from '../unified-config-types';
 import type { UnifiedConfig } from '../unified-config-types';
 import { canonicalizeBrowserConfig, normalizeSessionAffinityTtl } from './normalizers';
@@ -51,7 +52,7 @@ function normalizeOptionalString(value: unknown): string | undefined {
 export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfig {
   const defaults = createEmptyUnifiedConfig();
   const continuity = normalizeContinuityConfig(partial);
-  return {
+  const merged: UnifiedConfig = {
     version: partial.version ?? defaults.version,
     setup_completed: partial.setup_completed,
     default: partial.default ?? defaults.default,
@@ -325,4 +326,14 @@ export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfi
     },
     browser: canonicalizeBrowserConfig(partial.browser),
   };
+
+  // Relay config - optional, validate shape before preserving entries
+  if (partial.relay !== undefined && isRelayConfig(partial.relay)) {
+    merged.relay = {
+      relays: partial.relay.relays,
+      activeId: partial.relay.activeId ?? null,
+    };
+  }
+
+  return merged;
 }

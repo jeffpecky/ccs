@@ -238,6 +238,18 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
     lines.push('');
   }
 
+  // Relay section (deployed edge relays and active relay selection)
+  if (config.relay) {
+    lines.push('# ----------------------------------------------------------------------------');
+    lines.push('# Relay: Edge relay (deployed workers) and the active relay for outbound traffic');
+    lines.push('# activeId selects the relay used for outbound requests (null = none).');
+    lines.push('# ----------------------------------------------------------------------------');
+    lines.push(
+      yaml.dump({ relay: config.relay }, { indent: 2, lineWidth: -1, quotingType: '"' }).trim()
+    );
+    lines.push('');
+  }
+
   // Dashboard auth section (only if configured)
   if (config.dashboard_auth?.enabled) {
     lines.push('# ----------------------------------------------------------------------------');
