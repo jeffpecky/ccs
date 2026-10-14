@@ -70,7 +70,7 @@ interface VercelDeployment {
 
 interface VercelDeploymentState {
   /** Known states: 'READY' | 'ERROR' | 'CANCELED' (upstream also uses QUEUED/BUILDING). */
-  readyState?: 'READY' | 'ERROR' | 'CANCELED' | string;
+  readyState?: 'READY' | 'ERROR' | 'CANCELED';
   url?: string;
 }
 
@@ -416,10 +416,10 @@ interface NetlifyErrorBody {
 
 function sanitizeSiteName(raw: string | undefined): string {
   const name = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-  if (!name) return `relay-${Date.now().toString(36)}`;
+  if (!name) return defaultName();
   // Netlify site names become subdomains: lowercase alphanumerics + hyphens.
   const cleaned = name.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-  return cleaned || `relay-${Date.now().toString(36)}`;
+  return cleaned || defaultName();
 }
 
 async function readError(res: Response, fallback: string): Promise<string> {
