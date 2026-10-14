@@ -275,6 +275,7 @@ export async function ensureCliproxyService(
       proxyProcess = spawn(binaryPath, proxyArgs, {
         stdio: ['ignore', verbose ? 'pipe' : 'ignore', 'pipe'],
         detached: true,
+        windowsHide: true,
         env: {
           ...process.env,
           WRITABLE_PATH: getCliproxyWritablePath(),

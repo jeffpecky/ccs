@@ -19,7 +19,15 @@ import i18n from './i18n';
 /** Canonical list of CLIProxy provider IDs (shared with backend). */
 export const CLIPROXY_PROVIDERS = CLIPROXY_PROVIDER_IDS;
 export type CLIProxyProvider = (typeof CLIPROXY_PROVIDERS)[number];
-export type ProviderVisualId = CLIProxyProvider | 'openai' | 'vertex' | 'cloudflare' | 'nvidia' | 'openrouter';
+export type ProviderVisualId =
+  | CLIProxyProvider
+  | 'openai'
+  | 'vertex'
+  | 'cloudflare'
+  | 'nvidia'
+  | 'openrouter'
+  | 'opencode-go'
+  | 'ollama';
 export type CLIProxyProviderSectionId = 'core' | 'plus-extra';
 
 export interface CLIProxyProviderSection {
@@ -68,7 +76,15 @@ interface ProviderMetadata {
   description: string;
 }
 
-const SPECIAL_PROVIDER_VISUAL_IDS = ['openai', 'vertex', 'cloudflare', 'nvidia', 'openrouter'] as const;
+const SPECIAL_PROVIDER_VISUAL_IDS = [
+  'openai',
+  'vertex',
+  'cloudflare',
+  'nvidia',
+  'openrouter',
+  'opencode-go',
+  'ollama',
+] as const;
 
 function isPresentationProvider(provider: string): provider is CLIProxyProvider {
   return isValidProvider(provider);
@@ -114,6 +130,8 @@ export const PROVIDER_ASSETS: Partial<Record<ProviderVisualId, string>> = {
   cloudflare: '/assets/providers/cloudflare.png',
   nvidia: '/assets/providers/nvidia.png',
   openrouter: '/assets/providers/openrouter.png',
+  'opencode-go': '/assets/providers/opencode-go.png',
+  ollama: '/assets/providers/ollama.png',
 };
 
 interface ProviderFallbackVisual {
@@ -147,6 +165,8 @@ export const PROVIDER_FALLBACK_VISUALS: Record<ProviderVisualId, ProviderFallbac
   cloudflare: { textClass: 'text-orange-500', letter: 'CF' },
   nvidia: { textClass: 'text-green-600', letter: 'NV' },
   openrouter: { textClass: 'text-purple-600', letter: 'OR' },
+  'opencode-go': { textClass: 'text-emerald-600', letter: 'OC' },
+  ollama: { textClass: 'text-slate-700', letter: 'OL' },
   'openai-compatibility': { textClass: 'text-gray-500', letter: 'A' },
 };
 
@@ -172,6 +192,10 @@ export function getAiProviderFamilyVisual(familyId: AiProviderFamilyId): Provide
       return 'nvidia';
     case 'openrouter-api-key':
       return 'openrouter';
+    case 'opencode-go-api-key':
+      return 'opencode-go';
+    case 'ollama-local-api-key':
+      return 'ollama';
   }
 }
 
@@ -294,6 +318,8 @@ export const PROVIDER_COLORS: Record<string, string> = {
   cloudflare: '#F38020',
   nvidia: '#76B900',
   openrouter: '#8B5CF6',
+  'opencode-go': '#10B981',
+  ollama: '#000000',
 };
 
 const PROVIDER_NAMES: Record<string, string> = {
@@ -305,6 +331,8 @@ const PROVIDER_NAMES: Record<string, string> = {
   cloudflare: 'Cloudflare',
   nvidia: 'NVIDIA',
   openrouter: 'OpenRouter',
+  'opencode-go': 'OpenCode Go',
+  ollama: 'Ollama',
 };
 
 export function getProviderDisplayName(provider: unknown): string {

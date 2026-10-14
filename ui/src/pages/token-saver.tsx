@@ -315,7 +315,7 @@ export function TokenSaverPage() {
     [persist, refresh]
   );
 
-  const deferredSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deferredSaveTimer = useRef<number | null>(null);
 
   const updateConfig = useCallback(
     (

@@ -4,63 +4,44 @@ import { join } from 'node:path';
 
 const repoRoot = join(import.meta.dir, '../../..');
 
-describe('Swift CCS Bar authenticated probe contract', () => {
-  test('sends nonce and validates SHA-256 HMAC proof using token file', () => {
-    const probe = readFileSync(
-      join(repoRoot, 'macos-bar/Sources/CCSBarCore/BarServerProbe.swift'),
-      'utf8'
-    );
-    const client = readFileSync(
-      join(repoRoot, 'macos-bar/Sources/CCSBarCore/CCSBarClient.swift'),
-      'utf8'
-    );
+function readSource(relative: string): string {
+  return readFileSync(join(repoRoot, relative), 'utf8');
+}
 
-    expect(probe).toContain('x-ccs-bar-nonce');
-    expect(probe).toContain('x-ccs-bar-token');
-    expect(probe).toContain('CCSBarClient.proof');
-    expect(probe).toContain('api/bar/health');
-    expect(probe).not.toContain('api/bar/summary');
-    expect(client).toContain('HMAC<SHA256>');
-    expect(probe).toContain('.auth-token');
-    expect(probe).not.toMatch(/return http\.statusCode == 200/);
+// cdb67a9b ("sync macos-bar with upstream, remove auth") dropped client-side
+// nonce/proof signing: while dashboard auth is disabled (authMode "loopback",
+// docs/ccs-bar.md) the server trusts plain loopback reads, matching upstream,
+// which has no per-request bar gate at all. These checks pin that contract so
+// the client and server cannot silently drift apart again.
+describe('Swift CCS Bar loopback probe contract (no per-request auth)', () => {
+  test('probe discovers the server with a plain GET /api/bar/summary', () => {
+    const probe = readSource('macos-bar/Sources/CCSBarCore/BarServerProbe.swift');
+
+    expect(probe).toContain('api/bar/summary');
+    expect(probe).not.toContain('x-ccs-bar-nonce');
+    expect(probe).not.toContain('x-ccs-bar-token');
+    expect(probe).not.toContain('.auth-token');
+    expect(probe).not.toContain('HMAC');
   });
 
-  test('harness covers valid, missing, and invalid proof responses', () => {
-    const harness = readFileSync(
-      join(repoRoot, 'macos-bar/Sources/CCSBarCheck/main.swift'),
-      'utf8'
-    );
+  test('client sends unsigned summary, analytics, and mutation requests', () => {
+    const client = readSource('macos-bar/Sources/CCSBarCore/CCSBarClient.swift');
 
-    expect(harness).toContain('probe auth: valid proof accepted');
-    expect(harness).toContain('probe auth: request proof sent');
-    expect(harness).toContain('probe auth: missing proof rejected');
-    expect(harness).toContain('probe auth: invalid proof rejected');
-    expect(harness).toContain('probe auth: nonce header sent');
-    expect(harness).toContain('/api/bar/health');
+    expect(client).toContain('api/bar/summary');
+    expect(client).toContain('api/bar/analytics');
+    expect(client).not.toContain('x-ccs-bar-nonce');
+    expect(client).not.toContain('x-ccs-bar-token');
+    expect(client).not.toContain('HMAC<SHA256>');
+    expect(client).not.toContain('authenticatedRequest');
+    expect(client).not.toContain('.auth-token');
   });
 
-  test('client signs summary, analytics, and mutation requests', () => {
-    const client = readFileSync(
-      join(repoRoot, 'macos-bar/Sources/CCSBarCore/CCSBarClient.swift'),
-      'utf8'
-    );
-    expect(client).toContain('x-ccs-bar-nonce');
-    expect(client).toContain('x-ccs-bar-token');
-    expect(client).toContain('HMAC<SHA256>');
-    expect(client).toMatch(/summary[\s\S]*authenticatedRequest/);
-    expect(client).toMatch(/analytics[\s\S]*authenticatedRequest/);
-    expect(client).toMatch(/func post[\s\S]*authenticatedRequest/);
-    expect(client).toMatch(/authToken: String\? = BarServerProbe\.loadAuthToken\(\)/);
-  });
+  test('harness has no proof-signing checks to satisfy', () => {
+    const harness = readSource('macos-bar/Sources/CCSBarCheck/main.swift');
 
-  test('harness checks auth headers on reads and mutations', () => {
-    const harness = readFileSync(
-      join(repoRoot, 'macos-bar/Sources/CCSBarCheck/main.swift'),
-      'utf8'
-    );
-
-    expect(harness).toContain('client auth: summary signed');
-    expect(harness).toContain('client auth: analytics signed');
-    expect(harness).toContain('client auth: mutation signed');
+    expect(harness).not.toContain('probe auth:');
+    expect(harness).not.toContain('client auth:');
+    expect(harness).not.toContain('x-ccs-bar-nonce');
+    expect(harness).not.toContain('x-ccs-bar-token');
   });
 });

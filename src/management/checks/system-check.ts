@@ -51,12 +51,14 @@ export class ClaudeCliChecker implements IHealthChecker {
           ? spawn([claudeCli, '--version'].map(escapeShellArg).join(' '), {
               stdio: 'pipe',
               timeout: 5000,
+              windowsHide: true,
               shell: getWindowsEscapedCommandShell(),
               env: stripClaudeCodeEnv(process.env),
             })
           : spawn(claudeCli, ['--version'], {
               stdio: 'pipe',
               timeout: 5000,
+              windowsHide: true,
               env: stripClaudeCodeEnv(process.env),
             });
 

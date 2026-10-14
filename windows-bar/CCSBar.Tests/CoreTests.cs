@@ -468,11 +468,13 @@ public sealed class ViewModelTests
     }
 
     [TestMethod]
-    public async Task ViewModel_RetryDoesNotLaunchButStartDoes()
+    public async Task ViewModel_RetryLaunchesLikeStart()
     {
+        // Retry self-heals: it must pass launch:true so a down server is started
+        // instead of silently re-probing (macOS bar parity).
         var connector = new FakeConnector(null); var vm = new BarViewModel(connector, new MemoryBarSettings(), new FakeClock());
         await vm.RetryAsync(); await vm.StartAsync();
-        CollectionAssert.AreEqual(new[] { false, true }, connector.Launches.ToArray());
+        CollectionAssert.AreEqual(new[] { true, true }, connector.Launches.ToArray());
     }
 
     [TestMethod]

@@ -240,6 +240,7 @@ describe('GET /api/bar/health', () => {
   let originalCcsHome: string | undefined;
   let summaryStarted: Promise<void>;
   let markSummaryStarted: () => void;
+  let forcedRemoteAddress: string | null = null;
 
   beforeAll(async () => {
     tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-bar-health-'));
@@ -250,6 +251,15 @@ describe('GET /api/bar/health', () => {
       markSummaryStarted = resolve;
     });
     const app = express();
+    app.use((_req, _res, next) => {
+      if (forcedRemoteAddress) {
+        Object.defineProperty(_req.socket, 'remoteAddress', {
+          value: forcedRemoteAddress,
+          configurable: true,
+        });
+      }
+      next();
+    });
     app.use(barAuthMiddleware);
     app.use(barHealthMiddleware);
     app.get('/api/bar/summary', async () => {
@@ -297,18 +307,31 @@ describe('GET /api/bar/health', () => {
     expect(await summary).toBeInstanceOf(Error);
   });
 
-  it('requires nonce-bound auth v2', async () => {
-    expect((await fetch(`${baseUrl}/api/bar/health`)).status).toBe(401);
-    expect(
-      (
-        await fetch(`${baseUrl}/api/bar/health`, {
-          headers: {
-            [BAR_AUTH_NONCE_HEADER]: '0123456789abcdef0123456789abcdef',
-            [BAR_AUTH_TOKEN_HEADER]: '0'.repeat(64),
-          },
-        })
-      ).status
-    ).toBe(403);
+  it('trusts headerless loopback reads while still validating presented proofs', async () => {
+    // Headerless loopback GETs pass without proof (the native bar clients send
+    // plain requests since cdb67a9b; authMode "loopback" = dashboard auth off).
+    const headerless = await fetch(`${baseUrl}/api/bar/health`);
+    expect(headerless.status).toBe(200);
+    expect(await headerless.json()).toEqual({ ok: true });
+
+    // A request that presents proof headers still has to prove them.
+    const invalidProof = await fetch(`${baseUrl}/api/bar/health`, {
+      headers: {
+        [BAR_AUTH_NONCE_HEADER]: '0123456789abcdef0123456789abcdef',
+        [BAR_AUTH_TOKEN_HEADER]: '0'.repeat(64),
+      },
+    });
+    expect(invalidProof.status).toBe(403);
+  });
+
+  it('refuses headerless non-loopback reads when dashboard auth is disabled', async () => {
+    forcedRemoteAddress = '203.0.113.7';
+    try {
+      const response = await fetch(`${baseUrl}/api/bar/health`);
+      expect(response.status).toBe(401);
+    } finally {
+      forcedRemoteAddress = null;
+    }
   });
 });
 

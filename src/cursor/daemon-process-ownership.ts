@@ -50,6 +50,7 @@ function getProcessCommandLine(pid: number): string | null {
       try {
         const result = spawnSync(shell, ['-NoProfile', '-Command', command], {
           encoding: 'utf8',
+          windowsHide: true,
         });
         if (result.error) {
           continue;

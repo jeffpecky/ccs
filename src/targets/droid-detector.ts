@@ -52,6 +52,7 @@ export function detectDroidCli(): string | null {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000,
+      windowsHide: true,
     }).trim();
 
     const matches = result
@@ -105,6 +106,7 @@ export function checkDroidVersion(droidPath: string): void {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000,
+      windowsHide: true,
     }).trim();
 
     // Parse semver major version

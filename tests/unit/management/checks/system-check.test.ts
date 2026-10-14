@@ -56,7 +56,7 @@ describe('ClaudeCliChecker', () => {
         string,
         Record<string, unknown> | undefined,
       ];
-      expect(options?.shell).toBe('C:\\Windows\\System32\\cmd.exe');
+      expect(String(options?.shell).toLowerCase()).toBe('c:\\windows\\system32\\cmd.exe');
       expect(results.details['Claude CLI']?.status).toBe('OK');
     } finally {
       spawnSpy.mockRestore();

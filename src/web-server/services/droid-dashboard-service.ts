@@ -100,6 +100,7 @@ function getBinaryVersion(binaryPath: string): string | null {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000,
+      windowsHide: true,
     })
       .trim()
       .split('\n')[0]

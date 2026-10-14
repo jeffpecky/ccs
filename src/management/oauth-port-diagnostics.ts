@@ -105,10 +105,13 @@ export async function checkOAuthPort(provider: CLIProxyProvider): Promise<OAuthP
     };
   }
 
-  // Check if port is in use
-  const portProcess = await getPortProcess(port);
+  // Check availability with a pure-Node bind test (no process spawn, ever).
+  // The OAuth callback's real requirement is "can I listen on
+  // 127.0.0.1:port?", which this answers directly — health polls never shell
+  // out to netstat/tasklist, even when a port is occupied.
+  const binding = await testLocalhostBinding(port);
 
-  if (!portProcess) {
+  if (binding.success) {
     return {
       provider,
       flowType,
@@ -120,28 +123,16 @@ export async function checkOAuthPort(provider: CLIProxyProvider): Promise<OAuthP
     };
   }
 
-  // Check if it's CLIProxy (expected if proxy is running)
-  if (isCLIProxyProcess(portProcess)) {
-    return {
-      provider,
-      flowType,
-      port,
-      status: 'cliproxy',
-      process: portProcess,
-      message: `Port ${port} in use by CLIProxy (expected)`,
-      recommendation: null,
-    };
-  }
-
-  // Port is occupied by another process
+  // Port is taken — report the bind failure. (Interactive pre-flight
+  // diagnostics still identify the occupying process on demand.)
   return {
     provider,
     flowType,
     port,
     status: 'occupied',
-    process: portProcess,
-    message: `Port ${port} occupied by ${portProcess.processName}`,
-    recommendation: `Kill process: kill ${portProcess.pid} (or close ${portProcess.processName})`,
+    process: null,
+    message: binding.message,
+    recommendation: `Free port ${port} (close the app listening on it) before authenticating`,
   };
 }
 

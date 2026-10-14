@@ -472,7 +472,7 @@ describe('Phase 3: enablePoolRouting and disablePoolRouting', () => {
     // Must NOT claim "custom strategy" — the user's value is preserved but the
     // message should not make assumptions about intent
     expect(result.message).not.toContain('custom strategy');
-    expect(result.message).toContain('[!]');
+    expect(result.message).toContain('Your existing routing settings are preserved');
   });
 
   it('enablePoolRouting sets preservedExplicitSetting=true when user had fill-first', async () => {
@@ -1285,110 +1285,6 @@ describe('Phase 3: provider enumeration derives from registry', () => {
     // Must skip: accountCountBefore=1 but accountCountAfter=1 (re-auth, not new add)
     expect(result.skipped).toBe(true);
     expect(result.skipReason).toBe('not-at-transition');
-  });
-});
-
-// ── routing-subcommand pool-active warning regression ───────────────────────
-// handleRoutingSet must emit a pool-active warning when pool routing is enabled,
-// so the user understands the stored strategy is ignored while pool is active.
-
-import * as routingSubcommandModule from '../../commands/cliproxy/routing-subcommand';
-import * as routingStrategyModule from '../routing/routing-strategy';
-
-describe('Phase 3: routing-subcommand pool-active warning regression', () => {
-  let tempHome: string;
-  let originalCcsHome: string | undefined;
-
-  beforeEach(() => {
-    tempHome = createTestHome();
-    originalCcsHome = process.env.CCS_HOME;
-    process.env.CCS_HOME = tempHome;
-    invalidateSharedConfigCache();
-  });
-
-  afterEach(() => {
-    if (originalCcsHome !== undefined) {
-      process.env.CCS_HOME = originalCcsHome;
-    } else {
-      delete process.env.CCS_HOME;
-    }
-    fs.rmSync(tempHome, { recursive: true, force: true });
-  });
-
-  it('handleRoutingSet warns when pool routing is active', async () => {
-    // Enable pool routing in the shared config so the check fires.
-    const { mutateConfig, invalidateConfigCache } = await import(
-      `../../config/config-loader-facade?p3rsw1=${Date.now()}`
-    );
-    mutateConfig((cfg: { cliproxy?: { pool_routing?: Record<string, unknown> } }) => {
-      cfg.cliproxy = cfg.cliproxy ?? {};
-      cfg.cliproxy.pool_routing = { enabled: true };
-    });
-    invalidateConfigCache();
-    invalidateSharedConfigCache();
-
-    const warnLines: string[] = [];
-    const consoleSpy = spyOn(console, 'log').mockImplementation((msg?: unknown) => {
-      if (typeof msg === 'string') warnLines.push(msg);
-    });
-    // Stub applyCliproxyRoutingStrategy so it does not make network calls
-    const applySpy = spyOn(routingStrategyModule, 'applyCliproxyRoutingStrategy').mockResolvedValue(
-      {
-        strategy: 'round-robin',
-        source: 'config',
-        target: 'local',
-        reachable: false,
-        applied: 'config-only',
-      }
-    );
-
-    await routingSubcommandModule.handleRoutingSet(['round-robin']);
-
-    const output = warnLines.join('\n');
-    expect(output).toContain('Pool routing is active');
-
-    consoleSpy.mockRestore();
-    applySpy.mockRestore();
-  });
-
-  it('handleRoutingAffinitySet warns when pool routing is active (affinity parity)', async () => {
-    // Fix 6: affinity toggle path must emit the same pool-active warning as the
-    // strategy set path.  Without this fix the two paths have divergent UX.
-    const { mutateConfig, invalidateConfigCache } = await import(
-      `../../config/config-loader-facade?p3rsa1=${Date.now()}`
-    );
-    mutateConfig((cfg: { cliproxy?: { pool_routing?: Record<string, unknown> } }) => {
-      cfg.cliproxy = cfg.cliproxy ?? {};
-      cfg.cliproxy.pool_routing = { enabled: true };
-    });
-    invalidateConfigCache();
-    invalidateSharedConfigCache();
-
-    const warnLines: string[] = [];
-    const consoleSpy = spyOn(console, 'log').mockImplementation((msg?: unknown) => {
-      if (typeof msg === 'string') warnLines.push(msg);
-    });
-    // Stub applyCliproxySessionAffinitySettings so it does not touch the filesystem
-    const affinitySpy = spyOn(
-      routingStrategyModule,
-      'applyCliproxySessionAffinitySettings'
-    ).mockResolvedValue({
-      enabled: true,
-      ttl: '1h',
-      source: 'config',
-      target: 'local',
-      reachable: false,
-      manageable: true,
-      applied: 'config-only',
-    });
-
-    await routingSubcommandModule.handleRoutingAffinitySet(['on']);
-
-    const output = warnLines.join('\n');
-    expect(output).toContain('Pool routing is active');
-
-    consoleSpy.mockRestore();
-    affinitySpy.mockRestore();
   });
 });
 

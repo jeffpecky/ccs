@@ -177,6 +177,7 @@ async function fetchLatestVersion(): Promise<string> {
       encoding: 'utf8',
       timeout: 15000,
       shell: process.platform === 'win32',
+      windowsHide: true,
     });
 
     if (result.status === 0 && result.stdout) {

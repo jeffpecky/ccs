@@ -109,12 +109,14 @@ export function DroidEditor({
   const { data: nvidiaModels } = useAiProviderModels('nvidia-api-key');
   const { data: cloudflareModels } = useAiProviderModels('cloudflare-api-key');
   const { data: openrouterModels } = useAiProviderModels('openrouter-api-key');
+  const { data: opencodeGoModels } = useAiProviderModels('opencode-go-api-key');
   const providerModels = useMemo(() => {
     const base = modelsData?.models ?? [];
     const extra = [
       ...(nvidiaModels?.models ?? []),
       ...(cloudflareModels?.models ?? []),
       ...(openrouterModels?.models ?? []),
+      ...(opencodeGoModels?.models ?? []),
     ];
     const seen = new Set(base.map((m) => m.id));
     const merged = [...base];
@@ -125,7 +127,7 @@ export function DroidEditor({
       }
     }
     return merged.map((m) => ({ id: m.id, owned_by: m.owned_by }));
-  }, [modelsData, nvidiaModels, cloudflareModels, openrouterModels]);
+  }, [modelsData, nvidiaModels, cloudflareModels, openrouterModels, opencodeGoModels]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">

@@ -46,13 +46,11 @@ ccs bar install --no-launch  # install, skip launch prompt
 
 ### Gatekeeper note
 
-The install command automatically clears the macOS Gatekeeper quarantine attribute (`xattr -dr com.apple.quarantine`) on the downloaded app. If clearing fails for any reason, the command falls back to printing the manual command:
+The install command deliberately keeps the macOS Gatekeeper quarantine attribute on the downloaded app: the CI build is ad-hoc signed (not notarized), so stripping quarantine would silently bypass an explicit first-launch check. If Gatekeeper blocks the app, either right-click it and choose Open, or clear quarantine manually:
 
 ```bash
 xattr -dr com.apple.quarantine "$HOME/Applications/CCS Bar.app"
 ```
-
-Or right-click the app and choose Open.
 
 ## Launch
 
@@ -105,6 +103,7 @@ The source lives in `macos-bar/`. Contributors can build and run the logic check
 swift build                 # build all targets, including the app
 swift run ccs-bar-check     # run the logic tests
 ```
-# Release Contract
 
-`macos-bar/VERSION` is sole CCS Bar version source. macOS and Windows assets build from same commit, stage together with checksums and `release-metadata.json`, then floating `ccs-bar-latest` moves only after both platform builds pass.
+## Release Contract
+
+`macos-bar/VERSION` is the sole CCS Bar version source. The unified `.github/workflows/bar-release.yml` builds macOS and Windows assets from the same commit, runs `swift run ccs-bar-check` and `dotnet test` on the two build legs, then a single publish job stages both assets with checksums and `release-metadata.json` and moves the floating `ccs-bar-latest` release only after both platform builds pass. The publish job creates `ccs-bar-latest` if it does not exist and snapshots the previous assets so a failed publish rolls back.

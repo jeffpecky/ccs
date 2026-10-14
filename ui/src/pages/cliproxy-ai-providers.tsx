@@ -6,6 +6,7 @@ import type {
   AiProviderFamilyState,
   AiProvidersSourceSummary,
 } from '../../../src/cliproxy/ai-providers';
+import { requiresAiProviderApiKey } from '../../../src/cliproxy/ai-providers/types';
 import { ProviderLogo } from '@/components/cliproxy/provider-logo';
 import { ProxyStatusWidget } from '@/components/monitoring/proxy-status-widget';
 import { CodeEditor } from '@/components/shared/lazy-code-editor';
@@ -140,6 +141,8 @@ const PROVIDER_API_KEY_URLS: Record<string, string> = {
   'gemini-api-key': 'https://aistudio.google.com/app/apikey',
   'codex-api-key': 'https://platform.openai.com/api-keys',
   'claude-api-key': 'https://console.anthropic.com/settings/keys',
+  'opencode-go-api-key': 'https://opencode.ai/auth',
+  'ollama-local-api-key': 'https://ollama.com/download',
 };
 
 function isOpenAiCompatFamily(familyId: AiProviderFamilyId): boolean {
@@ -434,6 +437,74 @@ function getFamilyGuide(family: AiProviderFamilyState): FamilyGuide {
           },
         ],
       };
+    case 'opencode-go-api-key':
+      return {
+        requiredNow: [
+          'Add your OpenCode Go API key from https://opencode.ai/console.',
+          'Leave Base URL blank unless this route should hit another OpenCode-style endpoint.',
+          'Add mappings only when the requested model name differs from the upstream Go model.',
+        ],
+        optionalLater: [
+          'Base URL override for a gateway or custom endpoint.',
+          'Headers for provider-specific routing.',
+          'Additional API keys for load balancing.',
+          'Model mappings for custom endpoint names.',
+        ],
+        emptyStateSummary: [
+          `Requests to ${family.routePath} resolve through OpenCode Go.`,
+          'OpenCode Go provides hosted models behind a $10/mo subscription.',
+          'Set up the API key to get started.',
+        ],
+        profileBoundary:
+          'Use API Profiles when you want a CCS-native Anthropic-compatible profile instead of this CLIProxy-managed OpenCode Go route.',
+        editPrompts: [
+          {
+            label: 'API Key',
+            hint: 'Your OpenCode Go subscription key from the OpenCode console.',
+          },
+          {
+            label: 'Base URL',
+            hint: 'Optional. Defaults to https://opencode.ai/zen/go/v1.',
+          },
+          {
+            label: 'Model mappings',
+            hint: 'Map requested model names to OpenCode Go model IDs.',
+          },
+        ],
+      };
+    case 'ollama-local-api-key':
+      return {
+        requiredNow: [
+          'Set Base URL to your Ollama server, for example http://192.168.1.20:11434.',
+          'Confirm the server is reachable from this machine (ollama serve).',
+        ],
+        optionalLater: [
+          'Model mappings only when the requested name differs from the Ollama tag.',
+          'Headers only when a reverse proxy in front of Ollama requires them.',
+          'Excluded models to block specific Ollama tags on this route.',
+        ],
+        emptyStateSummary: [
+          `Requests to ${family.routePath} translate OpenAI chat requests into Ollama /api/chat calls.`,
+          'No API key is needed; only a reachable server Base URL.',
+          'Available models come from the tags installed on the Ollama server.',
+        ],
+        profileBoundary:
+          'Use API Profiles when you want a CCS-native Anthropic-compatible profile instead of this CLIProxy-managed Ollama route.',
+        editPrompts: [
+          {
+            label: 'Base URL',
+            hint: 'Point it at the Ollama host, including port 11434.',
+          },
+          {
+            label: 'Model mappings',
+            hint: 'Map requested names to exact Ollama tags such as llama3.1:8b.',
+          },
+          {
+            label: 'Headers',
+            hint: 'Leave empty unless a reverse proxy expects extra auth headers.',
+          },
+        ],
+      };
   }
 }
 
@@ -543,7 +614,7 @@ function buildEntryConfigRecord(
   }
 
   return {
-    'api-key': secretValue,
+    ...(requiresAiProviderApiKey(family.id) ? { 'api-key': secretValue } : {}),
     ...(draft.baseUrl.trim() ? { 'base-url': draft.baseUrl.trim() } : {}),
     ...(draft.proxyUrl.trim() ? { 'proxy-url': draft.proxyUrl.trim() } : {}),
     ...(draft.prefix.trim() ? { prefix: draft.prefix.trim() } : {}),
@@ -835,6 +906,9 @@ function EntryInspector({
       }
       return missing;
     }
+    if (!requiresAiProviderApiKey(family.id)) {
+      return draft.baseUrl.trim() ? [] : ['base-url'];
+    }
     if (!entry.secretConfigured && !draft.apiKey.trim()) {
       return ['api-key'];
     }
@@ -1011,8 +1085,20 @@ function EntryInspector({
                   <div className="mt-4 grid gap-3 2xl:grid-cols-3">
                     <SummaryCard
                       label="Secret"
-                      value={entry.secretConfigured ? 'Stored in CLIProxy' : 'Missing'}
-                      hint={entry.secretConfigured ? 'Rotate only when needed' : 'Required to save'}
+                      value={
+                        !requiresAiProviderApiKey(family.id)
+                          ? 'Not required'
+                          : entry.secretConfigured
+                            ? 'Stored in CLIProxy'
+                            : 'Missing'
+                      }
+                      hint={
+                        !requiresAiProviderApiKey(family.id)
+                          ? 'Ollama routes authenticate with the server itself'
+                          : entry.secretConfigured
+                            ? 'Rotate only when needed'
+                            : 'Required to save'
+                      }
                     />
                     <SummaryCard
                       label="Model Rules"
@@ -1057,7 +1143,7 @@ function EntryInspector({
                           placeholder="openrouter"
                         />
                       </EntryEditorField>
-                    ) : (
+                    ) : requiresAiProviderApiKey(family.id) ? (
                       <EntryEditorField
                         label={`${family.displayName} API Key`}
                         helper={
@@ -1079,7 +1165,7 @@ function EntryInspector({
                           }
                         />
                       </EntryEditorField>
-                    )}
+                    ) : null}
 
                     {isOpenAiCompatFamily(family.id) ? (
                       <EntryEditorField
@@ -1106,7 +1192,9 @@ function EntryInspector({
                       helper={
                         isOpenAiCompatFamily(family.id)
                           ? 'Required for connectors. This is the upstream OpenAI-style endpoint.'
-                          : 'Leave blank unless this route should target another upstream host.'
+                          : !requiresAiProviderApiKey(family.id)
+                            ? 'Required. Your Ollama server endpoint, for example http://192.168.1.20:11434.'
+                            : 'Leave blank unless this route should target another upstream host.'
                       }
                     >
                       <Input
@@ -1121,7 +1209,9 @@ function EntryInspector({
                               ? 'https://api.anthropic.com'
                               : isOpenAiCompatFamily(family.id)
                                 ? 'https://openrouter.ai/api/v1'
-                                : 'https://provider.example.com'
+                                : family.id === 'ollama-local-api-key'
+                                  ? 'http://localhost:11434'
+                                  : 'https://provider.example.com'
                         }
                       />
                     </EntryEditorField>
@@ -1767,7 +1857,9 @@ export function CliproxyAiProvidersPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Get API Key
+                    {requiresAiProviderApiKey(selectedFamilyState.id)
+                      ? 'Get API Key'
+                      : 'Get Ollama'}
                     <ExternalLink className="ml-1 h-3.5 w-3.5" />
                   </a>
                 </Button>

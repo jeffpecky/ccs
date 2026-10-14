@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { ChevronDown, KeyRound, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { requiresAiProviderApiKey } from '../../../../../src/cliproxy/ai-providers/types';
 import type {
   AiProviderEntryView,
   AiProviderFamilyId,
@@ -64,6 +65,7 @@ type DialogGuide = {
   aliasesPlaceholder: string;
   aliasesHelper: string;
   headersPlaceholder: string;
+  requiresApiKey?: boolean;
 };
 
 function getDialogGuide(family: AiProviderFamilyId): DialogGuide {
@@ -249,6 +251,53 @@ function getDialogGuide(family: AiProviderFamilyId): DialogGuide {
           'Format: requested=upstream. Leave blank unless the upstream model name differs.',
         headersPlaceholder: 'HTTP-Referer: https://your-app.example',
       };
+    case 'opencode-go-api-key':
+      return {
+        familyName: 'OpenCode Go',
+        description:
+          'Store the OpenCode Go subscription key here so CLIProxy can route OpenCode Go requests without creating a separate CCS API Profile.',
+        requiredNow: [
+          'Paste the OpenCode Go API key from https://opencode.ai/console.',
+          'Leave Base URL empty unless this route should target another OpenCode-style endpoint.',
+        ],
+        optionalLater: [
+          'Model mappings only when the requested model ID differs from the upstream Go model name.',
+          'Headers only when the provider expects extra routing context.',
+        ],
+        keyLabel: 'OpenCode Go API Key',
+        keyPlaceholder: 'oc_sk_...',
+        keyHelper: 'This is the only field most OpenCode Go setups need.',
+        baseUrlPlaceholder: 'https://opencode.ai/zen/go/v1',
+        baseUrlHelper: 'Optional. Leave blank to keep the default OpenCode Go endpoint.',
+        aliasesPlaceholder: 'claude-sonnet-4-5=glm-5.3',
+        aliasesHelper:
+          'Format: requested=upstream. Leave blank unless the upstream model name differs.',
+        headersPlaceholder: 'x-opencode-client: cli',
+      };
+    case 'ollama-local-api-key':
+      return {
+        familyName: 'Ollama Local',
+        description:
+          'Point CLIProxy at a self-hosted Ollama server. No API key is required; only the server Base URL.',
+        requiredNow: [
+          'Set Base URL to your Ollama server, for example http://192.168.1.20:11434.',
+          'Confirm the server is running and reachable (ollama serve).',
+        ],
+        optionalLater: [
+          'Model mappings only when the requested name differs from the Ollama tag.',
+          'Headers only when a reverse proxy expects extra auth.',
+        ],
+        keyLabel: 'API Key',
+        keyPlaceholder: '',
+        keyHelper: 'Not required for Ollama.',
+        requiresApiKey: false,
+        baseUrlPlaceholder: 'http://localhost:11434',
+        baseUrlHelper: 'Required. The Ollama server endpoint (default port 11434).',
+        aliasesPlaceholder: 'claude-sonnet-4-5=llama3.1:8b',
+        aliasesHelper:
+          'Format: requested=upstream. Leave blank unless the requested model name should map to a different Ollama tag.',
+        headersPlaceholder: 'Authorization: Bearer reverse-proxy-token',
+      };
   }
 }
 
@@ -352,6 +401,7 @@ export function ProviderEntryDialog({
   const isEditing = Boolean(entry);
   const supportsOpenAiCompat = isOpenAiCompatFamily(family);
   const supportsClaudeAdvanced = family === 'claude-api-key';
+  const requiresApiKey = requiresAiProviderApiKey(family);
 
   const [name, setName] = useState(() => entry?.name || '');
   const [baseUrl, setBaseUrl] = useState(() => entry?.baseUrl || '');
@@ -381,7 +431,7 @@ export function ProviderEntryDialog({
     setTestResult(null);
     try {
       const testApiKey = getProviderTestApiKey(supportsOpenAiCompat, apiKey, apiKeys);
-      if (!testApiKey) {
+      if (!testApiKey && requiresApiKey) {
         setTestResult({ success: false, message: 'API key is required for testing connection' });
         return;
       }
@@ -412,11 +462,12 @@ export function ProviderEntryDialog({
   };
 
   const secretHelper = useMemo(() => {
+    if (!requiresApiKey) return null;
     if (!isEditing || !entry?.secretConfigured) return null;
     return supportsOpenAiCompat
       ? 'Leave API keys blank to keep the stored connector secrets.'
       : 'Leave the API key blank to keep the stored secret.';
-  }, [entry?.secretConfigured, isEditing, supportsOpenAiCompat]);
+  }, [entry?.secretConfigured, isEditing, requiresApiKey, supportsOpenAiCompat]);
 
   const handleSubmit = async () => {
     if (modelRuleErrors.length > 0) {
@@ -466,7 +517,7 @@ export function ProviderEntryDialog({
                       {isEditing ? `Edit ${guide.familyName}` : `Set up ${guide.familyName}`}
                     </DialogTitle>
                     <Badge variant="outline" className="uppercase text-[11px]">
-                      {supportsOpenAiCompat ? 'connector' : 'api-key'}
+                      {supportsOpenAiCompat ? 'connector' : requiresApiKey ? 'api-key' : 'none'}
                     </Badge>
                   </div>
                   <DialogDescription className="mt-1 max-w-2xl leading-6">
@@ -544,6 +595,17 @@ export function ProviderEntryDialog({
                     <p className="text-xs text-muted-foreground">{guide.keyHelper}</p>
                   </div>
                 </div>
+              ) : !requiresApiKey ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="base-url">Base URL</Label>
+                  <Input
+                    id="base-url"
+                    value={baseUrl}
+                    onChange={(event) => setBaseUrl(event.target.value)}
+                    placeholder={guide.baseUrlPlaceholder}
+                  />
+                  <p className="text-xs text-muted-foreground">{guide.baseUrlHelper}</p>
+                </div>
               ) : (
                 <div className="space-y-1.5">
                   <Label htmlFor="api-key">{guide.keyLabel}</Label>
@@ -569,7 +631,7 @@ export function ProviderEntryDialog({
                 </div>
               </div>
 
-              {!supportsOpenAiCompat ? (
+              {!supportsOpenAiCompat && requiresApiKey ? (
                 <div className="space-y-1.5">
                   <Label htmlFor="base-url">Base URL</Label>
                   <Input
@@ -736,7 +798,11 @@ export function ProviderEntryDialog({
               <Button
                 type="button"
                 onClick={() => void handleSubmit()}
-                disabled={isSaving || modelRuleErrors.length > 0}
+                disabled={
+                  isSaving ||
+                  modelRuleErrors.length > 0 ||
+                  (!supportsOpenAiCompat && !requiresApiKey && !baseUrl.trim())
+                }
               >
                 {isSaving
                   ? 'Saving...'

@@ -12,6 +12,16 @@ const REPOSITORY = 'jeffpecky/ccs';
 const WINDOWS_ASSET = 'CCS-Bar-windows-x64.zip';
 const execFileAsync = promisify(execFile);
 
+/**
+ * Quote a value for inline use inside a `powershell -Command` string.
+ * Extra argv entries after -Command are appended as literal re-parsed text
+ * and never bind to $args, so paths must be inlined (single-quoted, with
+ * embedded quotes doubled per PowerShell string rules).
+ */
+function psQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 export interface WindowsBarPaths {
   installDir: string;
   exe: string;
@@ -125,9 +135,7 @@ async function stageWindowsAsset(
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force',
-      zip,
-      staging,
+      `Expand-Archive -LiteralPath ${psQuote(zip)} -DestinationPath ${psQuote(staging)} -Force`,
     ]);
   } catch (error) {
     throw new Error(
@@ -139,14 +147,11 @@ async function stageWindowsAsset(
 
 function registerWindowsShortcut(shortcut: string, target: string): void {
   fs.mkdirSync(path.dirname(shortcut), { recursive: true });
-  const script =
-    '$w=New-Object -ComObject WScript.Shell;$s=$w.CreateShortcut($args[0]);$s.TargetPath=$args[1];$s.WorkingDirectory=(Split-Path $args[1]);$s.Save()';
+  const script = `$w=New-Object -ComObject WScript.Shell;$s=$w.CreateShortcut(${psQuote(shortcut)});$s.TargetPath=${psQuote(target)};$s.WorkingDirectory=(Split-Path ${psQuote(target)});$s.Save()`;
   try {
-    execFileSync(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-Command', script, shortcut, target],
-      { stdio: 'pipe' }
-    );
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      stdio: 'pipe',
+    });
   } catch (error) {
     throw new Error(
       `Shortcut registration failed: ${error instanceof Error ? error.message : String(error)}`
@@ -160,14 +165,12 @@ function writeWindowsLaunchDescriptor(file: string): void {
 }
 
 async function isWindowsBarRunning(): Promise<boolean> {
-  const script =
-    '(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $args[0]} | Select-Object -First 1).ProcessId';
+  const script = `(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq ${psQuote(getWindowsBarPaths().exe)}} | Select-Object -First 1).ProcessId`;
   const { stdout } = await execFileAsync('powershell.exe', [
     '-NoProfile',
     '-NonInteractive',
     '-Command',
     script,
-    getWindowsBarPaths().exe,
   ]);
   return /^\d+$/m.test(stdout.trim());
 }
@@ -278,13 +281,10 @@ export async function uninstallWindowsBar(
     await (
       supplied.stopApp ??
       (async () => {
-        const script =
-          'Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $args[0]} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }';
-        execFileSync(
-          'powershell.exe',
-          ['-NoProfile', '-NonInteractive', '-Command', script, paths.exe],
-          { stdio: 'pipe' }
-        );
+        const script = `Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq ${psQuote(paths.exe)}} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`;
+        execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+          stdio: 'pipe',
+        });
       })
     )();
     fs.rmSync(paths.installDir, { recursive: true, force: true });

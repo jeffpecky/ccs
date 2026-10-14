@@ -123,6 +123,66 @@ function writeAuthToken(tokenFile: string, payload: Record<string, unknown>): vo
   fs.writeFileSync(path.join(authDir, tokenFile), JSON.stringify(payload, null, 2));
 }
 
+interface CliProxyAuthFileFixture {
+  auth_index: number;
+  provider: string;
+  id: string;
+  account?: string;
+  token: string;
+}
+
+/**
+ * The quota fetchers call providers through CLIProxy's management API
+ * (GET /v0/management/auth-files resolves the account's auth index, POST
+ * /v0/management/api-call performs the upstream request with $TOKEN$
+ * substituted for the account's real token). Emulate both endpoints so each
+ * test's upstream responder keeps receiving the provider request it was
+ * written against, with headers exactly as CLIProxy would send them.
+ */
+function installCliProxyManagementMock(
+  files: CliProxyAuthFileFixture[],
+  upstream: (url: string, options?: RequestInit) => Promise<Response> | Response
+): void {
+  const tokenByAuthIndex = new Map(files.map((file) => [String(file.auth_index), file.token]));
+
+  global.fetch = mock(async (input: unknown, options?: RequestInit) => {
+    const url = String(input);
+    if (url.includes('/v0/management/auth-files')) {
+      return Response.json({ files });
+    }
+
+    if (url.includes('/v0/management/api-call')) {
+      const call = JSON.parse(String(options?.body ?? '{}')) as {
+        auth_index?: string | number;
+        method?: string;
+        url: string;
+        header?: Record<string, string>;
+        data?: string;
+      };
+      const token = tokenByAuthIndex.get(String(call.auth_index)) ?? '';
+      const headers: Record<string, string> = {};
+      for (const [name, value] of Object.entries(call.header ?? {})) {
+        headers[name] = value.split('$TOKEN$').join(token);
+      }
+
+      const response = await upstream(call.url, {
+        method: call.method ?? 'GET',
+        headers,
+        ...(call.data !== undefined ? { body: call.data } : {}),
+      });
+      const bodylessStatus =
+        response.status === 204 || response.status === 205 || response.status === 304;
+      return Response.json({
+        status_code: response.status,
+        header: { 'content-type': 'application/json' },
+        body: bodylessStatus ? '' : await response.text(),
+      });
+    }
+
+    return await upstream(url, options);
+  }) as typeof fetch;
+}
+
 describe('Quota Exhaustion Handlers', () => {
   describe('writeQuotaWarning', () => {
     it('should write to stderr with box format', async () => {
@@ -411,19 +471,37 @@ describe('Quota Exhaustion Handlers', () => {
       writeCodexAuth('codex-exhausted.json', 'exhausted@example.com', 'exhausted-token');
       writeCodexAuth('codex-fallback.json', 'fallback@example.com', 'fallback-token');
 
-      global.fetch = mock((_url: string, options?: RequestInit) => {
-        const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
-        const usedPercent = accountHeader === 'chatgpt-fallback@example.com' ? 10 : 100;
-        return Promise.resolve(
-          Response.json({
-            plan_type: 'pro',
-            rate_limit: {
-              primary_window: { used_percent: usedPercent, reset_after_seconds: 3600 },
-              secondary_window: { used_percent: usedPercent, reset_after_seconds: 604800 },
-            },
-          })
-        );
-      }) as typeof fetch;
+      installCliProxyManagementMock(
+        [
+          {
+            auth_index: 0,
+            provider: 'codex',
+            id: 'exhausted@example.com',
+            account: 'chatgpt-exhausted@example.com',
+            token: 'exhausted-token',
+          },
+          {
+            auth_index: 1,
+            provider: 'codex',
+            id: 'fallback@example.com',
+            account: 'chatgpt-fallback@example.com',
+            token: 'fallback-token',
+          },
+        ],
+        (_url: string, options?: RequestInit) => {
+          const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
+          const usedPercent = accountHeader === 'chatgpt-fallback@example.com' ? 10 : 100;
+          return Promise.resolve(
+            Response.json({
+              plan_type: 'pro',
+              rate_limit: {
+                primary_window: { used_percent: usedPercent, reset_after_seconds: 3600 },
+                secondary_window: { used_percent: usedPercent, reset_after_seconds: 604800 },
+              },
+            })
+          );
+        }
+      );
 
       const result = await handleQuotaExhaustion('codex', 'exhausted@example.com', 10);
       const { getAccount, getDefaultAccount } = await import('../account-manager');
@@ -473,17 +551,27 @@ describe('Quota Exhaustion Handlers', () => {
 
       writeCodexAuth('codex-only.json', 'only-codex@example.com', 'only-token');
 
-      global.fetch = mock(() =>
-        Promise.resolve(
-          Response.json({
-            plan_type: 'pro',
-            rate_limit: {
-              primary_window: { used_percent: 100, reset_after_seconds: 3600 },
-              secondary_window: { used_percent: 100, reset_after_seconds: 604800 },
-            },
-          })
-        )
-      ) as typeof fetch;
+      installCliProxyManagementMock(
+        [
+          {
+            auth_index: 0,
+            provider: 'codex',
+            id: 'only-codex@example.com',
+            account: 'chatgpt-only-codex@example.com',
+            token: 'only-token',
+          },
+        ],
+        () =>
+          Promise.resolve(
+            Response.json({
+              plan_type: 'pro',
+              rate_limit: {
+                primary_window: { used_percent: 100, reset_after_seconds: 3600 },
+                secondary_window: { used_percent: 100, reset_after_seconds: 604800 },
+              },
+            })
+          )
+      );
 
       const { preflightCheck } = await import('../../quota/quota-manager');
       const result = await preflightCheck('codex');
@@ -548,19 +636,38 @@ describe('Quota Exhaustion Handlers', () => {
         'preflight-fallback-token'
       );
 
-      global.fetch = mock((_url: string, options?: RequestInit) => {
-        const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
-        const usedPercent = accountHeader === 'chatgpt-preflight-fallback@example.com' ? 10 : 100;
-        return Promise.resolve(
-          Response.json({
-            plan_type: 'pro',
-            rate_limit: {
-              primary_window: { used_percent: usedPercent, reset_after_seconds: 3600 },
-              secondary_window: { used_percent: usedPercent, reset_after_seconds: 604800 },
-            },
-          })
-        );
-      }) as typeof fetch;
+      installCliProxyManagementMock(
+        [
+          {
+            auth_index: 0,
+            provider: 'codex',
+            id: 'preflight-exhausted@example.com',
+            account: 'chatgpt-preflight-exhausted@example.com',
+            token: 'preflight-exhausted-token',
+          },
+          {
+            auth_index: 1,
+            provider: 'codex',
+            id: 'preflight-fallback@example.com',
+            account: 'chatgpt-preflight-fallback@example.com',
+            token: 'preflight-fallback-token',
+          },
+        ],
+        (_url: string, options?: RequestInit) => {
+          const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
+          const usedPercent =
+            accountHeader === 'chatgpt-preflight-fallback@example.com' ? 10 : 100;
+          return Promise.resolve(
+            Response.json({
+              plan_type: 'pro',
+              rate_limit: {
+                primary_window: { used_percent: usedPercent, reset_after_seconds: 3600 },
+                secondary_window: { used_percent: usedPercent, reset_after_seconds: 604800 },
+              },
+            })
+          );
+        }
+      );
 
       const { preflightCheck } = await import('../../quota/quota-manager');
       const result = await preflightCheck('codex');
@@ -632,19 +739,45 @@ describe('Quota Exhaustion Handlers', () => {
         'rotation-healthy-token'
       );
 
-      global.fetch = mock((_url: string, options?: RequestInit) => {
-        const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
-        const usedPercent = accountHeader === 'chatgpt-rotation-exhausted@example.com' ? 100 : 10;
-        return Promise.resolve(
-          Response.json({
-            plan_type: 'pro',
-            rate_limit: {
-              primary_window: { used_percent: usedPercent, reset_after_seconds: 3600 },
-              secondary_window: { used_percent: usedPercent, reset_after_seconds: 604800 },
-            },
-          })
-        );
-      }) as typeof fetch;
+      installCliProxyManagementMock(
+        [
+          {
+            auth_index: 0,
+            provider: 'codex',
+            id: 'rotation-default@example.com',
+            account: 'chatgpt-rotation-default@example.com',
+            token: 'rotation-default-token',
+          },
+          {
+            auth_index: 1,
+            provider: 'codex',
+            id: 'rotation-exhausted@example.com',
+            account: 'chatgpt-rotation-exhausted@example.com',
+            token: 'rotation-exhausted-token',
+          },
+          {
+            auth_index: 2,
+            provider: 'codex',
+            id: 'rotation-healthy@example.com',
+            account: 'chatgpt-rotation-healthy@example.com',
+            token: 'rotation-healthy-token',
+          },
+        ],
+        (_url: string, options?: RequestInit) => {
+          const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
+          const usedPercent =
+            accountHeader === 'chatgpt-rotation-exhausted@example.com' ? 100 : 10;
+          return Promise.resolve(
+            Response.json({
+              plan_type: 'pro',
+              rate_limit: {
+                primary_window: { used_percent: usedPercent, reset_after_seconds: 3600 },
+                secondary_window: { used_percent: usedPercent, reset_after_seconds: 604800 },
+              },
+            })
+          );
+        }
+      );
 
       const { preflightCheck } = await import('../../quota/quota-manager');
       const result = await preflightCheck('codex');
@@ -717,19 +850,38 @@ describe('Quota Exhaustion Handlers', () => {
       const { applyCooldown, preflightCheck } = await import('../../quota/quota-manager');
       applyCooldown('codex', 'cooldown-exhausted@example.com', 10);
 
-      global.fetch = mock((_url: string, options?: RequestInit) => {
-        const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
-        const usedPercent = accountHeader === 'chatgpt-cooldown-default@example.com' ? 10 : 100;
-        return Promise.resolve(
-          Response.json({
-            plan_type: 'pro',
-            rate_limit: {
-              primary_window: { used_percent: usedPercent, reset_after_seconds: 3600 },
-              secondary_window: { used_percent: usedPercent, reset_after_seconds: 604800 },
-            },
-          })
-        );
-      }) as typeof fetch;
+      installCliProxyManagementMock(
+        [
+          {
+            auth_index: 0,
+            provider: 'codex',
+            id: 'cooldown-default@example.com',
+            account: 'chatgpt-cooldown-default@example.com',
+            token: 'cooldown-default-token',
+          },
+          {
+            auth_index: 1,
+            provider: 'codex',
+            id: 'cooldown-exhausted@example.com',
+            account: 'chatgpt-cooldown-exhausted@example.com',
+            token: 'cooldown-exhausted-token',
+          },
+        ],
+        (_url: string, options?: RequestInit) => {
+          const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
+          const usedPercent =
+            accountHeader === 'chatgpt-cooldown-default@example.com' ? 10 : 100;
+          return Promise.resolve(
+            Response.json({
+              plan_type: 'pro',
+              rate_limit: {
+                primary_window: { used_percent: usedPercent, reset_after_seconds: 3600 },
+                secondary_window: { used_percent: usedPercent, reset_after_seconds: 604800 },
+              },
+            })
+          );
+        }
+      );
 
       const result = await preflightCheck('codex');
       const { getAccount } = await import('../account-manager');
@@ -798,19 +950,45 @@ describe('Quota Exhaustion Handlers', () => {
       );
       writeCodexAuth('codex-forced-healthy.json', 'forced-healthy@example.com', 'healthy-token');
 
-      global.fetch = mock((_url: string, options?: RequestInit) => {
-        const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
-        const usedPercent = accountHeader === 'chatgpt-forced-exhausted@example.com' ? 100 : 10;
-        return Promise.resolve(
-          Response.json({
-            plan_type: 'pro',
-            rate_limit: {
-              primary_window: { used_percent: usedPercent, reset_after_seconds: 3600 },
-              secondary_window: { used_percent: usedPercent, reset_after_seconds: 604800 },
-            },
-          })
-        );
-      }) as typeof fetch;
+      installCliProxyManagementMock(
+        [
+          {
+            auth_index: 0,
+            provider: 'codex',
+            id: 'forced-default@example.com',
+            account: 'chatgpt-forced-default@example.com',
+            token: 'forced-token',
+          },
+          {
+            auth_index: 1,
+            provider: 'codex',
+            id: 'forced-exhausted@example.com',
+            account: 'chatgpt-forced-exhausted@example.com',
+            token: 'forced-exhausted-token',
+          },
+          {
+            auth_index: 2,
+            provider: 'codex',
+            id: 'forced-healthy@example.com',
+            account: 'chatgpt-forced-healthy@example.com',
+            token: 'healthy-token',
+          },
+        ],
+        (_url: string, options?: RequestInit) => {
+          const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
+          const usedPercent =
+            accountHeader === 'chatgpt-forced-exhausted@example.com' ? 100 : 10;
+          return Promise.resolve(
+            Response.json({
+              plan_type: 'pro',
+              rate_limit: {
+                primary_window: { used_percent: usedPercent, reset_after_seconds: 3600 },
+                secondary_window: { used_percent: usedPercent, reset_after_seconds: 604800 },
+              },
+            })
+          );
+        }
+      );
 
       const { preflightCheck } = await import('../../quota/quota-manager');
       const result = await preflightCheck('codex');
@@ -875,22 +1053,40 @@ describe('Quota Exhaustion Handlers', () => {
         'preflight-unknown-fallback-token'
       );
 
-      global.fetch = mock((_url: string, options?: RequestInit) => {
-        const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
-        if (accountHeader === 'chatgpt-preflight-unknown-fallback@example.com') {
-          return Promise.resolve(new Response('', { status: 500 }));
-        }
+      installCliProxyManagementMock(
+        [
+          {
+            auth_index: 0,
+            provider: 'codex',
+            id: 'preflight-unknown-exhausted@example.com',
+            account: 'chatgpt-preflight-unknown-exhausted@example.com',
+            token: 'preflight-unknown-exhausted-token',
+          },
+          {
+            auth_index: 1,
+            provider: 'codex',
+            id: 'preflight-unknown-fallback@example.com',
+            account: 'chatgpt-preflight-unknown-fallback@example.com',
+            token: 'preflight-unknown-fallback-token',
+          },
+        ],
+        (_url: string, options?: RequestInit) => {
+          const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
+          if (accountHeader === 'chatgpt-preflight-unknown-fallback@example.com') {
+            return Promise.resolve(new Response('', { status: 500 }));
+          }
 
-        return Promise.resolve(
-          Response.json({
-            plan_type: 'pro',
-            rate_limit: {
-              primary_window: { used_percent: 100, reset_after_seconds: 3600 },
-              secondary_window: { used_percent: 100, reset_after_seconds: 604800 },
-            },
-          })
-        );
-      }) as typeof fetch;
+          return Promise.resolve(
+            Response.json({
+              plan_type: 'pro',
+              rate_limit: {
+                primary_window: { used_percent: 100, reset_after_seconds: 3600 },
+                secondary_window: { used_percent: 100, reset_after_seconds: 604800 },
+              },
+            })
+          );
+        }
+      );
 
       const { preflightCheck } = await import('../../quota/quota-manager');
       const result = await preflightCheck('codex');
@@ -957,22 +1153,38 @@ describe('Quota Exhaustion Handlers', () => {
       writeGeminiAuth('gemini-exhausted.json', 'gemini-exhausted@example.com', 'exhausted-token');
       writeGeminiAuth('gemini-fallback.json', 'gemini-fallback@example.com', 'fallback-token');
 
-      global.fetch = mock((_url: string, options?: RequestInit) => {
-        const authHeader = new Headers(options?.headers).get('Authorization') ?? '';
-        const remainingFraction = authHeader === 'Bearer fallback-token' ? 0.9 : 0;
-        return Promise.resolve(
-          Response.json({
-            buckets: [
-              {
-                model_id: 'gemini-3-flash-preview',
-                remaining_fraction: remainingFraction,
-                remaining_amount: Math.round(remainingFraction * 100),
-                reset_time: '2026-05-01T00:00:00Z',
-              },
-            ],
-          })
-        );
-      }) as typeof fetch;
+      installCliProxyManagementMock(
+        [
+          {
+            auth_index: 0,
+            provider: 'gemini',
+            id: 'gemini-exhausted@example.com',
+            token: 'exhausted-token',
+          },
+          {
+            auth_index: 1,
+            provider: 'gemini',
+            id: 'gemini-fallback@example.com',
+            token: 'fallback-token',
+          },
+        ],
+        (_url: string, options?: RequestInit) => {
+          const authHeader = new Headers(options?.headers).get('Authorization') ?? '';
+          const remainingFraction = authHeader === 'Bearer fallback-token' ? 0.9 : 0;
+          return Promise.resolve(
+            Response.json({
+              buckets: [
+                {
+                  model_id: 'gemini-3-flash-preview',
+                  remaining_fraction: remainingFraction,
+                  remaining_amount: Math.round(remainingFraction * 100),
+                  reset_time: '2026-05-01T00:00:00Z',
+                },
+              ],
+            })
+          );
+        }
+      );
 
       const result = await handleQuotaExhaustion('gemini', 'gemini-exhausted@example.com', 10);
       const { getAccount, getDefaultAccount } = await import('../account-manager');
@@ -1024,21 +1236,37 @@ describe('Quota Exhaustion Handlers', () => {
       writeGhcpAuth('ghcp-exhausted.json', 'exhausted-token');
       writeGhcpAuth('ghcp-fallback.json', 'fallback-token');
 
-      global.fetch = mock((_url: string, options?: RequestInit) => {
-        const authHeader = new Headers(options?.headers).get('Authorization') ?? '';
-        const remaining = authHeader === 'token fallback-token' ? 90 : 0;
-        return Promise.resolve(
-          Response.json({
-            copilot_plan: 'individual',
-            quota_reset_date: '2026-05-01T00:00:00Z',
-            quota_snapshots: {
-              premium_interactions: { entitlement: 100, remaining },
-              chat: { entitlement: 100, remaining },
-              completions: { entitlement: 100, remaining },
-            },
-          })
-        );
-      }) as typeof fetch;
+      installCliProxyManagementMock(
+        [
+          {
+            auth_index: 0,
+            provider: 'github-copilot',
+            id: 'ghcp-exhausted',
+            token: 'exhausted-token',
+          },
+          {
+            auth_index: 1,
+            provider: 'github-copilot',
+            id: 'ghcp-fallback',
+            token: 'fallback-token',
+          },
+        ],
+        (_url: string, options?: RequestInit) => {
+          const authHeader = new Headers(options?.headers).get('Authorization') ?? '';
+          const remaining = authHeader === 'token fallback-token' ? 90 : 0;
+          return Promise.resolve(
+            Response.json({
+              copilot_plan: 'individual',
+              quota_reset_date: '2026-05-01T00:00:00Z',
+              quota_snapshots: {
+                premium_interactions: { entitlement: 100, remaining },
+                chat: { entitlement: 100, remaining },
+                completions: { entitlement: 100, remaining },
+              },
+            })
+          );
+        }
+      );
 
       const result = await handleQuotaExhaustion('ghcp', 'ghcp-exhausted', 10);
       const { getAccount, getDefaultAccount } = await import('../account-manager');
@@ -1087,20 +1315,36 @@ describe('Quota Exhaustion Handlers', () => {
       writeGhcpAuth('ghcp-partial-exhausted.json', 'partial-exhausted-token');
       writeGhcpAuth('ghcp-partial-fallback.json', 'partial-fallback-token');
 
-      global.fetch = mock((_url: string, options?: RequestInit) => {
-        const authHeader = new Headers(options?.headers).get('Authorization') ?? '';
-        const remaining = authHeader === 'token partial-fallback-token' ? 90 : 0;
-        return Promise.resolve(
-          Response.json({
-            copilot_plan: 'individual',
-            quota_reset_date: '2026-05-01T00:00:00Z',
-            quota_snapshots: {
-              premium_interactions: { entitlement: 100, remaining },
-              chat: { entitlement: 100, remaining },
-            },
-          })
-        );
-      }) as typeof fetch;
+      installCliProxyManagementMock(
+        [
+          {
+            auth_index: 0,
+            provider: 'github-copilot',
+            id: 'ghcp-partial-exhausted',
+            token: 'partial-exhausted-token',
+          },
+          {
+            auth_index: 1,
+            provider: 'github-copilot',
+            id: 'ghcp-partial-fallback',
+            token: 'partial-fallback-token',
+          },
+        ],
+        (_url: string, options?: RequestInit) => {
+          const authHeader = new Headers(options?.headers).get('Authorization') ?? '';
+          const remaining = authHeader === 'token partial-fallback-token' ? 90 : 0;
+          return Promise.resolve(
+            Response.json({
+              copilot_plan: 'individual',
+              quota_reset_date: '2026-05-01T00:00:00Z',
+              quota_snapshots: {
+                premium_interactions: { entitlement: 100, remaining },
+                chat: { entitlement: 100, remaining },
+              },
+            })
+          );
+        }
+      );
 
       const result = await handleQuotaExhaustion('ghcp', 'ghcp-partial-exhausted', 10);
       const { getAccount, getDefaultAccount } = await import('../account-manager');

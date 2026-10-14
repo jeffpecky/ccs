@@ -414,6 +414,9 @@ describe('Model Catalog', () => {
       const { MODEL_CATALOG } = modelCatalog;
 
       for (const [provider, catalog] of Object.entries(MODEL_CATALOG)) {
+        // openai-compatibility intentionally ships no built-in models (the user
+        // supplies their own endpoint + models), so it has no default to check.
+        if (!catalog.defaultModel) continue;
         const defaultExists = catalog.models.some((m) => m.id === catalog.defaultModel);
         assert(defaultExists, `Default model ${catalog.defaultModel} not found in ${provider}`);
       }

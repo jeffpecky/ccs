@@ -21,6 +21,8 @@ type FamilyEntriesMap = {
   'cloudflare-api-key': AiProviderApiKeyEntry[];
   'nvidia-api-key': AiProviderApiKeyEntry[];
   'openrouter-api-key': AiProviderApiKeyEntry[];
+  'opencode-go-api-key': AiProviderApiKeyEntry[];
+  'ollama-local-api-key': AiProviderApiKeyEntry[];
 };
 
 export type FamilyEntries<F extends AiProviderFamilyId> = FamilyEntriesMap[F];

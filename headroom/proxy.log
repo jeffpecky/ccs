@@ -1,0 +1,66 @@
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║                         HEADROOM PROXY                                 ║
+║           The Context Optimization Layer for LLM Applications          ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+Starting proxy server...
+
+  URL:          http://127.0.0.1:8787
+  Mode:         cache
+  Optimization: ENABLED
+  Caching:      ENABLED
+  Rate Limit:   ENABLED
+  Memory:       DISABLED
+  License:      OSS (no license key)
+  Code-Aware:   ENABLED  (AST-based)
+  Extensions:   (none discovered)
+  Security:     loopback-only (no inbound token)
+  Telemetry:    anonymous usage counters — never prompts, code, or file paths. See: headroom telemetry --show | Off: HEADROOM_BEACON=off
+
+
+Routing:
+  /v1/messages                    → https://api.anthropic.com
+  /v1/chat/completions            → https://api.openai.com
+  /v1/responses                   → https://api.openai.com  (HTTP + WebSocket)
+  /v1internal:streamGenerateContent → https://cloudcode-pa.googleapis.com
+  /v1/projects/.../publishers/... → https://us-central1-aiplatform.googleapis.com
+
+Usage:
+  Claude Code:   ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude
+  Codex / OpenAI: OPENAI_BASE_URL=http://127.0.0.1:8787/v1 your-app
+
+Endpoints:
+  GET  /livez      Process liveness
+  GET  /readyz     Traffic readiness
+  GET  /health     Aggregate health
+  GET  /stats      Detailed statistics
+  GET  /stats-history Durable compression history + display session
+  GET  /metrics    Prometheus metrics
+
+Press Ctrl+C to stop.
+
+
+Update available: Headroom 0.40.0 (you have 0.39.1) - run: headroom update
+
+2026-10-06 11:33:14,152 - headroom.proxy - WARNING - Headroom cannot create C:\Users\sysadmin\.headroom\logs\proxy-8787.log owner-only on this platform: file modes do not control read access here, and Headroom does not set an ACL. The runtime log can contain request and response content (--log-messages, wire debug, HEADROOM_LOG_PAYLOAD_PREVIEW) — protect the log directory itself.
+ERROR:    Traceback (most recent call last):
+  File "C:\Users\sysadmin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\starlette\routing.py", line 694, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sysadmin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\headroom\proxy\server.py", line 3051, in lifespan
+    await proxy.startup()
+  File "C:\Users\sysadmin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\headroom\proxy\server.py", line 2104, in startup
+    if self._start_kompress_background_warmup():
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sysadmin\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\headroom\proxy\server.py", line 1904, in _start_kompress_background_warmup
+    libc, version = platform.libc_ver()
+                    ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\platform.py", line 198, in libc_ver
+    with open(executable, 'rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 22] Invalid argument: 'C:\\Users\\sysadmin\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\python.exe'
+
+ERROR:    Application startup failed. Exiting.

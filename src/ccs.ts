@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { startServer } from './web-server';
 import {
   DEFAULT_LOCAL_DASHBOARD_HOST,

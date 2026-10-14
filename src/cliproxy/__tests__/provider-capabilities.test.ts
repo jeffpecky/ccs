@@ -47,6 +47,7 @@ describe('provider-capabilities', () => {
       'codebuddy',
       'kilo',
       'qoder',
+      'openai-compatibility',
     ]);
   });
 
@@ -68,6 +69,7 @@ describe('provider-capabilities', () => {
       'codebuddy',
       'kilo',
       'qoder',
+      'openai-compatibility',
     ]);
     expect(getProvidersByOAuthFlow('authorization_code')).toEqual([
       'gemini',
@@ -88,6 +90,7 @@ describe('provider-capabilities', () => {
       'codebuddy',
       'kilo',
       'qoder',
+      'openai-compatibility',
     ]);
   });
 

@@ -80,9 +80,9 @@ describe('codex-detector', () => {
 
     expect(spawnSyncSpy).toHaveBeenCalled();
     expect(cmdWrapperProbeCall).toBeDefined();
-    expect((cmdWrapperProbeCall?.[1] as Record<string, unknown> | undefined)?.shell).toBe(
-      'C:\\Windows\\System32\\cmd.exe'
-    );
+    expect(
+      String((cmdWrapperProbeCall?.[1] as Record<string, unknown> | undefined)?.shell).toLowerCase()
+    ).toBe('c:\\windows\\system32\\cmd.exe');
     expect(info?.needsShell).toBe(true);
     expect(info?.features).toContain('config-overrides');
 

@@ -67,6 +67,7 @@ function runCodexProbe(codexPath: string, args: string[]): string | undefined {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000,
+      windowsHide: true,
     });
   } catch {
     return undefined;
@@ -131,6 +132,7 @@ export function detectCodexCli(): string | null {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
         timeout: 5000,
+        windowsHide: true,
       })
       .trim();
 

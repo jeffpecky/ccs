@@ -66,26 +66,27 @@ export function killProcessOnPort(port: number, verbose: boolean): boolean {
       const result = execSync(`netstat -ano | findstr :${port}`, {
         encoding: 'utf-8',
         stdio: 'pipe',
+        windowsHide: true,
       });
       const lines = result.trim().split('\n');
       for (const line of lines) {
         const parts = line.trim().split(/\s+/);
         const pid = parts[parts.length - 1];
         if (pid && /^\d+$/.test(pid)) {
-          execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe' });
+          execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe', windowsHide: true });
           if (verbose) console.error(`[auth] Killed process ${pid} on port ${port}`);
         }
       }
       return true;
     } else {
       // Unix: use lsof + kill
-      const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8', stdio: 'pipe' });
+      const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8', stdio: 'pipe', windowsHide: true });
       const pids = result
         .trim()
         .split('\n')
         .filter((p) => p);
       for (const pid of pids) {
-        execSync(`kill -9 ${pid}`, { stdio: 'pipe' });
+        execSync(`kill -9 ${pid}`, { stdio: 'pipe', windowsHide: true });
         if (verbose) console.error(`[auth] Killed process ${pid} on port ${port}`);
       }
       return pids.length > 0;

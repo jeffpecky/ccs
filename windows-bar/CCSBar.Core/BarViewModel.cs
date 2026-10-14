@@ -54,6 +54,8 @@ public sealed class BarViewModel : INotifyPropertyChanged, IDisposable, IAsyncDi
     IReadOnlyList<BarSummaryRow> rows = []; BarAnalytics? analytics; bool offline; bool starting; bool refreshing;
     bool summaryStale; bool analyticsStale; string? lastError; IReadOnlyList<BarNotification> activeAlerts = []; BarConnectionState connectionState = BarConnectionState.Unreachable;
     bool updateAvailable; string? latestVersion; bool installingUpdate;
+    CancellationTokenSource? autoRetryCts; int autoRetryCount;
+    const int MaxAutoRetries = 4; static readonly TimeSpan AutoRetryDelay = TimeSpan.FromSeconds(5);
 
     public BarViewModel(IBarConnector connector, IBarSettings settings, IBarClock? clock = null,
         Func<CancellationToken, Task<string?>>? updateChecker = null, string currentVersion = "0.0.0", IBarNotifier? notifier = null)
@@ -78,7 +80,10 @@ public sealed class BarViewModel : INotifyPropertyChanged, IDisposable, IAsyncDi
     public string StatusTitle => Offline ? "CCS offline" : BarFormatting.StatusTitle(Rows, Analytics, Ui.GlanceMode);
 
     public Task ReconnectAndLoadAsync(bool force, CancellationToken ct = default) => RefreshAsync(force, true, ct);
-    public Task RetryAsync(CancellationToken ct = default) => RefreshAsync(true, false, ct);
+    // Retry self-heals like the macOS bar: probe first, and if the server is not
+    // reachable, start it (same path as Start). The previous launch:false behavior
+    // made Retry a bare re-probe that failed identically when the server was down.
+    public Task RetryAsync(CancellationToken ct = default) => RefreshAsync(true, true, ct);
     public Task StartAsync(CancellationToken ct = default) => RefreshAsync(true, true, ct);
     public Task ForceRefreshAsync(CancellationToken ct = default) => RefreshAsync(true, false, ct);
     async Task RefreshAsync(bool force, bool launch, CancellationToken ct)
@@ -104,7 +109,7 @@ public sealed class BarViewModel : INotifyPropertyChanged, IDisposable, IAsyncDi
     }
     async Task LoadGenerationAsync(bool force, int generation, CancellationToken ct)
     {
-        if (client is null) { Offline = Rows.Count == 0; SummaryStale = Rows.Count > 0; LastError = ConnectionState switch { BarConnectionState.Timeout => "CCS did not respond in time", BarConnectionState.AuthenticationFailure => "CCS Bar authentication failed", _ => LastError }; return; }
+        if (client is null) { Offline = Rows.Count == 0; SummaryStale = Rows.Count > 0; LastError = ConnectionState switch { BarConnectionState.Timeout => "CCS did not respond in time", BarConnectionState.AuthenticationFailure => "CCS Bar authentication failed", _ => LastError }; if (Offline) ScheduleAutoRetry(); return; }
         IsRefreshing = force;
         var summary = Capture(() => client.SummaryAsync(force, ct));
         var analysis = Capture(() => client.AnalyticsAsync(ct));
@@ -115,7 +120,33 @@ public sealed class BarViewModel : INotifyPropertyChanged, IDisposable, IAsyncDi
         LastError = summary.Result.Error?.Message ?? analysis.Result.Error?.Message;
         ConnectionState = summary.Result.Error is TimeoutException ? BarConnectionState.Timeout : summary.Result.Error is not null ? BarConnectionState.ApiFailure : Rows.Count == 0 ? BarConnectionState.Empty : BarConnectionState.Ready;
         Offline = Rows.Count == 0 && ConnectionState is BarConnectionState.Unreachable or BarConnectionState.Timeout or BarConnectionState.AuthenticationFailure or BarConnectionState.ApiFailure;
+        if (Offline) ScheduleAutoRetry(); else { autoRetryCount = 0; CancelPendingAutoRetry(); }
         IsRefreshing = false; EvaluateAlerts(); Changed(nameof(StatusTitle));
+    }
+    // Offline states re-probe on their own a few times so a slow cold start
+    // (AV scan, server boot) heals without the user babysitting the Retry button.
+    // Bounded: MaxAutoRetries per outage; the 60s poll keeps long-term recovery.
+    void ScheduleAutoRetry()
+    {
+        if (autoRetryCount >= MaxAutoRetries || lifetime.IsCancellationRequested) return; autoRetryCount++;
+        CancelPendingAutoRetry();
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); autoRetryCts = cts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(AutoRetryDelay, cts.Token);
+                if (ReferenceEquals(autoRetryCts, cts)) autoRetryCts = null;
+                await RefreshAsync(false, false, cts.Token);
+            }
+            catch (OperationCanceledException) { }
+            finally { if (ReferenceEquals(autoRetryCts, cts)) autoRetryCts = null; cts.Dispose(); }
+        }, CancellationToken.None);
+    }
+    void CancelPendingAutoRetry()
+    {
+        var pending = autoRetryCts; autoRetryCts = null;
+        try { pending?.Cancel(); } catch (ObjectDisposedException) { }
     }
     public Task OnPanelOpenedAsync(CancellationToken ct = default)
     {

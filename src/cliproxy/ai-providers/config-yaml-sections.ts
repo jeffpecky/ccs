@@ -38,6 +38,11 @@ export function rewriteTopLevelYamlSection(
   }
 
   if (!sectionFound && newSection) {
+    // A flow-map root ({}) or empty file cannot be appended to; the section
+    // becomes the whole document.
+    if (content.trim() === '{}' || content.trim() === '') {
+      return `${newSection.trimEnd()}\n`;
+    }
     result.push('');
     result.push(newSection.trimEnd());
   }

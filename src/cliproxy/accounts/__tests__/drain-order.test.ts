@@ -54,12 +54,6 @@ async function loadStatsTransformer() {
   return import(`../../../cliproxy/services/stats-fetcher?drain-order-stats-fetcher=${Date.now()}`);
 }
 
-async function loadOrderSubcommand() {
-  return import(
-    `../../../commands/cliproxy/order-subcommand?drain-order-order-subcommand=${Date.now()}`
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Priority computation tests
 // ---------------------------------------------------------------------------
@@ -273,7 +267,7 @@ describe('computeTierDrainOrder', () => {
 
 describe('tieBreakKey', () => {
   it('preserves case on non-Windows (byte order, upper before lower)', async () => {
-    const { tieBreakKey } = await loadOrderSubcommand();
+    const { tieBreakKey } = await loadDrainOrder();
     // On non-Windows the selector compares raw Auth.ID bytes: 'B' (0x42) < 'a' (0x61).
     const files = ['antigravity-aaa.json', 'antigravity-Bbb.json'];
     const sorted = files
@@ -283,7 +277,7 @@ describe('tieBreakKey', () => {
   });
 
   it('lowercases on Windows so mixed case sorts case-insensitively', async () => {
-    const { tieBreakKey } = await loadOrderSubcommand();
+    const { tieBreakKey } = await loadDrainOrder();
     const files = ['antigravity-aaa.json', 'antigravity-Bbb.json'];
     const sorted = files
       .slice()

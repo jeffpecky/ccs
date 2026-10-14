@@ -468,7 +468,9 @@ public partial class MainWindow : Window
         var overflow = SmallButton("...");
         AutomationProperties.SetName(overflow, $"Actions for {title}");
         overflow.ContextMenu = ActionsMenu(row);
-        overflow.Click += (_, _) => { overflow.ContextMenu.PlacementTarget = overflow; overflow.ContextMenu.IsOpen = true; };
+        // Anchor the menu to the left of the "..." button: the panel sits at the
+        // screen's right edge, and the default placement opens rightward off-screen.
+        overflow.Click += (_, _) => { overflow.ContextMenu.PlacementTarget = overflow; overflow.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Left; overflow.ContextMenu.IsOpen = true; };
         actions.Children.Add(overflow);
         right.Children.Add(actions);
         Grid.SetColumn(right, 2);
@@ -684,7 +686,24 @@ public partial class MainWindow : Window
     }
     async void Refresh_Click(object sender, RoutedEventArgs e) => await vm.ForceRefreshAsync(); async void Retry_Click(object sender, RoutedEventArgs e) => await vm.RetryAsync(); async void Start_Click(object sender, RoutedEventArgs e) => await vm.StartAsync();
     void Icon_Click(object sender, RoutedEventArgs e) { settings.Ui = settings.Ui with { IconStyle = settings.Ui.IconStyle == BarIconStyle.Color ? BarIconStyle.Template : BarIconStyle.Color }; settings.Save(); ((App)Application.Current).SettingsChanged(); }
-    void Dashboard_Click(object sender, RoutedEventArgs e) { if (vm.ActiveBaseUrl is not null) try { new DashboardLauncher(WindowsProcess.Start).Open(vm.ActiveBaseUrl); } catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "CCS Bar", MessageBoxButton.OK, MessageBoxImage.Error); } Hide(); }
+    // macOS openOrStart parity: open the dashboard if the server answers; if it is
+    // down (or the URL is unknown), start CCS first — the panel shows "Starting
+    // CCS…" while that runs — then open the browser once a base URL is known.
+    async void Dashboard_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var url = vm.ActiveBaseUrl;
+            if (url is null || !await DashboardLauncher.IsReachableAsync(url))
+            {
+                await vm.StartAsync();
+                url = vm.ActiveBaseUrl;
+            }
+            if (url is not null) new DashboardLauncher(WindowsProcess.Start).Open(url);
+        }
+        catch (Exception ex) { System.Windows.MessageBox.Show(ex.Message, "CCS Bar", MessageBoxButton.OK, MessageBoxImage.Error); }
+        Hide();
+    }
     void Settings_Click(object sender, RoutedEventArgs e) { settingsWindow ??= new SettingsWindow(vm, (JsonBarSettings)settings) { Owner = null }; settingsWindow.Closed += (_, _) => settingsWindow = null; settingsWindow.Show(); settingsWindow.Activate(); }
     void Quit_Click(object sender, RoutedEventArgs e) { if (!quitArmed) { quitArmed = true; QuitGlyph.Text = "\uEA14"; QuitButton.Foreground = (Brush)FindResource("RedBrush"); QuitButton.ToolTip = "Click to confirm quit"; return; } ((App)Application.Current).Exit(); }
     void Window_Deactivated(object sender, EventArgs e) { if (settingsWindow?.IsActive != true && activationGuard.ShouldHide(Now)) Hide(); } void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { if (e.Key == Key.Escape) Hide(); }

@@ -27,6 +27,19 @@ const SUPPORTED_SNAPSHOT_VERSION = 3;
  */
 const SNAPSHOT_MAX_BYTES = 32 * 1024 * 1024;
 
+/**
+ * Parsed-snapshot cache. latest.json reaches many megabytes (47k+ detail
+ * records ≈ 250ms of synchronous JSON.parse plus the normalize pass), and the
+ * file lands on the /api/bar/summary request path — parsing it per request
+ * blocked the event loop and pushed summary responses to multi-second
+ * durations. Keyed by (mtimeMs, size) from an async stat, so a steady-state
+ * read costs one stat call; the syncer's atomic temp+rename write always
+ * bumps both fields. Concurrent misses share a single in-flight parse.
+ * The returned array is shared and MUST be treated as read-only.
+ */
+let cachedSnapshot: { mtimeMs: number; size: number; details: CliproxyUsageHistoryDetail[] } | null = null;
+let inFlightParse: Promise<CliproxyUsageHistoryDetail[]> | null = null;
+
 function getLatestSnapshotPath(): string {
   return path.join(getCcsDir(), 'cache', 'cliproxy-usage', 'latest.json');
 }
@@ -57,25 +70,46 @@ export async function loadCliproxySnapshotDetails(): Promise<CliproxyUsageHistor
     if (!stat.isFile() || stat.size > SNAPSHOT_MAX_BYTES) {
       return [];
     }
-
-    const raw = await fsp.readFile(snapshotPath, 'utf-8');
-    const snapshot = JSON.parse(raw) as Record<string, unknown>;
-
-    if (snapshot.version !== SUPPORTED_SNAPSHOT_VERSION) {
-      // Legacy / future snapshot — skip rather than mis-interpret
-      return [];
+    if (cachedSnapshot && cachedSnapshot.mtimeMs === stat.mtimeMs && cachedSnapshot.size === stat.size) {
+      return cachedSnapshot.details;
     }
-
-    const details = snapshot.details;
-    if (!Array.isArray(details)) {
-      return [];
+    if (inFlightParse) {
+      return inFlightParse;
     }
-
-    return details
-      .map((item) => normalizeCliproxyUsageHistoryDetail(item))
-      .filter((item): item is CliproxyUsageHistoryDetail => item !== null);
+    inFlightParse = parseSnapshotDetails(snapshotPath, stat.mtimeMs, stat.size)
+      .catch(() => [] as CliproxyUsageHistoryDetail[])
+      .finally(() => {
+        inFlightParse = null;
+      });
+    return inFlightParse;
   } catch {
     // IO / parse errors are non-fatal — bar glance degrades gracefully
     return [];
   }
+}
+
+async function parseSnapshotDetails(
+  snapshotPath: string,
+  mtimeMs: number,
+  size: number
+): Promise<CliproxyUsageHistoryDetail[]> {
+  const raw = await fsp.readFile(snapshotPath, 'utf-8');
+  const snapshot = JSON.parse(raw) as Record<string, unknown>;
+
+  if (snapshot.version !== SUPPORTED_SNAPSHOT_VERSION) {
+    // Legacy / future snapshot — skip rather than mis-interpret. Not cached:
+    // the syncer's next atomic rewrite produces a new (mtime, size) anyway.
+    return [];
+  }
+
+  const details = snapshot.details;
+  if (!Array.isArray(details)) {
+    return [];
+  }
+
+  const normalized = details
+    .map((item) => normalizeCliproxyUsageHistoryDetail(item))
+    .filter((item): item is CliproxyUsageHistoryDetail => item !== null);
+  cachedSnapshot = { mtimeMs, size, details: normalized };
+  return normalized;
 }

@@ -51,10 +51,12 @@ when a new app version is required.
 
 ### Automatic release
 
-`.github/workflows/bar-release.yml` publishes the asset after a push to `main`
-that changes `macos-bar/**`, or from a manual `workflow_dispatch` run whose
-selected ref is `main`. It runs on the dedicated self-hosted macOS runner
-labelled `ccs-bar`.
+`.github/workflows/bar-release.yml` publishes the assets after a push to `main`
+that changes `macos-bar/**` or `windows-bar/**`, or from a manual
+`workflow_dispatch` run whose selected ref is `main`. The macOS build runs on
+GitHub-hosted `macos-latest` and the Windows build on `windows-latest`; the
+floating `ccs-bar-latest` release is only updated by the publish job after both
+builds and their check suites (`swift run ccs-bar-check`, `dotnet test`) pass.
 
 ### Manual fallback
 

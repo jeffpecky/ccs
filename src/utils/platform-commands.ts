@@ -67,9 +67,9 @@ export function getPlatformName(): string {
 export function killProcessByPid(pid: number, verbose = false): boolean {
   try {
     if (isWindows) {
-      execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe' });
+      execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe', windowsHide: true });
     } else {
-      execSync(`kill -9 ${pid}`, { stdio: 'pipe' });
+      execSync(`kill -9 ${pid}`, { stdio: 'pipe', windowsHide: true });
     }
     if (verbose) {
       console.error(`[cleanup] Killed process ${pid}`);
@@ -91,12 +91,12 @@ export function killAllCLIProxyProcesses(verbose = false): number {
     if (isWindows) {
       // Windows: taskkill by image name
       // Use /T to kill child processes too
-      execSync('taskkill /F /IM cli-proxy-api-plus.exe /T 2>nul', { stdio: 'pipe' });
+      execSync('taskkill /F /IM cli-proxy-api-plus.exe /T 2>nul', { stdio: 'pipe', windowsHide: true });
       killed++;
     } else {
       // Unix: pkill with pattern matching
       try {
-        execSync('pkill -9 -f cli-proxy-api-plus', { stdio: 'pipe' });
+        execSync('pkill -9 -f cli-proxy-api-plus', { stdio: 'pipe', windowsHide: true });
         killed++;
       } catch {
         // pkill returns non-zero if no processes matched - that's OK
@@ -124,6 +124,7 @@ export function killProcessOnPort(port: number, verbose = false): boolean {
       const result = execSync(`netstat -ano | findstr :${port}`, {
         encoding: 'utf-8',
         stdio: 'pipe',
+        windowsHide: true,
       });
       const lines = result.trim().split('\n');
       let killed = false;
@@ -132,7 +133,7 @@ export function killProcessOnPort(port: number, verbose = false): boolean {
         const pid = parts[parts.length - 1];
         if (pid && /^\d+$/.test(pid)) {
           try {
-            execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe' });
+            execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe', windowsHide: true });
             if (verbose) {
               console.error(`[cleanup] Killed process ${pid} on port ${port}`);
             }
@@ -145,14 +146,14 @@ export function killProcessOnPort(port: number, verbose = false): boolean {
       return killed;
     } else {
       // Unix: lsof + kill
-      const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8', stdio: 'pipe' });
+      const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8', stdio: 'pipe', windowsHide: true });
       const pids = result
         .trim()
         .split('\n')
         .filter((p) => p);
       for (const pid of pids) {
         try {
-          execSync(`kill -9 ${pid}`, { stdio: 'pipe' });
+          execSync(`kill -9 ${pid}`, { stdio: 'pipe', windowsHide: true });
           if (verbose) {
             console.error(`[cleanup] Killed process ${pid} on port ${port}`);
           }

@@ -7,7 +7,14 @@ export const AI_PROVIDER_FAMILY_IDS = [
   'cloudflare-api-key',
   'nvidia-api-key',
   'openrouter-api-key',
+  'opencode-go-api-key',
+  'ollama-local-api-key',
 ] as const;
+
+/** Families that authenticate with the endpoint itself instead of a stored secret. */
+export function requiresAiProviderApiKey(family: AiProviderFamilyId): boolean {
+  return family !== 'ollama-local-api-key';
+}
 
 export type AiProviderFamilyId = (typeof AI_PROVIDER_FAMILY_IDS)[number];
 
@@ -46,7 +53,7 @@ export interface AiProviderFamilyDefinition {
   id: AiProviderFamilyId;
   displayName: string;
   description: string;
-  authMode: 'api-key' | 'hybrid' | 'connector';
+  authMode: 'api-key' | 'hybrid' | 'connector' | 'none';
   supportsNamedEntries: boolean;
   routePath: string;
 }
@@ -72,7 +79,7 @@ export interface AiProviderFamilyState {
   id: AiProviderFamilyId;
   displayName: string;
   description: string;
-  authMode: 'api-key' | 'hybrid' | 'connector';
+  authMode: 'api-key' | 'hybrid' | 'connector' | 'none';
   routePath: string;
   status: 'empty' | 'partial' | 'ready';
   supportsNamedEntries: boolean;
@@ -127,6 +134,8 @@ export interface LocalAiProviderConfig {
   'cloudflare-api-key'?: AiProviderApiKeyEntry[];
   'nvidia-api-key'?: AiProviderApiKeyEntry[];
   'openrouter-api-key'?: AiProviderApiKeyEntry[];
+  'opencode-go-api-key'?: AiProviderApiKeyEntry[];
+  'ollama-local-api-key'?: AiProviderApiKeyEntry[];
   [key: string]: unknown;
 }
 
@@ -197,5 +206,21 @@ export const AI_PROVIDER_FAMILY_DEFINITIONS: Record<
     authMode: 'api-key',
     supportsNamedEntries: false,
     routePath: '/api/provider/openrouter',
+  },
+  'opencode-go-api-key': {
+    id: 'opencode-go-api-key',
+    displayName: 'OpenCode Go',
+    description: 'OpenCode Go subscription API keys for hosted models',
+    authMode: 'api-key',
+    supportsNamedEntries: false,
+    routePath: '/api/provider/opencode-go',
+  },
+  'ollama-local-api-key': {
+    id: 'ollama-local-api-key',
+    displayName: 'Ollama Local',
+    description: 'Self-hosted Ollama server endpoints routed over /api/chat',
+    authMode: 'none',
+    supportsNamedEntries: false,
+    routePath: '/api/provider/ollama-local',
   },
 };

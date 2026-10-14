@@ -162,6 +162,7 @@ export async function querySqliteJson(
   try {
     const { stdout } = await execFileAsync(sqlitePath, ['-json', dbPath, sql], {
       maxBuffer: SQLITE_JSON_MAX_BUFFER,
+      windowsHide: true,
     });
     const trimmed = stdout.trim();
     if (!trimmed) {

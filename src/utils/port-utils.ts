@@ -40,6 +40,7 @@ async function getPortProcessUnix(port: number): Promise<PortProcess | null> {
   try {
     const { stdout } = await execAsync(`lsof -i :${port} -sTCP:LISTEN -F pcn`, {
       timeout: 3000,
+      windowsHide: true,
     });
 
     if (!stdout.trim()) {
@@ -80,7 +81,7 @@ async function getPortProcessWindows(port: number): Promise<PortProcess | null> 
     // netstat -ano finds PID, then tasklist gets process name
     const { stdout: netstatOut } = await execAsync(
       `netstat -ano | findstr :${port} | findstr LISTENING`,
-      { timeout: 3000 }
+      { timeout: 3000, windowsHide: true }
     );
 
     if (!netstatOut.trim()) {
@@ -102,6 +103,7 @@ async function getPortProcessWindows(port: number): Promise<PortProcess | null> 
     try {
       const { stdout: tasklistOut } = await execAsync(`tasklist /FI "PID eq ${pid}" /NH`, {
         timeout: 3000,
+        windowsHide: true,
       });
       const taskMatch = tasklistOut.match(/^([^\s]+)/);
       if (taskMatch && !taskMatch[1].startsWith('PID-')) {
@@ -116,7 +118,7 @@ async function getPortProcessWindows(port: number): Promise<PortProcess | null> 
       try {
         const { stdout: wmicOut } = await execAsync(
           `wmic process where "ProcessId=${pid}" get Name /value`,
-          { timeout: 3000 }
+          { timeout: 3000, windowsHide: true }
         );
         const wmicMatch = wmicOut.match(/Name=([^\r\n]+)/);
         if (wmicMatch) {
@@ -171,7 +173,7 @@ export async function checkWindowsFirewall(port: number): Promise<FirewallCheckR
     // Check for inbound rules allowing our port
     const { stdout } = await execAsync(
       `netsh advfirewall firewall show rule name=all dir=in | findstr /C:"LocalPort" | findstr /C:"${port}"`,
-      { timeout: 5000 }
+      { timeout: 5000, windowsHide: true }
     );
 
     // If we find the port in firewall rules, it's likely allowed

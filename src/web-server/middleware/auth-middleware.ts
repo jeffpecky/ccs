@@ -170,6 +170,20 @@ export function barAuthMiddleware(req: Request, res: Response, next: NextFunctio
   const nonce = req.header(BAR_AUTH_NONCE_HEADER)?.trim();
   const proof = req.header(BAR_AUTH_TOKEN_HEADER)?.trim();
   if (!nonce && !proof) {
+    // Headerless readers are trusted only from loopback while dashboard auth is
+    // disabled — the documented `authMode: "loopback"` model (docs/ccs-bar.md).
+    // The native bar clients send plain loopback GETs since cdb67a9b removed
+    // client-side proof signing to match upstream, which has no per-request bar
+    // gate at all. Non-loopback callers, dashboard-auth-enabled deployments, and
+    // non-GET bar traffic still require the nonce/proof scheme or a session.
+    const isReadMethod = req.method === 'GET' || req.method === 'HEAD';
+    if (
+      isReadMethod &&
+      !isDashboardAuthEnabled() &&
+      isLoopbackRemoteAddress(req.socket.remoteAddress)
+    ) {
+      return next();
+    }
     res.status(401).json({ error: 'CCS Bar authentication required' });
     return;
   }

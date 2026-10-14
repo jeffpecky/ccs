@@ -93,8 +93,24 @@ export function isAccountPaused(provider: CLIProxyProvider, accountId: string): 
 
 /**
  * Get summary of all accounts across providers
+ *
+ * Aggregation cache: every /api/bar/summary request re-read accounts.json and
+ * hydrates every token file synchronously; on AV-scanned Windows machines each
+ * such read is variably expensive (60ms to seconds) and blocks the event loop,
+ * which inflated glance responses past their deadline. Both call sites (bar
+ * glance, auth account listing) are display paths tolerant of bounded
+ * staleness; mutating routes go through the uncached getProviderAccounts and
+ * stay exact-fresh. Cached at build completion so a slow build never returns
+ * an already-expired entry.
  */
+const SUMMARY_CACHE_TTL_MS = 2500;
+let summaryCache: { at: number; value: Record<CLIProxyProvider, AccountInfo[]> } | null = null;
+
 export function getAllAccountsSummary(): Record<CLIProxyProvider, AccountInfo[]> {
+  const now = Date.now();
+  if (summaryCache && now - summaryCache.at < SUMMARY_CACHE_TTL_MS) {
+    return summaryCache.value;
+  }
   const providers: CLIProxyProvider[] = [...CLIPROXY_PROFILES];
   const summary: Record<CLIProxyProvider, AccountInfo[]> = {} as Record<
     CLIProxyProvider,
@@ -105,5 +121,6 @@ export function getAllAccountsSummary(): Record<CLIProxyProvider, AccountInfo[]>
     summary[provider] = getProviderAccounts(provider);
   }
 
+  summaryCache = { at: Date.now(), value: summary };
   return summary;
 }

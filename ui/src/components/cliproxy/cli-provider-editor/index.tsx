@@ -50,6 +50,7 @@ export function CLIProviderEditor({
   const { data: nvidiaModels } = useAiProviderModels('nvidia-api-key');
   const { data: cloudflareModels } = useAiProviderModels('cloudflare-api-key');
   const { data: openrouterModels } = useAiProviderModels('openrouter-api-key');
+  const { data: opencodeGoModels } = useAiProviderModels('opencode-go-api-key');
   const { data: presetsData } = usePresets(provider);
   const createPresetMutation = useCreatePreset();
   const deletePresetMutation = useDeletePreset();
@@ -76,6 +77,7 @@ export function CLIProviderEditor({
       ...(nvidiaModels?.models ?? []),
       ...(cloudflareModels?.models ?? []),
       ...(openrouterModels?.models ?? []),
+      ...(opencodeGoModels?.models ?? []),
     ];
     const seen = new Set(base.map((m) => m.id));
     const merged = [...base];
@@ -86,7 +88,7 @@ export function CLIProviderEditor({
       }
     }
     return merged.map((m) => ({ id: m.id, owned_by: m.owned_by }));
-  }, [modelsData, nvidiaModels, cloudflareModels, openrouterModels]);
+  }, [modelsData, nvidiaModels, cloudflareModels, openrouterModels, opencodeGoModels]);
 
   const providerRoute = (baseProvider || provider).toLowerCase();
 

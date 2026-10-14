@@ -17,7 +17,12 @@
 
 import { getExistingProxy, registerSession, getRunningProxyVersion } from '../session-tracker';
 import { isCliproxyRunning } from '../services/stats-fetcher';
-import { getPortProcess, isCLIProxyProcess, PortProcess } from '../../utils/port-utils';
+import {
+  getPortProcess,
+  isCLIProxyProcess,
+  testLocalhostBinding,
+  PortProcess,
+} from '../../utils/port-utils';
 import { CLIPROXY_DEFAULT_PORT } from '../config/port-manager';
 import { createLogger } from '../../services/logging';
 
@@ -134,6 +139,16 @@ export async function detectRunningProxy(
   log('No session lock found');
 
   // 3. Third: Check port process (fallback for orphaned/untracked proxy)
+  // Bind-test first (pure Node): if we can bind to loopback, nothing is
+  // listening there — no proxy and no blocker — so skip the netstat shell-out.
+  const binding = await testLocalhostBinding(validPort);
+  if (binding.success) {
+    log('Port is free (bind test), no proxy detected');
+    return {
+      running: false,
+      verified: false,
+    };
+  }
   log('Checking port process...');
   const portProcess = await getPortProcess(validPort);
   if (portProcess) {

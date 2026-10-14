@@ -13,7 +13,11 @@ export type {
   TestAiProviderConnectionResult,
 } from './types';
 export type { AiProviderModel, FetchAiProviderModelsResult } from './service';
-export { AI_PROVIDER_FAMILY_DEFINITIONS, AI_PROVIDER_FAMILY_IDS } from './types';
+export {
+  AI_PROVIDER_FAMILY_DEFINITIONS,
+  AI_PROVIDER_FAMILY_IDS,
+  requiresAiProviderApiKey,
+} from './types';
 export {
   listAiProviders,
   createAiProviderEntry,

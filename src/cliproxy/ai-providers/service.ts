@@ -1,6 +1,7 @@
 import {
   AI_PROVIDER_FAMILY_DEFINITIONS,
   AI_PROVIDER_FAMILY_IDS,
+  requiresAiProviderApiKey,
   type AiProviderApiKeyEntry,
   type AiProviderEntryView,
   type AiProviderFamilyId,
@@ -11,6 +12,20 @@ import {
   type UpsertAiProviderEntryInput,
 } from './types';
 import { getAiProvidersSourceSummary, readFamilyEntries, writeFamilyEntries } from './config-store';
+
+const OLLAMA_LOCAL_DEFAULT_BASE_URL = 'http://localhost:11434';
+
+function defaultBaseUrlForFamily(family: AiProviderFamilyId): string | undefined {
+  if (family === 'nvidia-api-key') return 'https://integrate.api.nvidia.com/v1';
+  if (family === 'openrouter-api-key') return 'https://openrouter.ai/api/v1';
+  if (family === 'opencode-go-api-key') return 'https://opencode.ai/zen/go/v1';
+  if (family === 'codex-api-key') return 'https://api.openai.com/v1';
+  if (family === 'claude-api-key') return 'https://api.anthropic.com';
+  if (family === 'gemini-api-key') return 'https://generativelanguage.googleapis.com';
+  if (family === 'vertex-api-key') return 'https://vertex.googleapis.com';
+  if (family === 'ollama-local-api-key') return OLLAMA_LOCAL_DEFAULT_BASE_URL;
+  return undefined;
+}
 
 function maskSecret(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -98,7 +113,7 @@ function buildApiKeyEntryView(
     excludedModels: [...(entry['excluded-models'] || [])],
     models: normalizeModelAliases(entry.models),
     apiKeyMasked: maskSecret(entry['api-key']),
-    secretConfigured: Boolean(entry['api-key']),
+    secretConfigured: requiresAiProviderApiKey(family) ? Boolean(entry['api-key']) : true,
     accountId: entry['account-id'] || undefined,
   };
 }
@@ -268,6 +283,13 @@ function validateFamilyInput(family: AiProviderFamilyId, input: UpsertAiProvider
     return;
   }
 
+  if (!requiresAiProviderApiKey(family)) {
+    if (!(input.baseUrl?.trim() || '').length) {
+      throw new Error('baseUrl is required');
+    }
+    return;
+  }
+
   if (!input.preserveSecrets && !(input.apiKey?.trim() || '').length) {
     throw new Error('apiKey is required');
   }
@@ -354,17 +376,12 @@ export async function testAiProviderConnection(
   const apiKey = input.apiKey?.trim();
   let baseUrl = input.baseUrl?.trim();
 
-  if (!apiKey) {
+  if (!apiKey && requiresAiProviderApiKey(family)) {
     return { success: false, message: 'API key is required for testing connection' };
   }
 
   if (!baseUrl) {
-    if (family === 'nvidia-api-key') baseUrl = 'https://integrate.api.nvidia.com/v1';
-    else if (family === 'openrouter-api-key') baseUrl = 'https://openrouter.ai/api/v1';
-    else if (family === 'codex-api-key') baseUrl = 'https://api.openai.com/v1';
-    else if (family === 'claude-api-key') baseUrl = 'https://api.anthropic.com';
-    else if (family === 'gemini-api-key') baseUrl = 'https://generativelanguage.googleapis.com';
-    else if (family === 'vertex-api-key') baseUrl = 'https://vertex.googleapis.com';
+    baseUrl = defaultBaseUrlForFamily(family);
   }
 
   if (!baseUrl) {
@@ -396,6 +413,8 @@ export async function testAiProviderConnection(
       testUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
     } else if (family === 'gemini-api-key') {
       testUrl = `${baseUrl}/v1beta/models?key=${encodeURIComponent(apiKey || '')}`;
+    } else if (family === 'ollama-local-api-key') {
+      testUrl = `${baseUrl}/api/tags`;
     } else {
       reqHeaders['Authorization'] = `Bearer ${apiKey}`;
     }
@@ -459,6 +478,7 @@ const PROVIDER_MODEL_ENDPOINTS: Partial<
 > = {
   'nvidia-api-key': (baseUrl) => `${baseUrl.replace(/\/+$/, '')}/models`,
   'openrouter-api-key': (baseUrl) => `${baseUrl.replace(/\/+$/, '')}/models`,
+  'opencode-go-api-key': (baseUrl) => `${baseUrl.replace(/\/+$/, '')}/models`,
   'cloudflare-api-key': (_baseUrl, _apiKey, entry) => {
     const accountId = entry['account-id']?.trim();
     if (!accountId) return '';
@@ -471,6 +491,7 @@ const PROVIDER_MODEL_ENDPOINTS: Partial<
     `${baseUrl.replace(/\/+$/, '')}/v1beta/models?key=${encodeURIComponent(apiKey)}`,
   'vertex-api-key': (baseUrl) =>
     `${baseUrl.replace(/\/+$/, '')}/v1/projects/-/locations/us-central1/publishers/google/models`,
+  'ollama-local-api-key': (baseUrl) => `${baseUrl.replace(/\/+$/, '')}/api/tags`,
 };
 
 export async function fetchAiProviderModels(
@@ -480,18 +501,13 @@ export async function fetchAiProviderModels(
   const firstEntry = entries[0];
   const apiKey = firstEntry?.['api-key']?.trim();
 
-  if (!apiKey) {
+  if (!apiKey && requiresAiProviderApiKey(family)) {
     return { models: [], provider: family };
   }
 
   let baseUrl = firstEntry?.['base-url']?.trim();
   if (!baseUrl) {
-    if (family === 'nvidia-api-key') baseUrl = 'https://integrate.api.nvidia.com/v1';
-    else if (family === 'openrouter-api-key') baseUrl = 'https://openrouter.ai/api/v1';
-    else if (family === 'codex-api-key') baseUrl = 'https://api.openai.com/v1';
-    else if (family === 'claude-api-key') baseUrl = 'https://api.anthropic.com';
-    else if (family === 'gemini-api-key') baseUrl = 'https://generativelanguage.googleapis.com';
-    else if (family === 'vertex-api-key') baseUrl = 'https://vertex.googleapis.com';
+    baseUrl = defaultBaseUrlForFamily(family);
   }
 
   if (!baseUrl) {
@@ -519,6 +535,8 @@ export async function fetchAiProviderModels(
       reqHeaders['anthropic-version'] = '2023-06-01';
     } else if (family === 'gemini-api-key') {
       // API key is in the URL query string
+    } else if (family === 'ollama-local-api-key') {
+      // Local Ollama servers do not require authentication
     } else {
       reqHeaders['Authorization'] = `Bearer ${apiKey}`;
     }
@@ -537,6 +555,21 @@ export async function fetchAiProviderModels(
       data?: Array<{ id: string; owned_by?: string }>;
       models?: Array<{ id: string; owned_by?: string }>;
     };
+
+    if (family === 'ollama-local-api-key') {
+      const tags = (
+        (data as { models?: Array<{ name?: string; details?: { family?: string } }> }).models ?? []
+      ).filter((tag): tag is { name: string; details?: { family?: string } } =>
+        Boolean(typeof tag.name === 'string' && tag.name.length > 0)
+      );
+      return {
+        models: tags.map((tag) => ({
+          id: tag.name,
+          owned_by: tag.details?.family || 'ollama',
+        })),
+        provider: family,
+      };
+    }
 
     const rawModels = data.data ?? data.models ?? [];
     const providerLabel = family.replace('-api-key', '');

@@ -45,6 +45,8 @@ mock.module('../../../src/cliproxy/ai-providers', () => ({
     updateCalls.push({ family, entryId, data });
   },
   deleteAiProviderEntry: async () => {},
+  fetchAiProviderModels: async () => ({ models: [], provider: 'mock' }),
+  testAiProviderConnection: async () => ({ success: true, message: 'Connection successful' }),
 }));
 
 describe('ai-provider-routes', () => {

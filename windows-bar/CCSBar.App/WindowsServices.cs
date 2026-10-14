@@ -23,6 +23,12 @@ public static class WindowsProcess
 public sealed class DashboardLauncher(Func<ProcessCommand, Process?> start)
 {
     public void Open(Uri activeBaseUrl) { using var process = start(new(activeBaseUrl.AbsoluteUri, [], UseShellExecute: true)); }
+    public static async Task<bool> IsReachableAsync(Uri baseUri, CancellationToken ct = default)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(1.5) };
+        try { using var response = await http.GetAsync(new Uri(baseUri, "api/bar/health"), HttpCompletionOption.ResponseHeadersRead, ct); return response.IsSuccessStatusCode; }
+        catch (Exception e) when (e is not OperationCanceledException) { return false; }
+    }
 }
 
 public sealed class WindowsBarUpdater(Func<ProcessCommand, Process?> start)
@@ -97,7 +103,9 @@ sealed class WindowsBarConnector : IBarConnector, IActiveBarConnection, IBarConn
             if (uri is null && launch)
             {
                 StartServer();
-                for (var i = 0; i < 12 && uri is null; i++) { await Task.Delay(500, ct); result = await new BarServerProbe(http).ProbeAsync(BarDiscovery.Load(home).Value, ct); uri = result.BaseUri; }
+                // Cold-boot serve children need 5-11s to answer their first probe on
+                // AV-scanned machines; poll 20s before giving up (macOS polls ~12s).
+                for (var i = 0; i < 40 && uri is null; i++) { await Task.Delay(500, ct); result = await new BarServerProbe(http).ProbeAsync(BarDiscovery.Load(home).Value, ct); uri = result.BaseUri; }
             }
             activeBaseUrl = uri;
             connectionState = uri is null ? result.State : BarConnectionState.Ready;

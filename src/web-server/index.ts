@@ -26,12 +26,18 @@ import { startAutoSyncWatcher, stopAutoSyncWatcher } from '../cliproxy/sync';
 import { initUsageAggregator, shutdownUsageAggregator } from './usage/aggregator';
 import { createLogger } from '../services/logging';
 import { DEFAULT_DASHBOARD_HOST, isLoopbackHost } from './dashboard-host';
-
 export interface ServerOptions {
   port: number;
   host?: string;
   staticDir?: string;
   dev?: boolean;
+  /**
+   * Auto-start the local CLIProxy service as a deferred background service.
+   * The bar serve path sets this so a boot-time bar server also brings up
+   * the proxy agents need. Off by default so embedding callers (dashboard
+   * dev mode, tests) keep full control of process side effects.
+   */
+  autoStartCliproxy?: boolean;
   /**
    * Background services deferred until AFTER the server is listening.
    *
@@ -49,6 +55,12 @@ export interface ServerBackgroundServices {
   startAutoSyncWatcher?: () => void | Promise<void>;
   /** Warm usage aggregator caches/services off the request path. */
   initUsageAggregator?: () => void | Promise<void>;
+  /**
+   * Ensure the local CLIProxy service is running (bar/CLI agents need it to
+   * serve proxied traffic). Gated on cliproxy_server.local.auto_start
+   * (default: true) and skipped when a remote proxy is configured.
+   */
+  startCliproxyService?: () => void | Promise<void>;
 }
 
 export interface ServerInstance {
@@ -385,10 +397,18 @@ function runBackgroundService(name: string, start: () => void | Promise<void>): 
   }
 }
 
+/** Deferred CLIProxy auto-start delay — see scheduleBackgroundServices. */
+const CLIPROXY_AUTOSTART_DELAY_MS = 15_000;
+
 function scheduleBackgroundServices(options: ServerOptions): void {
   const services = options.backgroundServices ?? {
     startAutoSyncWatcher: () => startAutoSyncWatcher(),
     initUsageAggregator: () => initUsageAggregator(),
+    // Only when explicitly requested (bar serve) so tests/dev dashboard never
+    // spawn a real CLIProxy process as a side effect of listening.
+    startCliproxyService: options.autoStartCliproxy
+      ? () => defaultStartCliproxyService()
+      : undefined,
   };
 
   setImmediate(() => {
@@ -398,5 +418,57 @@ function scheduleBackgroundServices(options: ServerOptions): void {
     if (services.initUsageAggregator) {
       runBackgroundService('usage-aggregator', services.initUsageAggregator);
     }
+    const startCliproxy = services.startCliproxyService;
+    if (startCliproxy) {
+      // Defer well past the boot-time readiness-probe windows (launcher: 10 s,
+      // bar app self-start: ~6 s). The auto-start imports the whole cliproxy
+      // module graph and can hold the event loop briefly; that must never
+      // compete with the authenticated health probes that gate launch success,
+      // or slow machines (AV cold scans) race past the deadline and the
+      // launcher kills an otherwise-healthy server.
+      const timer = setTimeout(
+        () => runBackgroundService('cliproxy-service', startCliproxy),
+        CLIPROXY_AUTOSTART_DELAY_MS
+      );
+      timer.unref?.();
+    }
   });
+}
+
+/**
+ * Auto-start the local CLIProxy service when the dashboard/bar server boots,
+ * so agents proxied through CCS work right after boot without a manual
+ * "Start proxy" click. Honors the user's cliproxy_server config:
+ * - skipped when a remote proxy is configured,
+ * - skipped when cliproxy_server.local.auto_start is disabled (default: true).
+ * Failure is contained (warn-only) — the server stays up either way.
+ */
+async function defaultStartCliproxyService(): Promise<void> {
+  const { loadOrCreateUnifiedConfig } = await import('../config/unified-config-loader');
+  const config = loadOrCreateUnifiedConfig();
+  const serverConfig = config.cliproxy_server;
+  if (serverConfig?.remote?.enabled) {
+    logger.info('server.cliproxy_autostart_skipped', 'CLIProxy auto-start skipped (remote proxy configured)');
+    return;
+  }
+  if (serverConfig?.local?.auto_start === false) {
+    logger.info('server.cliproxy_autostart_skipped', 'CLIProxy auto-start disabled by config');
+    return;
+  }
+  const { ensureCliproxyService } = await import('../cliproxy/service-manager');
+  const { resolveLifecyclePort } = await import('../cliproxy/config/port-manager');
+  const port = resolveLifecyclePort();
+  const result = await ensureCliproxyService(port);
+  if (result.error) {
+    logger.warn('server.cliproxy_autostart_failed', 'CLIProxy auto-start failed', {
+      port,
+      error: result.error,
+    });
+    return;
+  }
+  logger.info(
+    'server.cliproxy_autostart_ok',
+    result.alreadyRunning ? 'CLIProxy already running' : 'CLIProxy auto-started',
+    { port }
+  );
 }

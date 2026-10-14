@@ -80,6 +80,7 @@ export function detectClaudeCli(): string | null {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000, // 5 second timeout to prevent hangs
+      windowsHide: true,
     }).trim();
 
     // where.exe may return multiple lines (all matches in PATH order)
@@ -163,6 +164,7 @@ function runClaudeCliCommand(args: string[], envOverrides?: NodeJS.ProcessEnv): 
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],
           timeout: 5000,
+          windowsHide: true,
           env,
         }
       ).trim();
@@ -174,6 +176,7 @@ function runClaudeCliCommand(args: string[], envOverrides?: NodeJS.ProcessEnv): 
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 5000,
+        windowsHide: true,
         shell: typeof shell === 'string' ? shell : undefined,
         env,
       }).trim();
@@ -183,6 +186,7 @@ function runClaudeCliCommand(args: string[], envOverrides?: NodeJS.ProcessEnv): 
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 5000,
+      windowsHide: true,
       env,
     }).trim();
   } catch (error) {

@@ -37,8 +37,8 @@ describe('droid-dashboard-service', () => {
       homeDir: '/Users/tester',
     });
 
-    expect(resolved.settingsPath).toBe('/tmp/ccs-home/.factory/settings.json');
-    expect(resolved.legacyConfigPath).toBe('/tmp/ccs-home/.factory/config.json');
+    expect(resolved.settingsPath).toBe(path.join('/tmp/ccs-home', '.factory', 'settings.json'));
+    expect(resolved.legacyConfigPath).toBe(path.join('/tmp/ccs-home', '.factory', 'config.json'));
     expect(resolved.settingsDisplayPath).toBe('~/.factory/settings.json');
     expect(resolved.legacyConfigDisplayPath).toBe('~/.factory/config.json');
   });

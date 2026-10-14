@@ -343,7 +343,10 @@ public sealed class VisualContractTests
             Assert.AreEqual(0, ((ScrollViewer)window.FindName("ContentScroll")).MinHeight);
             Assert.AreEqual(780, ((ScrollViewer)window.FindName("ContentScroll")).MaxHeight);
 
-            vm.RetryAsync().GetAwaiter().GetResult();
+            // ForceRefreshAsync keeps launch:false so the connector returns no client,
+            // exercising the offline panel copy. (RetryAsync now launches — TestConnector
+            // then returns an EmptyClient, which renders the empty state, not offline.)
+            vm.ForceRefreshAsync().GetAwaiter().GetResult();
             window.Render();
             Assert.AreEqual(Visibility.Visible, ((FrameworkElement)window.FindName("OfflinePanel")).Visibility);
             Assert.AreEqual("CCS is not running", ((TextBlock)window.FindName("OfflineTitle")).Text);
