@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ExternalLink, Loader2, Network, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -52,6 +52,151 @@ const PLATFORM_LABELS: Record<RelayEntry['platform'], string> = {
   cloudflare: 'Cloudflare',
   deno: 'Deno Deploy',
   netlify: 'Netlify',
+};
+
+const TOKEN_LINK_CLASS = 'text-primary underline-offset-4 hover:underline';
+
+interface PlatformGuide {
+  infoTitle: string;
+  infoDescription: string;
+  infoBullets: string[];
+  tokenSteps?: string[];
+  tokenLabel: string;
+  tokenPlaceholder: string;
+  tokenHint: ReactNode;
+  accountIdPlaceholder?: string;
+  accountIdHint?: string;
+  orgDomainPlaceholder?: string;
+  orgDomainHint?: string;
+  namePlaceholder: string;
+  nameHint: string;
+}
+
+// Deploy-dialog guidance, adapted from 9Router's per-platform proxy-pool modals.
+const PLATFORM_GUIDE: Record<RelayEntry['platform'], PlatformGuide> = {
+  vercel: {
+    infoTitle: 'What is Vercel Relay?',
+    infoDescription:
+      "Deploys an edge relay function to Vercel. All AI provider requests will be forwarded through Vercel's edge network, masking your real IP from providers.",
+    infoBullets: [
+      "Your IP is replaced by Vercel's dynamic edge IPs (hundreds of IPs across 20+ global regions)",
+      "Vercel serves millions of apps — providers can't block Vercel IPs without affecting legitimate traffic",
+      'Free tier: 100GB bandwidth/month, 500K edge invocations',
+      'Deploy multiple relays on different accounts for more IP diversity',
+    ],
+    tokenLabel: 'Vercel API token',
+    tokenPlaceholder: 'your-vercel-api-token',
+    tokenHint: (
+      <>
+        Token is used once for deployment and not stored.{' '}
+        <a
+          href="https://vercel.com/account/tokens"
+          target="_blank"
+          rel="noreferrer"
+          className={TOKEN_LINK_CLASS}
+        >
+          Get token →
+        </a>
+      </>
+    ),
+    namePlaceholder: 'my-relay',
+    nameHint: 'Unique name for your Vercel project. Leave empty for auto-generated name.',
+  },
+  cloudflare: {
+    infoTitle: 'What is Cloudflare Relay?',
+    infoDescription:
+      "Deploys a Cloudflare Worker as a proxy relay. All AI provider requests will be forwarded through Cloudflare's global edge network.",
+    infoBullets: [
+      'High performance global routing and IP masking via Cloudflare Workers',
+      'Free tier: 100,000 requests per day',
+      'Requires Cloudflare Account ID and a Workers API Token (Edit Workers permission)',
+    ],
+    tokenSteps: [
+      'Go to My Profile → API Tokens → Create Token',
+      'Scroll down to Custom Token and click Get started',
+      'Under Permissions: Account | Workers Scripts | Edit',
+      'Under Account Resources: Include | Account | Your Account Name',
+      'Click Continue to summary → Create Token',
+    ],
+    tokenLabel: 'Cloudflare API token',
+    tokenPlaceholder: 'your-cloudflare-api-token',
+    tokenHint: (
+      <>
+        Requires "Workers Scripts: Edit" permission.{' '}
+        <a
+          href="https://dash.cloudflare.com/profile/api-tokens"
+          target="_blank"
+          rel="noreferrer"
+          className={TOKEN_LINK_CLASS}
+        >
+          Get token →
+        </a>
+      </>
+    ),
+    accountIdPlaceholder: 'your-cloudflare-account-id',
+    accountIdHint: 'Found on the right side of the Cloudflare dashboard overview page.',
+    namePlaceholder: 'my-relay',
+    nameHint: 'Unique name for your Cloudflare Worker. Leave empty for auto-generated name.',
+  },
+  deno: {
+    infoTitle: 'What is Deno Relay?',
+    infoDescription:
+      "Deploys a relay worker to Deno Deploy's global edge network. All AI provider requests are forwarded through Deno's edge, masking your real IP.",
+    infoBullets: [
+      'Deno Deploy v2 runs on a high-performance global edge network',
+      'Free tier: 1M requests & 100GiB outbound traffic per month',
+      'No per-request CPU time limits (unlike Vercel/Cloudflare)',
+      'Support up to 20 active apps & 50 custom domains',
+      'Deploy multiple relays for maximum IP diversity',
+    ],
+    tokenSteps: [
+      'Go to console.deno.com',
+      'Select your Organization → Settings → Organization Tokens',
+      'Create an Organization Token (prefix ddo_)',
+    ],
+    tokenLabel: 'Deno Deploy API token',
+    tokenPlaceholder: 'ddo_xxxxxxxxxxxxxxxx',
+    tokenHint: 'Token is used once for deployment, not stored. Found in Organization Settings.',
+    orgDomainPlaceholder: 'your-org.deno.net',
+    orgDomainHint:
+      "Organization's default domain. Your relay URL will be in the format: https://my-relay.your-org.deno.net",
+    namePlaceholder: 'my-relay',
+    nameHint: 'Unique name for your Deno Deploy app. Leave empty for auto-generated name.',
+  },
+  netlify: {
+    infoTitle: 'What is Netlify Relay?',
+    infoDescription:
+      "Deploys a serverless relay function to Netlify's global edge network. All AI provider requests are forwarded through Netlify's edge, masking your real IP.",
+    infoBullets: [
+      'Runs on Netlify Functions with a 60-second execution limit (buffered responses — not suitable for streaming/inference)',
+      'Free tier: 125,000 function invocations and 100GB bandwidth per month',
+      'Relay URL format: https://your-site.netlify.app/.netlify/functions/relay',
+      'Deploy multiple relays on different accounts for more IP diversity',
+    ],
+    tokenSteps: [
+      'Go to User Settings → Applications → Personal access tokens',
+      'Select New access token and generate a token',
+      "Copy the token — you won't see it again after leaving the page",
+    ],
+    tokenLabel: 'Netlify API token',
+    tokenPlaceholder: 'nfp_xxxxxxxxxxxxxxxx',
+    tokenHint: (
+      <>
+        Token is used once for deployment and not stored.{' '}
+        <a
+          href="https://app.netlify.com/user/applications#personal-access-tokens"
+          target="_blank"
+          rel="noreferrer"
+          className={TOKEN_LINK_CLASS}
+        >
+          Get token →
+        </a>
+      </>
+    ),
+    namePlaceholder: 'netlify-relay',
+    nameHint:
+      'Unique site name (lowercase letters, numbers, hyphens). Your relay URL will be https://site-name.netlify.app/.netlify/functions/relay',
+  },
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -119,14 +264,24 @@ export function RelayPage() {
   const deploy = async () => {
     setDeploying(true);
     try {
-      await request('/deploy', {
+      const result = await request<{
+        relay: RelayEntry;
+        activated: boolean;
+        activationError?: string;
+      }>('/deploy', {
         method: 'POST',
         body: JSON.stringify({ platform, name, token, accountId, orgDomain }),
       });
       setToken('');
       setName('');
       setDialogOpen(false);
-      toast.success('Relay deployed');
+      if (result.activated) {
+        toast.success('Relay deployed and activated');
+      } else {
+        toast.warning(
+          `Relay deployed, but activation failed: ${result.activationError ?? 'unknown error'}`
+        );
+      }
       await reload();
     } catch (error) {
       toast.error((error as Error).message);
@@ -149,19 +304,6 @@ export function RelayPage() {
       } else {
         toast.error(`Relay failed: ${result.error ?? `status ${result.status}`}`);
       }
-      await reload();
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const activate = async (id: string) => {
-    setBusyId(id);
-    try {
-      await request(`/${id}/activate`, { method: 'POST' });
-      toast.success('Relay activated — proxy config regenerated');
       await reload();
     } catch (error) {
       toast.error((error as Error).message);
@@ -216,6 +358,7 @@ export function RelayPage() {
   }
 
   const busy = busyId !== null;
+  const guide = PLATFORM_GUIDE[platform];
   const deployDisabled =
     deploying ||
     !token.trim() ||
@@ -237,8 +380,8 @@ export function RelayPage() {
               hiding your own IP address.
             </span>
             <span className="mt-1 block">
-              Deleting the active relay turns relaying off and regenerates the proxy config; there
-              is no separate deactivate.
+              Deploying a relay activates it immediately — provider traffic routes through it right
+              away. Deleting the active relay turns relaying off and regenerates the proxy config.
             </span>
           </CardDescription>
         </CardHeader>
@@ -263,20 +406,20 @@ export function RelayPage() {
                 <Plus className="mr-2 h-4 w-4" /> Deploy relay
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Deploy relay</DialogTitle>
                 <DialogDescription>
-                  Deploy a proxy worker to an edge platform. The token is forwarded for deployment
-                  only and is never stored.
+                  Deploy a proxy worker to an edge platform. The relay is activated as soon as the
+                  deploy finishes. The token is forwarded for deployment only and is never stored.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <p className="text-xs text-muted-foreground">
-                  The deployed worker has no authentication — anyone with the relay URL can
-                  forward requests through it. The relay platform can see request headers
-                  (including auth tokens) and URL query strings. Only route traffic you would
-                  trust that platform with.
+                  The deployed worker has no authentication — anyone with the relay URL can forward
+                  requests through it. The relay platform can see request headers (including auth
+                  tokens) and URL query strings. Only route traffic you would trust that platform
+                  with.
                 </p>
                 <div className="space-y-2">
                   <Label htmlFor="relay-platform">Platform</Label>
@@ -303,36 +446,60 @@ export function RelayPage() {
                     {PLATFORM_HINTS[platform]}
                   </p>
                 </div>
+                <div className="space-y-2 rounded-md border bg-muted/40 p-3">
+                  <p className="text-sm font-medium">{guide.infoTitle}</p>
+                  <p className="text-xs text-muted-foreground">{guide.infoDescription}</p>
+                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
+                    {guide.infoBullets.map((bullet) => (
+                      <li key={bullet}>{bullet}</li>
+                    ))}
+                  </ul>
+                  {guide.tokenSteps && (
+                    <div className="mt-2 space-y-1 border-t pt-2">
+                      <p className="text-xs font-medium">How to generate your API token:</p>
+                      <ol className="list-decimal space-y-0.5 pl-4 text-xs text-muted-foreground">
+                        {guide.tokenSteps.map((step) => (
+                          <li key={step}>{step}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="relay-name">Name (optional)</Label>
                   <Input
                     id="relay-name"
-                    placeholder="lowercase letters, numbers, hyphens"
+                    placeholder={guide.namePlaceholder}
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                     disabled={deploying}
                   />
+                  <p className="text-xs text-muted-foreground">{guide.nameHint}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="relay-token">API token (required)</Label>
+                  <Label htmlFor="relay-token">{guide.tokenLabel} (required)</Label>
                   <Input
                     id="relay-token"
                     type="password"
                     autoComplete="new-password"
+                    placeholder={guide.tokenPlaceholder}
                     value={token}
                     onChange={(event) => setToken(event.target.value)}
                     disabled={deploying}
                   />
+                  <p className="text-xs text-muted-foreground">{guide.tokenHint}</p>
                 </div>
                 {platform === 'cloudflare' && (
                   <div className="space-y-2">
                     <Label htmlFor="relay-account-id">Account ID (required)</Label>
                     <Input
                       id="relay-account-id"
+                      placeholder={guide.accountIdPlaceholder}
                       value={accountId}
                       onChange={(event) => setAccountId(event.target.value)}
                       disabled={deploying}
                     />
+                    <p className="text-xs text-muted-foreground">{guide.accountIdHint}</p>
                   </div>
                 )}
                 {platform === 'deno' && (
@@ -340,17 +507,15 @@ export function RelayPage() {
                     <Label htmlFor="relay-org-domain">Organization domain (required)</Label>
                     <Input
                       id="relay-org-domain"
+                      placeholder={guide.orgDomainPlaceholder}
                       value={orgDomain}
                       onChange={(event) => setOrgDomain(event.target.value)}
                       disabled={deploying}
                     />
+                    <p className="text-xs text-muted-foreground">{guide.orgDomainHint}</p>
                   </div>
                 )}
-                <Button
-                  className="w-full"
-                  onClick={() => void deploy()}
-                  disabled={deployDisabled}
-                >
+                <Button className="w-full" onClick={() => void deploy()} disabled={deployDisabled}>
                   {deploying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   {deploying ? 'Deploying…' : 'Deploy'}
                 </Button>
@@ -436,15 +601,6 @@ export function RelayPage() {
                       ) : null}
                       Test
                     </Button>
-                    {!isActive && (
-                      <Button
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => void activate(relay.id)}
-                      >
-                        Activate
-                      </Button>
-                    )}
                     <Button
                       variant="destructive"
                       size="sm"

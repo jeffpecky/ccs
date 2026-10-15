@@ -152,7 +152,7 @@ describe('Relay routes', () => {
     expect(app.saved).toHaveLength(0);
   });
 
-  it('deploys and persists the relay entry without ever storing the token', async () => {
+  it('deploys, persists, and activates the relay entry without ever storing the token', async () => {
     const app = await setup({
       deploy: async (input) => ({
         url: 'https://vercel-relay.example.test',
@@ -165,18 +165,65 @@ describe('Relay routes', () => {
       name: 'my-relay',
     });
     expect(response.status).toBe(201);
-    const body = (await response.json()) as { relay: RelayEntry };
+    const body = (await response.json()) as { relay: RelayEntry; activated: boolean };
     expect(body.relay.platform).toBe('vercel');
     expect(body.relay.url).toBe('https://vercel-relay.example.test');
     expect(body.relay.name).toBe('my-relay');
     expect(body.relay.testStatus).toBe('untested');
+    // Deploy activates immediately: the entry is appended and marked active
+    // under the lock, then the runtime config is regenerated.
+    expect(body.activated).toBe(true);
     expect(app.saved).toHaveLength(1);
     expect(app.saved[0].relays).toHaveLength(1);
-    // Deploying only appends the entry (locked read-modify-write update);
-    // the runtime config is regenerated on activate, not here.
-    expect(app.order).toEqual(['update']);
+    expect(app.saved[0].activeId).toBe(body.relay.id);
+    expect(app.order).toEqual(['update', 'regenerate']);
+    expect(app.regenerations()).toBe(1);
+    expect(app.currentConfig().activeId).toBe(body.relay.id);
     expect(JSON.stringify(app.saved)).not.toContain('SECRET');
     expect(JSON.stringify(body)).not.toContain('SECRET');
+  });
+
+  it('keeps the deployed entry but reverts activation when regeneration fails', async () => {
+    const app = await setup({
+      regenerate: () => {
+        throw new Error('generation failed');
+      },
+    });
+    const response = await post(app.baseUrl, '/deploy', { platform: 'vercel', token: 't' });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      relay: RelayEntry;
+      activated: boolean;
+      activationError: string;
+    };
+    expect(body.activated).toBe(false);
+    expect(body.activationError).toBe('generation failed');
+    // The remote worker exists, so the entry survives; only the activation
+    // pointer reverts (regenerate failed, so config.yaml was never written).
+    expect(app.currentConfig().relays.map((entry) => entry.id)).toEqual([body.relay.id]);
+    expect(app.currentConfig().activeId).toBeNull();
+    expect(app.regenerations()).toBe(1);
+  });
+
+  it('replaces the previously active relay when deploying a new one', async () => {
+    const app = await setup({ config: { relays: [makeRelay('r1')], activeId: 'r1' } });
+    const response = await post(app.baseUrl, '/deploy', { platform: 'vercel', token: 't' });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { relay: RelayEntry; activated: boolean };
+    expect(body.activated).toBe(true);
+    expect(app.currentConfig().activeId).toBe(body.relay.id);
+    expect(app.currentConfig().relays.map((entry) => entry.id)).toEqual(['r1', body.relay.id]);
+  });
+
+  it('responds 500 instead of hanging when the config read fails during deploy', async () => {
+    const app = await setup({
+      getConfig: () => {
+        throw new Error('broken config.yaml');
+      },
+    });
+    const response = await post(app.baseUrl, '/deploy', { platform: 'vercel', token: 't' });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'broken config.yaml' });
   });
 
   it('maps DeployError to its upstream status', async () => {
@@ -294,54 +341,6 @@ describe('Relay routes', () => {
     const response = await post(app.baseUrl, '/r1/test', {});
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: 'Failed to test relay' });
-  });
-
-  it('rejects activation of unknown relays', async () => {
-    const app = await setup({ config: { relays: [makeRelay('r1')], activeId: null } });
-    expect((await post(app.baseUrl, '/missing/activate', {})).status).toBe(404);
-  });
-
-  it('saves the new active relay before regenerating the runtime config', async () => {
-    const app = await setup({ config: { relays: [makeRelay('r1')], activeId: null } });
-    const response = await post(app.baseUrl, '/r1/activate', {});
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      success: true,
-      config: { relays: [makeRelay('r1')], activeId: 'r1' },
-    });
-    expect(app.regenerations()).toBe(1);
-    expect(app.order).toEqual(['save', 'regenerate']);
-    expect(app.currentConfig().activeId).toBe('r1');
-  });
-
-  it('reverts the unified config when activation regeneration fails', async () => {
-    const app = await setup({
-      config: { relays: [makeRelay('r1')], activeId: null },
-      regenerate: () => {
-        throw new Error('generation failed');
-      },
-    });
-    const response = await post(app.baseUrl, '/r1/activate', {});
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      error: 'Failed to activate relay: generation failed',
-    });
-    // The final save reverts to the previous config (no active relay).
-    expect(app.currentConfig()).toEqual({ relays: [makeRelay('r1')], activeId: null });
-    expect(app.saved[app.saved.length - 1].activeId).toBeNull();
-  });
-
-  it('responds 500 instead of hanging when the config read fails during activation', async () => {
-    const app = await setup({
-      getConfig: () => {
-        throw new Error('broken config.yaml');
-      },
-    });
-    const response = await post(app.baseUrl, '/r1/activate', {});
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      error: 'Failed to activate relay: broken config.yaml',
-    });
   });
 
   it('rejects deletion of unknown relays', async () => {

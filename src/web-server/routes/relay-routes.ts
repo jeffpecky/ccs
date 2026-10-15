@@ -1,20 +1,24 @@
 /**
- * Relay API routes — list, deploy, test, activate, and delete edge relays.
+ * Relay API routes — list, deploy, test, and delete edge relays.
  *
  * Deployments are one-shot: POST /deploy talks to the platform (Vercel,
- * Cloudflare, Deno Deploy, Netlify) and appends the resulting relay entry to
- * the unified config. The API token is only forwarded to the deploy client —
- * it is never persisted or echoed back. Writes that must not clobber a
- * concurrent writer (deploy append, probe-result persistence) go through the
- * service's updateRelayConfig, which runs a read-modify-write under the
- * config loader's lock.
+ * Cloudflare, Deno Deploy, Netlify), appends the resulting relay entry to
+ * the unified config, and activates it in the same transaction (9Router
+ * parity: a deployed relay is immediately live). The API token is only
+ * forwarded to the deploy client — it is never persisted or echoed back.
+ * Writes that must not clobber a concurrent writer (deploy append +
+ * activation, probe-result persistence) go through the service's
+ * updateRelayConfig, which runs a read-modify-write under the config
+ * loader's lock.
  *
- * Activation and active-relay deletion also regenerate the runtime
+ * Deploy activation and active-relay deletion also regenerate the runtime
  * config.yaml. Within THIS router those save+regenerate transactions are
- * serialized through a module-level queue so concurrent activate/delete
- * calls cannot interleave their steps. Other routes that regenerate
- * config.yaml (e.g. headroom) are not serialized against this queue —
- * that is pre-existing behavior, out of scope here.
+ * serialized through a module-level queue so concurrent deploy/delete
+ * calls cannot interleave their steps. When activation regeneration fails
+ * the deployed entry is kept (the remote worker exists) but the active
+ * pointer reverts and the response reports activated: false. Other routes
+ * that regenerate config.yaml (e.g. headroom) are not serialized against
+ * this queue — that is pre-existing behavior, out of scope here.
  */
 
 import type { NextFunction, Request, Response } from 'express';
@@ -123,10 +127,7 @@ export function createRelayRouter(deps: RelayRouterDeps = defaultDeps): Router {
     };
 
     const platform = body.platform;
-    if (
-      typeof platform !== 'string' ||
-      !RELAY_PLATFORMS.includes(platform as RelayPlatform)
-    ) {
+    if (typeof platform !== 'string' || !RELAY_PLATFORMS.includes(platform as RelayPlatform)) {
       res.status(400).json({ error: 'platform must be vercel, cloudflare, deno, or netlify.' });
       return;
     }
@@ -137,7 +138,10 @@ export function createRelayRouter(deps: RelayRouterDeps = defaultDeps): Router {
       return;
     }
 
-    if (body.name !== undefined && (typeof body.name !== 'string' || !RELAY_NAME_PATTERN.test(body.name))) {
+    if (
+      body.name !== undefined &&
+      (typeof body.name !== 'string' || !RELAY_NAME_PATTERN.test(body.name))
+    ) {
       res.status(400).json({
         error: 'name must contain only lowercase letters, numbers, and hyphens.',
       });
@@ -182,13 +186,37 @@ export function createRelayRouter(deps: RelayRouterDeps = defaultDeps): Router {
         ...(orgDomain ? { orgDomain } : {}),
       });
       const entry = createRelayEntry(platform as RelayPlatform, result.name, result.url);
-      // Append under the lock: never clobber a relay added while the deploy
-      // was in flight.
-      deps.updateRelayConfig((current) => ({
-        ...current,
-        relays: [...current.relays, entry],
-      }));
-      res.status(201).json({ relay: entry });
+      // Deployed relays activate immediately (9Router parity). The whole
+      // save+regenerate transaction runs on the queue so concurrent
+      // deploy/delete calls cannot interleave their steps.
+      const outcome = await serializeConfigTransaction(async () => {
+        // Read inside the queue, then append+activate under the lock so a
+        // relay added while the platform deploy was in flight is kept.
+        const previousActiveId = deps.getRelayConfig().activeId ?? null;
+        deps.updateRelayConfig((current) => ({
+          ...current,
+          relays: [...current.relays, entry],
+          activeId: entry.id,
+        }));
+        try {
+          await deps.regenerateConfig();
+          return { activated: true };
+        } catch (error) {
+          // The remote worker exists: keep the entry, revert only the
+          // activation. regenerateConfig writes config.yaml atomically as
+          // its last step, so a throw leaves the runtime config unchanged.
+          try {
+            deps.updateRelayConfig((current) => ({ ...current, activeId: previousActiveId }));
+          } catch (revertError) {
+            logRouteError(
+              'Relay activation revert after regenerate failure also failed',
+              revertError
+            );
+          }
+          return { activated: false, activationError: errorMessage(error) };
+        }
+      });
+      res.status(201).json({ relay: entry, ...outcome });
     } catch (error) {
       if (error instanceof DeployError) {
         res.status(error.status).json({ error: error.message });
@@ -209,7 +237,7 @@ export function createRelayRouter(deps: RelayRouterDeps = defaultDeps): Router {
       }
 
       // The probe can take up to its timeout; every config write below must
-      // happen under the lock so a deploy/activate landing mid-probe is not
+      // happen under the lock so a deploy/delete landing mid-probe is not
       // clobbered by the snapshot we read above.
       const result = await deps.testRelay(relay.url);
       const testedAt = new Date().toISOString();
@@ -240,42 +268,6 @@ export function createRelayRouter(deps: RelayRouterDeps = defaultDeps): Router {
     } catch (error) {
       logRouteError('Relay test failed', error);
       res.status(500).json({ error: 'Failed to test relay' });
-    }
-  });
-
-  router.post('/:id/activate', async (req: Request, res: Response) => {
-    const id = req.params.id;
-    try {
-      const next = await serializeConfigTransaction(async (): Promise<RelayConfig | null> => {
-        // Read inside the queue: the target may have been deleted while this
-        // request waited its turn.
-        const previous = deps.getRelayConfig();
-        if (!previous.relays.some((entry) => entry.id === id)) return null;
-        const updated: RelayConfig = { ...previous, activeId: id };
-        await deps.saveRelayConfig(updated);
-        try {
-          await deps.regenerateConfig();
-        } catch (error) {
-          try {
-            await deps.saveRelayConfig(previous);
-          } catch (revertError) {
-            logRouteError(
-              'Relay config revert after regenerate failure also failed',
-              revertError
-            );
-          }
-          throw error;
-        }
-        return updated;
-      });
-      if (!next) {
-        res.status(404).json({ error: 'Relay not found' });
-        return;
-      }
-      res.json({ success: true, config: next });
-    } catch (error) {
-      logRouteError('Relay activation failed', error);
-      res.status(500).json({ error: `Failed to activate relay: ${errorMessage(error)}` });
     }
   });
 

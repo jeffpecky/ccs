@@ -1684,3 +1684,17 @@ git commit -m "test: local end-to-end relay protocol verification"
 - All Tasks 1–13 green: CCS `npm run build` clean, every new/modified test file passes per-file, Go `go build` clean + targeted tests pass.
 - CCS commits on `main`; CLIProxyAPIPlus commits on its default branch; nothing pushed without the user asking.
 - Live verification (user-opted, manual, after the user supplies platform tokens): deploy a relay from the dashboard UI → Test badge green → Activate → confirm `~/.ccs/cliproxy/config.yaml` gained `relay-url: <url>` and the running proxy hot-reloaded it (proxy log shows the config diff) → a Claude/Gemini call egresses via the relay.
+
+---
+
+## Amendment (2026-10-15): deploy auto-activates
+
+The lifecycle described above changed for 9Router parity: `POST /api/relay/deploy`
+now appends **and activates** the relay inside the same serialized
+save+regenerate transaction (the response carries `activated: true/false`, plus
+`activationError` when regeneration fails — the deployed entry is kept and the
+active pointer reverts). The `POST /api/relay/:id/activate` endpoint and the
+dashboard Activate button were removed; deploying a relay makes it the live one
+immediately, and deleting the active relay still turns relaying off. The
+activate-route test sketches above were rewritten as deploy-activation cases
+(append+activate, regenerate-failure revert, previous-active replacement).
