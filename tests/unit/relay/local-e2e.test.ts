@@ -23,7 +23,10 @@ const servers: Server[] = [];
 const tempDirs: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((s) => new Promise<void>((r) => s.close(() => r()))));
+  await Promise.all(servers.splice(0).map((s) => {
+    s.closeAllConnections();
+    return new Promise<void>((r) => s.close(() => r()));
+  }));
 }, HOOK_TIMEOUT);
 
 afterAll(() => {
