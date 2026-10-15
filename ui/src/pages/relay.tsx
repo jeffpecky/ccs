@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { ExternalLink, Loader2, Network, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { ExternalLink, Loader2, Network, Plus, RefreshCw, Shuffle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
 interface RelayEntry {
@@ -35,9 +36,23 @@ interface RelayEntry {
   lastError?: string | null;
 }
 
+type RelayStrategy = 'none' | 'round-robin' | 'random';
+
+const RELAY_STRATEGIES: readonly RelayStrategy[] = ['none', 'round-robin', 'random'];
+
+const RELAY_STRATEGY_HINTS: Record<RelayStrategy, string> = {
+  none: 'Only the active relay is used — the legacy single-relay behavior.',
+  'round-robin':
+    'Every healthy relay is used, starting at the next one for each request (failover tail follows).',
+  random: 'Every healthy relay is used, starting at a random one for each request.',
+};
+
 interface RelayConfig {
   relays: RelayEntry[];
   activeId: string | null;
+  strategy?: RelayStrategy;
+  strict?: boolean;
+  providerRelayIds?: Record<string, string>;
 }
 
 const PLATFORM_HINTS: Record<RelayEntry['platform'], string> = {
@@ -229,6 +244,10 @@ export function RelayPage() {
   const [deploying, setDeploying] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [strategyDraft, setStrategyDraft] = useState<RelayStrategy>('none');
+  const [strictDraft, setStrictDraft] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [testingAll, setTestingAll] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -246,6 +265,16 @@ export function RelayPage() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // Keep the rotation form in sync with whatever the server returned; a fresh
+  // load must discard an unsaved draft rather than replay it on next save.
+  useEffect(() => {
+    if (!config) return;
+    setStrategyDraft(
+      config.strategy && RELAY_STRATEGIES.includes(config.strategy) ? config.strategy : 'none'
+    );
+    setStrictDraft(config.strict ?? false);
+  }, [config]);
 
   const retry = () => {
     setLoading(true);
@@ -325,6 +354,48 @@ export function RelayPage() {
     }
   };
 
+  const saveRotation = async () => {
+    setSettingsSaving(true);
+    try {
+      await request<{ config: RelayConfig }>('', {
+        method: 'PATCH',
+        body: JSON.stringify({ strategy: strategyDraft, strict: strictDraft }),
+      });
+      toast.success('Rotation settings saved');
+      await reload();
+    } catch (error) {
+      toast.error((error as Error).message);
+      // The save failed: resync the draft so the form cannot drift from the
+      // config the proxy actually runs with.
+      await reload();
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const testAll = async () => {
+    setTestingAll(true);
+    try {
+      const result = await request<{
+        results: Array<{ id: string; ok: boolean; error?: string; status: number }>;
+        healthChanged?: boolean;
+      }>('/test-all', { method: 'POST' });
+      const healthy = result.results.filter((entry) => entry.ok).length;
+      if (healthy === result.results.length) {
+        toast.success(`All ${result.results.length} relays healthy`);
+      } else {
+        toast.warning(
+          `${result.results.length - healthy} of ${result.results.length} relays failed their probe`
+        );
+      }
+      await reload();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setTestingAll(false);
+    }
+  };
+
   if (loading) {
     return (
       <div
@@ -364,6 +435,14 @@ export function RelayPage() {
     !token.trim() ||
     (platform === 'cloudflare' && !accountId.trim()) ||
     (platform === 'deno' && !orgDomain.trim());
+  const activeRelay = config.activeId
+    ? config.relays.find((relay) => relay.id === config.activeId)
+    : undefined;
+  const healthyRelays = config.relays.filter((relay) => relay.testStatus !== 'fail');
+  // Mirrors resolveRelayCandidates: 'none' pins to the active relay whether or
+  // not it was probed, rotation pools admit every relay not known-failed.
+  const poolSize = strategyDraft === 'none' ? (activeRelay ? 1 : 0) : healthyRelays.length;
+  const failClosed = strictDraft && poolSize === 0;
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-4 md:p-6">
@@ -380,8 +459,9 @@ export function RelayPage() {
               hiding your own IP address.
             </span>
             <span className="mt-1 block">
-              Deploying a relay activates it immediately — provider traffic routes through it right
-              away. Deleting the active relay turns relaying off and regenerates the proxy config.
+              Deploying a relay makes it the preferred relay — provider traffic routes through it
+              right away. Deleting a relay drops it from the rotation pool and regenerates the proxy
+              config.
             </span>
           </CardDescription>
         </CardHeader>
@@ -528,6 +608,102 @@ export function RelayPage() {
       <div role="status" aria-live="polite" className="sr-only">
         {busy || deploying ? 'Working on relay action…' : 'Relay page ready'}
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <Shuffle className="h-4 w-4" /> Rotation
+          </div>
+          <h2 className="text-xl font-semibold tracking-tight">Rotation &amp; health</h2>
+          <CardDescription className="max-w-2xl text-sm">
+            A rotation strategy cycles outbound traffic across every healthy relay instead of
+            pinning to one. Relays that fail a probe drop out of the pool until they pass again.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="relay-strategy">Strategy</Label>
+              <Select
+                value={strategyDraft}
+                onValueChange={(value) => setStrategyDraft(value as RelayStrategy)}
+              >
+                <SelectTrigger
+                  id="relay-strategy"
+                  aria-describedby="relay-strategy-hint"
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None — active relay only</SelectItem>
+                  <SelectItem value="round-robin">Round robin — rotate per request</SelectItem>
+                  <SelectItem value="random">Random — pick per request</SelectItem>
+                </SelectContent>
+              </Select>
+              <p id="relay-strategy-hint" className="text-xs text-muted-foreground">
+                {RELAY_STRATEGY_HINTS[strategyDraft]}
+              </p>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+              <div className="space-y-0.5">
+                <Label htmlFor="relay-strict">Strict (fail closed)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Error instead of quietly egressing from this machine when no relay is usable.
+                </p>
+              </div>
+              <Switch
+                id="relay-strict"
+                checked={strictDraft}
+                onCheckedChange={setStrictDraft}
+                disabled={settingsSaving}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              Pool: {poolSize} relay{poolSize === 1 ? '' : 's'} ({healthyRelays.length} of{' '}
+              {config.relays.length} healthy)
+            </span>
+            {Object.keys(config.providerRelayIds ?? {}).length > 0 && (
+              <span>
+                {Object.keys(config.providerRelayIds ?? {}).length} provider pin
+                {Object.keys(config.providerRelayIds ?? {}).length === 1 ? '' : 's'} (config only)
+              </span>
+            )}
+          </div>
+
+          {failClosed && (
+            <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              Strict is on but no relay would be used — outbound requests will fail until a relay is
+              deployed or passes its probe.
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => void saveRotation()}
+              disabled={settingsSaving || busy || deploying}
+            >
+              {settingsSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {settingsSaving ? 'Saving…' : 'Save rotation'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void testAll()}
+              disabled={testingAll || busy || deploying || config.relays.length === 0}
+            >
+              {testingAll ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Test all relays
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {config.relays.length === 0 ? (
         <div className="rounded-lg border border-dashed px-4 py-10 text-center">

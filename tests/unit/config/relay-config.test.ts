@@ -18,12 +18,29 @@ const RELAY_ENTRY = {
 
 describe('relay config schema', () => {
   it('provides defaults and a type guard', () => {
-    expect(DEFAULT_RELAY_CONFIG).toEqual({ relays: [], activeId: null });
+    expect(DEFAULT_RELAY_CONFIG).toEqual({
+      relays: [],
+      activeId: null,
+      strategy: 'none',
+      strict: false,
+      providerRelayIds: {},
+    });
     expect(isRelayConfig({ relays: [], activeId: null })).toBe(true);
     // activeId may be omitted in hand-edited sections (filled in by the merger)
     expect(isRelayConfig({ relays: [] })).toBe(true);
     expect(isRelayConfig({ relays: [], activeId: undefined })).toBe(true);
     expect(isRelayConfig('nope')).toBe(false);
+  });
+
+  it('rejects malformed rotation settings', () => {
+    const base = { relays: [], activeId: null };
+    expect(isRelayConfig({ ...base, strategy: 'fastest' })).toBe(false);
+    expect(isRelayConfig({ ...base, strategy: 'round-robin' })).toBe(true);
+    expect(isRelayConfig({ ...base, strict: 'yes' })).toBe(false);
+    expect(isRelayConfig({ ...base, strict: true })).toBe(true);
+    expect(isRelayConfig({ ...base, providerRelayIds: { claude: 7 } })).toBe(false);
+    expect(isRelayConfig({ ...base, providerRelayIds: ['claude'] })).toBe(false);
+    expect(isRelayConfig({ ...base, providerRelayIds: { claude: 'r1' } })).toBe(true);
   });
 
   it('rejects malformed relay entries', () => {
@@ -51,20 +68,38 @@ describe('relay config schema', () => {
   });
 
   it('preserves a relay section through mergeWithDefaults', () => {
-    const relay: RelayConfig = { relays: [{ ...RELAY_ENTRY }], activeId: 'r1' };
+    const relay: RelayConfig = {
+      relays: [{ ...RELAY_ENTRY }],
+      activeId: 'r1',
+      strategy: 'round-robin',
+      strict: true,
+      providerRelayIds: { claude: 'r1' },
+    };
     const merged = mergeWithDefaults({ version: UNIFIED_CONFIG_VERSION, relay });
     expect(merged.relay).toEqual(relay);
   });
 
-  it('fills in activeId when a hand-edited section omits it', () => {
+  it('fills in activeId and rotation settings when a hand-edited section omits them', () => {
     const handEdited = { relays: [{ ...RELAY_ENTRY }] } as unknown as RelayConfig;
     const merged = mergeWithDefaults({ version: UNIFIED_CONFIG_VERSION, relay: handEdited });
-    expect(merged.relay).toEqual({ relays: [{ ...RELAY_ENTRY }], activeId: null });
+    expect(merged.relay).toEqual({
+      relays: [{ ...RELAY_ENTRY }],
+      activeId: null,
+      strategy: 'none',
+      strict: false,
+      providerRelayIds: {},
+    });
   });
 
   it('round-trips a relay entry through yaml serialization', () => {
     const config = loadOrCreateUnifiedConfig();
-    const relay: RelayConfig = { relays: [{ ...RELAY_ENTRY }], activeId: 'r1' };
+    const relay: RelayConfig = {
+      relays: [{ ...RELAY_ENTRY }],
+      activeId: 'r1',
+      strategy: 'random',
+      strict: true,
+      providerRelayIds: { claude: 'r1' },
+    };
     (config as Record<string, unknown>).relay = relay;
     const reparsed = yaml.load(generateYamlWithComments(config)) as Record<string, unknown>;
     expect(reparsed.relay).toEqual(relay);

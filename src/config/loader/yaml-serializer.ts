@@ -238,11 +238,16 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
     lines.push('');
   }
 
-  // Relay section (deployed edge relays and active relay selection)
+  // Relay section (deployed edge relays and outbound relay selection)
   if (config.relay) {
     lines.push('# ----------------------------------------------------------------------------');
-    lines.push('# Relay: Edge relay (deployed workers) and the active relay for outbound traffic');
-    lines.push('# activeId selects the relay used for outbound requests (null = none).');
+    lines.push('# Relay: Edge relay (deployed workers) and outbound relay selection');
+    lines.push('# activeId selects the preferred relay; strategy rotates across the');
+    lines.push("# healthy pool ('none' = active relay only, 'round-robin', 'random').");
+    lines.push(
+      '# strict = true fails closed instead of egressing direct when no relay is healthy.'
+    );
+    lines.push('# providerRelayIds pins a relay per provider (provider name -> relay id).');
     lines.push('# ----------------------------------------------------------------------------');
     lines.push(
       yaml.dump({ relay: config.relay }, { indent: 2, lineWidth: -1, quotingType: '"' }).trim()

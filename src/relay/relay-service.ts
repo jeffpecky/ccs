@@ -63,6 +63,58 @@ export function getActiveRelayUrl(config: RelayConfig = getRelayConfig()): strin
   return relays.find((relay) => relay.id === activeId)?.url ?? null;
 }
 
+/**
+ * Ordered relay URL candidates for the proxy's outbound egress.
+ *
+ * `none` keeps the legacy single-relay behavior: only the active relay
+ * participates, so flipping the dashboard toggle is still a hard on/off. With a
+ * rotation strategy every relay that is not known-failed becomes a candidate,
+ * with the active relay first so it stays the preferred starting point.
+ *
+ * Health gating is deliberately one-directional: a relay last probed `fail` is
+ * excluded (retrying it on every request would just add latency), while an
+ * untested relay stays eligible because a freshly deployed worker has no probe
+ * history yet. When every relay has failed the list is empty — the caller then
+ * egresses direct, or fails closed when `strict` is set.
+ */
+export function resolveRelayCandidates(config: RelayConfig = getRelayConfig()): string[] {
+  const active = config.activeId
+    ? config.relays.find((relay) => relay.id === config.activeId)
+    : undefined;
+
+  // A section written before rotation existed (or by a hand-edit the merger
+  // has not seen yet) has no strategy; treat it as the legacy single-relay mode
+  // rather than quietly rotating.
+  if ((config.strategy ?? 'none') === 'none') {
+    return active ? [active.url] : [];
+  }
+
+  const healthy = config.relays.filter((relay) => relay.testStatus !== 'fail');
+  const ordered =
+    active && healthy.includes(active)
+      ? [active, ...healthy.filter((relay) => relay !== active)]
+      : healthy;
+  return ordered.map((relay) => relay.url);
+}
+
+/**
+ * Per-provider relay URL overrides for the proxy config.
+ *
+ * Only pins that still resolve to a deployed relay are emitted; a pin left
+ * behind by a relay deletion is dropped rather than forwarded as a dangling
+ * id (the Go side reads URLs, not ids).
+ */
+export function resolveProviderRelayUrls(
+  config: RelayConfig = getRelayConfig()
+): Record<string, string> {
+  const urls: Record<string, string> = {};
+  for (const [provider, relayId] of Object.entries(config.providerRelayIds ?? {})) {
+    const relay = config.relays.find((entry) => entry.id === relayId);
+    if (relay) urls[provider] = relay.url;
+  }
+  return urls;
+}
+
 /** Create a fresh relay entry for a just-completed deployment. */
 export function createRelayEntry(platform: RelayPlatform, name: string, url: string): RelayEntry {
   return {

@@ -112,6 +112,14 @@ function post(baseUrl: string, path: string, body: unknown): Promise<Response> {
   });
 }
 
+function patch(baseUrl: string, path: string, body: unknown): Promise<Response> {
+  return fetch(`${baseUrl}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
 describe('Relay routes', () => {
   it('enforces the localhost access gate', async () => {
     const app = await setup({ access: false });
@@ -125,7 +133,7 @@ describe('Relay routes', () => {
     const app = await setup();
     const response = await fetch(app.baseUrl);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ relays: [], activeId: null });
+    expect(await response.json()).toEqual(DEFAULT_RELAY_CONFIG);
   });
 
   it('validates deploy inputs before calling the platform client', async () => {
@@ -354,11 +362,12 @@ describe('Relay routes', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       success: true,
-      config: { relays: [], activeId: null },
+      // Deleting also drops the pins map the handler now always writes.
+      config: { relays: [], activeId: null, providerRelayIds: {} },
     });
     expect(app.regenerations()).toBe(1);
     expect(app.order).toEqual(['save', 'regenerate']);
-    expect(app.currentConfig()).toEqual({ relays: [], activeId: null });
+    expect(app.currentConfig()).toEqual({ relays: [], activeId: null, providerRelayIds: {} });
   });
 
   it('reverts the unified config when active-relay deletion fails to regenerate', async () => {
@@ -382,11 +391,15 @@ describe('Relay routes', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       success: true,
-      config: { relays: [makeRelay('r1')], activeId: 'r1' },
+      config: { relays: [makeRelay('r1')], activeId: 'r1', providerRelayIds: {} },
     });
     expect(app.regenerations()).toBe(0);
     expect(app.order).toEqual(['save']);
-    expect(app.currentConfig()).toEqual({ relays: [makeRelay('r1')], activeId: 'r1' });
+    expect(app.currentConfig()).toEqual({
+      relays: [makeRelay('r1')],
+      activeId: 'r1',
+      providerRelayIds: {},
+    });
   });
 
   it('responds 500 instead of hanging when the config read fails during deletion', async () => {
@@ -399,6 +412,123 @@ describe('Relay routes', () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
       error: 'Failed to delete relay: broken config.yaml',
+    });
+  });
+
+  describe('rotation settings', () => {
+    it('persists strategy and strict, then regenerates once', async () => {
+      const app = await setup({ config: { relays: [makeRelay('r1')], activeId: 'r1' } });
+      const response = await patch(app.baseUrl, '', { strategy: 'round-robin', strict: true });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { success: boolean; config: RelayConfig };
+      expect(body.success).toBe(true);
+      expect(body.config.strategy).toBe('round-robin');
+      expect(body.config.strict).toBe(true);
+      // Both keys reach config.yaml, so exactly one regeneration follows the save.
+      expect(app.order).toEqual(['save', 'regenerate']);
+      expect(app.currentConfig().strategy).toBe('round-robin');
+      expect(app.currentConfig().strict).toBe(true);
+    });
+
+    it('rejects an unknown strategy without writing anything', async () => {
+      const app = await setup({ config: { relays: [makeRelay('r1')], activeId: 'r1' } });
+      const response = await patch(app.baseUrl, '', { strategy: 'fastest' });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        errors: ['strategy must be one of: none, round-robin, random'],
+      });
+      expect(app.order).toEqual([]);
+    });
+
+    it('rejects an update that carries no settings', async () => {
+      const app = await setup();
+      const response = await patch(app.baseUrl, '', {});
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ errors: ['no relay settings provided'] });
+      expect(app.order).toEqual([]);
+    });
+
+    it('404s when the preferred relay does not exist', async () => {
+      const app = await setup({ config: { relays: [makeRelay('r1')], activeId: 'r1' } });
+      const response = await patch(app.baseUrl, '', { activeId: 'ghost' });
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: 'Relay not found' });
+      expect(app.order).toEqual([]);
+    });
+
+    it('400s when a provider pin references an unknown relay', async () => {
+      const app = await setup({ config: { relays: [makeRelay('r1')], activeId: 'r1' } });
+      const response = await patch(app.baseUrl, '', { providerRelayIds: { claude: 'ghost' } });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: 'providerRelayIds references unknown relays for: claude',
+      });
+      expect(app.order).toEqual([]);
+    });
+
+    it('reverts the saved config when regeneration fails', async () => {
+      const previous = { relays: [makeRelay('r1')], activeId: 'r1' };
+      const app = await setup({
+        config: previous,
+        regenerate: () => {
+          throw new Error('generation failed');
+        },
+      });
+      const response = await patch(app.baseUrl, '', { strategy: 'random' });
+      expect(response.status).toBe(500);
+      // The unified config is rolled back so the dashboard cannot show a
+      // rotation setting the proxy never received.
+      expect(app.currentConfig().strategy).toBeUndefined();
+      expect(app.currentConfig().relays).toEqual(previous.relays);
+    });
+  });
+
+  describe('health sweep', () => {
+    it('probes every relay, records the results, and pushes the new pool', async () => {
+      const app = await setup({
+        config: { relays: [makeRelay('r1'), makeRelay('r2')], activeId: 'r1' },
+        test: async (url) =>
+          url.includes('r1')
+            ? { ok: true, status: 200, elapsedMs: 1 }
+            : { ok: false, status: 502, error: 'dead', elapsedMs: 2 },
+      });
+
+      const response = await post(app.baseUrl, '/test-all', {});
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        results: Array<{ id: string; ok: boolean }>;
+        healthChanged: boolean;
+      };
+      expect(body.results.map((entry) => entry.id)).toEqual(['r1', 'r2']);
+      expect(body.healthChanged).toBe(true);
+
+      const relays = app.currentConfig().relays;
+      expect(relays.find((entry) => entry.id === 'r1')?.testStatus).toBe('ok');
+      expect(relays.find((entry) => entry.id === 'r2')?.testStatus).toBe('fail');
+      expect(relays.find((entry) => entry.id === 'r2')?.lastError).toBe('dead');
+      // Membership changed, so the pool written to config.yaml has to follow.
+      expect(app.regenerations()).toBe(1);
+    });
+
+    it('does not regenerate when every status is unchanged', async () => {
+      const app = await setup({
+        config: { relays: [{ ...makeRelay('r1'), testStatus: 'ok' }], activeId: 'r1' },
+        test: async () => ({ ok: true, status: 200, elapsedMs: 1 }),
+      });
+
+      const response = await post(app.baseUrl, '/test-all', {});
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as { healthChanged: boolean }).healthChanged).toBe(false);
+      expect(app.regenerations()).toBe(0);
+      expect(app.order).toEqual(['update']);
+    });
+
+    it('answers an empty sweep without touching the config', async () => {
+      const app = await setup();
+      const response = await post(app.baseUrl, '/test-all', {});
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ results: [], healthChanged: false });
+      expect(app.order).toEqual([]);
     });
   });
 });

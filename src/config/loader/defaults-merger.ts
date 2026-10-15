@@ -26,6 +26,7 @@ import {
   DEFAULT_DASHBOARD_AUTH_CONFIG,
   DEFAULT_LOGGING_CONFIG,
   DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG,
+  DEFAULT_RELAY_CONFIG,
   isRelayConfig,
 } from '../unified-config-types';
 import type { UnifiedConfig } from '../unified-config-types';
@@ -332,6 +333,9 @@ export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfi
     merged.relay = {
       relays: partial.relay.relays,
       activeId: partial.relay.activeId ?? null,
+      strategy: partial.relay.strategy ?? DEFAULT_RELAY_CONFIG.strategy,
+      strict: partial.relay.strict ?? DEFAULT_RELAY_CONFIG.strict,
+      providerRelayIds: partial.relay.providerRelayIds ?? {},
     };
   }
 

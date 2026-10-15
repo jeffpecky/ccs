@@ -15,7 +15,11 @@ import { getDeniedModelIdReasonForProvider } from '../ai-providers/model-id-norm
 import { getAuthDir, getProviderAuthDir, getConfigPathForPort } from './path-resolver';
 import { CLIPROXY_DEFAULT_PORT } from './port-manager';
 import { loadOrCreateUnifiedConfig } from '../../config/config-loader-facade';
-import { getActiveRelayUrl } from '../../relay/relay-service';
+import {
+  getRelayConfig,
+  resolveProviderRelayUrls,
+  resolveRelayCandidates,
+} from '../../relay/relay-service';
 import { getActiveDockerLegacyApiKeys } from '../../docker/docker-key-rotation';
 import type { CLIProxyTokenSaverConfig } from '../../config/unified-config-types';
 
@@ -53,8 +57,11 @@ export const CCS_CONTROL_PANEL_SECRET = 'mgmt-f078070e88eadc04ff2688da7797b8be';
  *      coerce caveman/ponytail levels to the upstream lite|full|ultra enum
  *      (unknown levels silently inject nothing upstream)
  * v23: Emit relay-url (active edge relay egress URL; empty = direct)
+ * v24: Emit relay-urls (health-gated rotation pool), relay-strategy,
+ *      relay-strict (fail closed when no relay is healthy), and
+ *      relay-provider-urls (per-provider pin overrides)
  */
-export const CLIPROXY_CONFIG_VERSION = 23;
+export const CLIPROXY_CONFIG_VERSION = 24;
 
 export const ORIGINAL_MANAGEMENT_PANEL_REPOSITORY =
   'https://github.com/router-for-me/Cli-Proxy-API-Management-Center';
@@ -299,12 +306,41 @@ function generateTokenSaverBlock(override?: CLIProxyTokenSaverConfig): string {
 }
 
 function generateRelayBlock(): string {
-  // Active relay URL flows from the dashboard toggle into the proxy config.
-  // Hot-reload takes effect once CLIProxyAPIPlus gains the relay-url key
-  // on the Go side and watches it via fsnotify.
-  const url = getActiveRelayUrl() ?? '';
-  return `# Edge relay egress URL (managed by the CCS dashboard; empty = direct).
-relay-url: ${quoteYamlString(url)}`;
+  // Relay selection flows from the dashboard into the proxy config. The Go
+  // side prefers relay-urls over the legacy relay-url when both are present,
+  // so relay-url stays as the single-candidate fallback for older binaries and
+  // for configs whose rotation pool is empty.
+  const config = getRelayConfig();
+  const activeId = config.activeId ?? null;
+  const activeUrl =
+    (activeId ? (config.relays.find((relay) => relay.id === activeId)?.url ?? null) : null) ?? '';
+  const candidates = resolveRelayCandidates(config);
+  const providerUrls = Object.entries(resolveProviderRelayUrls(config)).sort(([a], [b]) =>
+    a.localeCompare(b)
+  );
+
+  const lines = [
+    '# Edge relay egress (managed by the CCS dashboard; empty = direct).',
+    `relay-url: ${quoteYamlString(activeUrl || candidates[0] || '')}`,
+  ];
+  if (candidates.length > 0) {
+    lines.push(`relay-urls: [${candidates.map(quoteYamlString).join(', ')}]`);
+  }
+  if (config.strategy && config.strategy !== 'none') {
+    lines.push(`relay-strategy: ${quoteYamlString(config.strategy)}`);
+  }
+  if (config.strict) {
+    // Written even with no candidates: fail-closed is exactly the case where
+    // the pool is empty and direct egress must not happen.
+    lines.push('relay-strict: true');
+  }
+  if (providerUrls.length > 0) {
+    lines.push('relay-provider-urls:');
+    for (const [provider, url] of providerUrls) {
+      lines.push(`  ${quoteYamlString(provider)}: ${quoteYamlString(url)}`);
+    }
+  }
+  return lines.join('\n');
 }
 
 function normalizeManagementPanelRepository(value: unknown): string | undefined {

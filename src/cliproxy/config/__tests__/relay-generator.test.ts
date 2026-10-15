@@ -37,6 +37,9 @@ describe('relay-url generation', () => {
           },
         ],
         activeId: 'r1',
+        strategy: 'none',
+        strict: false,
+        providerRelayIds: {},
       };
     });
 
@@ -47,17 +50,24 @@ describe('relay-url generation', () => {
     // Parse-based: a commented-out `# relay-url:` line must not satisfy this.
     const parsed = load(yaml) as Record<string, unknown>;
     expect(parsed['relay-url']).toBe('https://my.workers.dev');
+    expect(parsed['relay-urls']).toEqual(['https://my.workers.dev']);
     // Placement: Server Settings, right after the token-saver block and
     // before the Logging section.
     expect(yaml.indexOf('relay-url:')).toBeGreaterThan(yaml.indexOf('token-saver:'));
     expect(yaml.indexOf('relay-url:')).toBeLessThan(yaml.indexOf('# Logging'));
     // Mirrors the >21 guard in token-saver-generator.test.ts.
-    expect(CLIPROXY_CONFIG_VERSION).toBe(23);
+    expect(CLIPROXY_CONFIG_VERSION).toBe(24);
   });
 
   it('emits an empty relay-url when no relay is active', () => {
     mutateConfig((config) => {
-      config.relay = { relays: [], activeId: null };
+      config.relay = {
+        relays: [],
+        activeId: null,
+        strategy: 'none',
+        strict: false,
+        providerRelayIds: {},
+      };
     });
 
     const configPath = path.join(home, 'runtime.yaml');
@@ -75,7 +85,13 @@ describe('relay-url generation', () => {
     // Dangling activeId (e.g. relay deleted after activation) must degrade
     // to empty, never a phantom URL — exercises relay-service's `?? null`.
     mutateConfig((config) => {
-      config.relay = { relays: [], activeId: 'ghost' };
+      config.relay = {
+        relays: [],
+        activeId: 'ghost',
+        strategy: 'none',
+        strict: false,
+        providerRelayIds: {},
+      };
     });
 
     const configPath = path.join(home, 'runtime.yaml');

@@ -2,8 +2,14 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import * as http from 'http';
 import type { AddressInfo } from 'net';
 
-import type { RelayEntry } from '../../../src/config/schemas/relay';
-import { getActiveRelayUrl, testRelay } from '../../../src/relay/relay-service';
+import type { RelayConfig, RelayEntry } from '../../../src/config/schemas/relay';
+import { DEFAULT_RELAY_CONFIG } from '../../../src/config/schemas/relay';
+import {
+  getActiveRelayUrl,
+  resolveProviderRelayUrls,
+  resolveRelayCandidates,
+  testRelay,
+} from '../../../src/relay/relay-service';
 
 const servers: http.Server[] = [];
 
@@ -33,26 +39,126 @@ function makeRelay(id: string, url: string): RelayEntry {
   };
 }
 
+/** Relay section with the schema defaults filled in, plus overrides. */
+function makeConfig(overrides: Partial<RelayConfig>): RelayConfig {
+  return { ...DEFAULT_RELAY_CONFIG, ...overrides };
+}
+
 describe('getActiveRelayUrl', () => {
   it('returns null when no relay is active', () => {
-    const config = { relays: [makeRelay('r1', 'https://r1.example.test')], activeId: null };
+    const config = makeConfig({ relays: [makeRelay('r1', 'https://r1.example.test')] });
     expect(getActiveRelayUrl(config)).toBeNull();
   });
 
   it('returns null when the active relay is missing from the list', () => {
-    const config = { relays: [], activeId: 'ghost' };
+    const config = makeConfig({ activeId: 'ghost' });
     expect(getActiveRelayUrl(config)).toBeNull();
   });
 
   it('returns the URL of the active relay', () => {
-    const config = {
+    const config = makeConfig({
       relays: [
         makeRelay('r1', 'https://r1.example.test'),
         makeRelay('r2', 'https://r2.example.test'),
       ],
       activeId: 'r2',
-    };
+    });
     expect(getActiveRelayUrl(config)).toBe('https://r2.example.test');
+  });
+});
+
+describe('resolveRelayCandidates', () => {
+  it('uses only the active relay when strategy is none', () => {
+    const config = makeConfig({
+      relays: [
+        makeRelay('r1', 'https://r1.example.test'),
+        { ...makeRelay('r2', 'https://r2.example.test'), testStatus: 'ok' },
+      ],
+      activeId: 'r1',
+      strategy: 'none',
+    });
+    expect(resolveRelayCandidates(config)).toEqual(['https://r1.example.test']);
+  });
+
+  it('resolves nothing with strategy none and no active relay', () => {
+    const config = makeConfig({
+      relays: [makeRelay('r1', 'https://r1.example.test')],
+      activeId: null,
+      strategy: 'none',
+    });
+    expect(resolveRelayCandidates(config)).toEqual([]);
+  });
+
+  it('keeps the active relay in the pool even when its probe failed', () => {
+    // 'none' deliberately ignores health: routing to a known-dead relay fails
+    // loudly instead of silently falling back to this machine's IP.
+    const config = makeConfig({
+      relays: [{ ...makeRelay('r1', 'https://r1.example.test'), testStatus: 'fail' }],
+      activeId: 'r1',
+      strategy: 'none',
+    });
+    expect(resolveRelayCandidates(config)).toEqual(['https://r1.example.test']);
+  });
+
+  it('rotates across every healthy relay with the active one first', () => {
+    const config = makeConfig({
+      relays: [
+        { ...makeRelay('dead', 'https://dead.example.test'), testStatus: 'fail' },
+        { ...makeRelay('fresh', 'https://fresh.example.test'), testStatus: 'ok' },
+        makeRelay('r2', 'https://r2.example.test'),
+        { ...makeRelay('active', 'https://active.example.test'), testStatus: 'ok' },
+      ],
+      activeId: 'active',
+      strategy: 'round-robin',
+    });
+    expect(resolveRelayCandidates(config)).toEqual([
+      'https://active.example.test',
+      'https://fresh.example.test',
+      'https://r2.example.test',
+    ]);
+  });
+
+  it('rotates over healthy relays even when none is active', () => {
+    const config = makeConfig({
+      relays: [
+        makeRelay('r1', 'https://r1.example.test'),
+        { ...makeRelay('dead', 'https://dead.example.test'), testStatus: 'fail' },
+      ],
+      activeId: null,
+      strategy: 'random',
+    });
+    expect(resolveRelayCandidates(config)).toEqual(['https://r1.example.test']);
+  });
+
+  it('resolves nothing when every relay has failed', () => {
+    const config = makeConfig({
+      relays: [{ ...makeRelay('r1', 'https://r1.example.test'), testStatus: 'fail' }],
+      activeId: 'r1',
+      strategy: 'round-robin',
+    });
+    expect(resolveRelayCandidates(config)).toEqual([]);
+  });
+});
+
+describe('resolveProviderRelayUrls', () => {
+  it('maps pinned providers to deployed relay URLs', () => {
+    const config = makeConfig({
+      relays: [
+        makeRelay('r1', 'https://r1.example.test'),
+        makeRelay('r2', 'https://r2.example.test'),
+      ],
+      activeId: 'r1',
+      providerRelayIds: { claude: 'r2' },
+    });
+    expect(resolveProviderRelayUrls(config)).toEqual({ claude: 'https://r2.example.test' });
+  });
+
+  it('drops pins whose relay no longer exists', () => {
+    const config = makeConfig({
+      relays: [makeRelay('r1', 'https://r1.example.test')],
+      providerRelayIds: { claude: 'r1', codex: 'ghost' },
+    });
+    expect(resolveProviderRelayUrls(config)).toEqual({ claude: 'https://r1.example.test' });
   });
 });
 
