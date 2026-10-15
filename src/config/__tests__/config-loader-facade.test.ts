@@ -90,7 +90,10 @@ describe('config-loader-facade', () => {
       expect(typeof facade.getContinuityInheritanceMap).toBe('function');
       expect(typeof facade.getCliproxySafetyConfig).toBe('function');
       expect(typeof facade.getThinkingConfig).toBe('function');
-      expect(typeof facade.getOfficialChannelsConfig).toBe('function');
+      // NOTE: `getOfficialChannelsConfig` was removed from this list — the
+      // Official Channels feature is intentionally not shipped in this fork
+      // (implementation stripped in 28fe9b08/55b029ef). Re-add if a future
+      // upstream merge reintroduces the channels schema + facade getter.
       expect(typeof facade.isDashboardAuthEnabled).toBe('function');
       expect(typeof facade.getDashboardAuthConfig).toBe('function');
       expect(typeof facade.getBrowserConfig).toBe('function');

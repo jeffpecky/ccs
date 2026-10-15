@@ -41,8 +41,6 @@ import type {
   ThinkingMode,
   ThinkingTierDefaults,
   ThinkingConfig,
-  OfficialChannelId,
-  OfficialChannelsConfig,
   BrowserToolPolicy,
   BrowserEvalMode,
   BrowserClaudeConfig,
@@ -82,10 +80,13 @@ describe('config schemas backward compatibility', () => {
   // -------------------------------------------------------------------------
   // Default constants
   // -------------------------------------------------------------------------
+  // NOTE: 'DEFAULT_OFFICIAL_CHANNELS_CONFIG' was removed from this list: the
+  // Official Channels feature is intentionally not shipped in this fork
+  // (stripped in 28fe9b08/55b029ef). Re-add if a future upstream merge
+  // reintroduces the channels schema.
   const defaultConstants = [
     'DEFAULT_CLIPROXY_SAFETY_CONFIG',
     'DEFAULT_LOGGING_CONFIG',
-    'DEFAULT_OFFICIAL_CHANNELS_CONFIG',
     'DEFAULT_BROWSER_CONFIG',
     'DEFAULT_DASHBOARD_AUTH_CONFIG',
     'DEFAULT_AUTO_QUOTA_CONFIG',
@@ -129,7 +130,8 @@ describe('config schemas backward compatibility', () => {
     expect(config.quota_management).toBeDefined();
     expect(config.thinking).toBeDefined();
     expect(config.relay).toBeDefined();
-    expect(config.channels).toBeDefined();
+    // Official Channels intentionally not shipped in this fork — upstream's
+    // `expect(config.channels).toBeDefined()` assertion removed (28fe9b08/55b029ef).
     expect(config.dashboard_auth).toBeDefined();
     expect(config.copilot).toBeDefined();
     expect(config.cursor).toBeDefined();
@@ -161,7 +163,6 @@ describe('config schemas backward compatibility', () => {
     'isRelayConfig',
     'DEFAULT_CLIPROXY_SAFETY_CONFIG',
     'DEFAULT_LOGGING_CONFIG',
-    'DEFAULT_OFFICIAL_CHANNELS_CONFIG',
     'DEFAULT_BROWSER_CONFIG',
     'DEFAULT_DASHBOARD_AUTH_CONFIG',
     'DEFAULT_AUTO_QUOTA_CONFIG',
