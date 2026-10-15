@@ -29,7 +29,7 @@ import {
   isRelayConfig,
 } from '../unified-config-types';
 import type { UnifiedConfig } from '../unified-config-types';
-import { canonicalizeBrowserConfig, normalizeSessionAffinityTtl } from './normalizers';
+import { normalizeSessionAffinityTtl } from './normalizers';
 import { normalizeContinuityConfig } from './normalizers';
 
 // ---------------------------------------------------------------------------
@@ -324,7 +324,6 @@ export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfi
         partial.dashboard_auth?.session_timeout_hours ??
         DEFAULT_DASHBOARD_AUTH_CONFIG.session_timeout_hours,
     },
-    browser: canonicalizeBrowserConfig(partial.browser),
   };
 
   // Relay config - only preserved when present so existing configs without the

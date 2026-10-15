@@ -12,12 +12,10 @@ import type { ProfileType } from '../types/profile';
 import {
   escapeShellArg,
   getWindowsEscapedCommandShell,
-  stripBrowserEnv,
   stripAnthropicEnv,
   stripClaudeCodeEnv,
 } from '../utils/shell-executor';
 import { ErrorManager } from '../utils/error-manager';
-import { appendBrowserToolArgs } from '../utils/browser';
 import { wireChildProcessSignals } from '../utils/signal-forwarder';
 import { runCleanup } from '../errors';
 import { createLogger } from '../services/logging';
@@ -41,16 +39,8 @@ export class ClaudeAdapter implements TargetAdapter {
     // No-op: Claude receives credentials via environment variables
   }
 
-  buildArgs(
-    _profile: string,
-    userArgs: string[],
-    options?: {
-      creds?: TargetCredentials;
-      profileType?: ProfileType;
-      binaryInfo?: TargetBinaryInfo;
-    }
-  ): string[] {
-    return options?.creds?.browserRuntimeEnv ? appendBrowserToolArgs(userArgs) : userArgs;
+  buildArgs(_profile: string, userArgs: string[]): string[] {
+    return userArgs;
   }
 
   buildEnv(creds: TargetCredentials, profileType: ProfileType): NodeJS.ProcessEnv {
@@ -61,13 +51,10 @@ export class ClaudeAdapter implements TargetAdapter {
         ? stripAnthropicEnv(process.env)
         : process.env;
 
-    const env: NodeJS.ProcessEnv = { ...stripBrowserEnv(baseEnv) };
+    const env: NodeJS.ProcessEnv = { ...baseEnv };
 
     if (creds.envVars) {
-      Object.assign(env, stripBrowserEnv(creds.envVars));
-    }
-    if (creds.browserRuntimeEnv) {
-      Object.assign(env, creds.browserRuntimeEnv);
+      Object.assign(env, creds.envVars);
     }
 
     if (creds.baseUrl) env['ANTHROPIC_BASE_URL'] = creds.baseUrl;

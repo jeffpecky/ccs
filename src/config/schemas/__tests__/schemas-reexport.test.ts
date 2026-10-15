@@ -41,11 +41,6 @@ import type {
   ThinkingMode,
   ThinkingTierDefaults,
   ThinkingConfig,
-  BrowserToolPolicy,
-  BrowserEvalMode,
-  BrowserClaudeConfig,
-  BrowserCodexConfig,
-  BrowserConfig,
   LoggingLevel,
   LoggingConfig,
   PreferencesConfig,
@@ -87,7 +82,6 @@ describe('config schemas backward compatibility', () => {
   const defaultConstants = [
     'DEFAULT_CLIPROXY_SAFETY_CONFIG',
     'DEFAULT_LOGGING_CONFIG',
-    'DEFAULT_BROWSER_CONFIG',
     'DEFAULT_DASHBOARD_AUTH_CONFIG',
     'DEFAULT_AUTO_QUOTA_CONFIG',
     'DEFAULT_MANUAL_QUOTA_CONFIG',
@@ -126,7 +120,6 @@ describe('config schemas backward compatibility', () => {
     expect(config.cliproxy.variants).toEqual({});
     expect(config.logging).toBeDefined();
     expect(config.preferences).toBeDefined();
-    expect(config.browser).toBeDefined();
     expect(config.quota_management).toBeDefined();
     expect(config.thinking).toBeDefined();
     expect(config.relay).toBeDefined();
@@ -163,7 +156,6 @@ describe('config schemas backward compatibility', () => {
     'isRelayConfig',
     'DEFAULT_CLIPROXY_SAFETY_CONFIG',
     'DEFAULT_LOGGING_CONFIG',
-    'DEFAULT_BROWSER_CONFIG',
     'DEFAULT_DASHBOARD_AUTH_CONFIG',
     'DEFAULT_AUTO_QUOTA_CONFIG',
     'DEFAULT_MANUAL_QUOTA_CONFIG',

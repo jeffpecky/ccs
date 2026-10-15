@@ -98,49 +98,7 @@ describe('ClaudeAdapter', () => {
     expect(env['ANTHROPIC_MODEL']).toBe('claude-opus-4-6');
   });
 
-  it('should append browser steering prompt when browser runtime env exists', () => {
-    const args = adapter.buildArgs('gemini', ['-p', 'hello', '--verbose'], {
-      creds: {
-        profile: 'gemini',
-        baseUrl: 'https://api.example.com',
-        apiKey: 'test-key',
-        browserRuntimeEnv: {
-          CCS_BROWSER_USER_DATA_DIR: '/tmp/chrome',
-          CCS_BROWSER_DEVTOOLS_HOST: '127.0.0.1',
-          CCS_BROWSER_DEVTOOLS_PORT: '9222',
-          CCS_BROWSER_DEVTOOLS_HTTP_URL: 'http://127.0.0.1:9222',
-          CCS_BROWSER_DEVTOOLS_WS_URL: 'ws://127.0.0.1/devtools/browser/test',
-        },
-      },
-      profileType: 'settings',
-    });
-
-    expect(args).toContain('--append-system-prompt');
-    expect(args.join(' ')).toContain('prefer the CCS MCP Browser tool');
-  });
-
-  it('should merge browser runtime env into Claude launch env', () => {
-    const env = adapter.buildEnv(
-      {
-        profile: 'gemini',
-        baseUrl: 'https://api.example.com',
-        apiKey: 'test-key',
-        browserRuntimeEnv: {
-          CCS_BROWSER_USER_DATA_DIR: '/tmp/chrome',
-          CCS_BROWSER_DEVTOOLS_HOST: '127.0.0.1',
-          CCS_BROWSER_DEVTOOLS_PORT: '9222',
-          CCS_BROWSER_DEVTOOLS_HTTP_URL: 'http://127.0.0.1:9222',
-          CCS_BROWSER_DEVTOOLS_WS_URL: 'ws://127.0.0.1/devtools/browser/test',
-        },
-      },
-      'settings'
-    );
-
-    expect(env['CCS_BROWSER_USER_DATA_DIR']).toBe('/tmp/chrome');
-    expect(env['CCS_BROWSER_DEVTOOLS_WS_URL']).toBe('ws://127.0.0.1/devtools/browser/test');
-  });
-
-  it('should pass through args unchanged when browser runtime env is absent', () => {
+  it('should pass through args unchanged', () => {
     const args = adapter.buildArgs('gemini', ['-p', 'hello', '--verbose']);
     expect(args).toEqual(['-p', 'hello', '--verbose']);
   });

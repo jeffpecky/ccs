@@ -37,8 +37,6 @@ import type { ThinkingConfig } from './thinking';
 import { DEFAULT_THINKING_CONFIG } from './thinking';
 import type { RelayConfig } from './relay';
 import { DEFAULT_RELAY_CONFIG } from './relay';
-import type { BrowserConfig } from './browser';
-import { DEFAULT_BROWSER_CONFIG } from './browser';
 
 /**
  * Main unified configuration structure.
@@ -81,8 +79,6 @@ export interface UnifiedConfig {
   dashboard_auth?: DashboardAuthConfig;
   /** Edge relay configuration (optional) */
   relay?: RelayConfig;
-  /** Browser automation configuration */
-  browser?: BrowserConfig;
 }
 
 /**
@@ -136,10 +132,6 @@ export function createEmptyUnifiedConfig(): UnifiedConfig {
     thinking: { ...DEFAULT_THINKING_CONFIG },
     dashboard_auth: { ...DEFAULT_DASHBOARD_AUTH_CONFIG },
     relay: structuredClone(DEFAULT_RELAY_CONFIG),
-    browser: {
-      claude: { ...DEFAULT_BROWSER_CONFIG.claude },
-      codex: { ...DEFAULT_BROWSER_CONFIG.codex },
-    },
   };
 }
 

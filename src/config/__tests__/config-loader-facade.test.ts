@@ -96,7 +96,6 @@ describe('config-loader-facade', () => {
       // upstream merge reintroduces the channels schema + facade getter.
       expect(typeof facade.isDashboardAuthEnabled).toBe('function');
       expect(typeof facade.getDashboardAuthConfig).toBe('function');
-      expect(typeof facade.getBrowserConfig).toBe('function');
       expect(typeof facade.getLoggingConfig).toBe('function');
       expect(typeof facade.getCursorConfig).toBe('function');
     });

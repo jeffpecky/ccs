@@ -38,7 +38,6 @@ export {
   getRelayConfig,
   isDashboardAuthEnabled,
   getDashboardAuthConfig,
-  getBrowserConfig,
   getLoggingConfig,
   getCursorConfig,
 } from './unified-config-loader';

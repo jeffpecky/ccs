@@ -4,77 +4,13 @@
  * Input normalization and validation helpers extracted from
  * unified-config-loader.ts (Phase 2 split — issue #1164).
  *
- * Contains: browser config normalizers, session affinity TTL normalizer,
- * composite variant validator, and continuity config normalizer.
+ * Contains: session affinity TTL normalizer, composite variant validator, and
+ * continuity config normalizer.
  */
 
-import { DEFAULT_BROWSER_CONFIG } from '../unified-config-types';
-import type {
-  UnifiedConfig,
-  BrowserConfig,
-  BrowserEvalMode,
-  BrowserToolPolicy,
-  ContinuityConfig,
-} from '../unified-config-types';
+import type { UnifiedConfig, ContinuityConfig } from '../unified-config-types';
 import { validateCompositeTiers } from '../../cliproxy/config/composite-validator';
-import { getRecommendedBrowserUserDataDir } from '../../utils/browser/browser-settings';
 import { GO_DURATION_PATTERN, GO_DURATION_SEGMENT } from './io-locks';
-
-// ---------------------------------------------------------------------------
-// Browser normalizers
-// ---------------------------------------------------------------------------
-
-export function normalizeBrowserDevtoolsPort(value: number | undefined): number {
-  if (!Number.isFinite(value)) {
-    return DEFAULT_BROWSER_CONFIG.claude.devtools_port;
-  }
-
-  const port = Math.floor(value as number);
-  if (port < 1 || port > 65535) {
-    return DEFAULT_BROWSER_CONFIG.claude.devtools_port;
-  }
-
-  return port;
-}
-
-export function normalizeBrowserPolicy(value: string | undefined): BrowserToolPolicy {
-  return value === 'auto' || value === 'manual' ? value : DEFAULT_BROWSER_CONFIG.claude.policy;
-}
-
-export function normalizeBrowserEvalMode(value: string | undefined): BrowserEvalMode {
-  if (value === 'disabled' || value === 'readonly' || value === 'readwrite') {
-    return value;
-  }
-
-  return DEFAULT_BROWSER_CONFIG.claude.eval_mode ?? 'readonly';
-}
-
-export function canonicalizeBrowserConfig(
-  config?: BrowserConfig,
-  fallback: BrowserConfig = DEFAULT_BROWSER_CONFIG
-): BrowserConfig {
-  const claudeUserDataDir =
-    config?.claude?.user_data_dir === undefined
-      ? fallback.claude.user_data_dir || getRecommendedBrowserUserDataDir()
-      : config.claude.user_data_dir.trim() || getRecommendedBrowserUserDataDir();
-
-  return {
-    claude: {
-      enabled: config?.claude?.enabled ?? fallback.claude.enabled,
-      policy: normalizeBrowserPolicy(config?.claude?.policy ?? fallback.claude.policy),
-      user_data_dir: claudeUserDataDir,
-      devtools_port: normalizeBrowserDevtoolsPort(
-        config?.claude?.devtools_port ?? fallback.claude.devtools_port
-      ),
-      eval_mode: normalizeBrowserEvalMode(config?.claude?.eval_mode ?? fallback.claude.eval_mode),
-    },
-    codex: {
-      enabled: config?.codex?.enabled ?? fallback.codex.enabled,
-      policy: normalizeBrowserPolicy(config?.codex?.policy ?? fallback.codex.policy),
-      eval_mode: normalizeBrowserEvalMode(config?.codex?.eval_mode ?? fallback.codex.eval_mode),
-    },
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Session affinity TTL normalizer

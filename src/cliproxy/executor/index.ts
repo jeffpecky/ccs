@@ -28,7 +28,6 @@ import { HttpsTunnelProxy } from '../proxy/https-tunnel-proxy';
 import { resolveProfileContinuityInheritance } from '../../auth/profile-continuity-inheritance';
 
 // Import modular components
-import { resolveBrowserLaunchFlags, resolveBrowserRuntime } from './browser-launch-setup';
 import {
   resolveRuntimeQuotaMonitorProviders as _resolveRuntimeQuotaMonitorProviders,
   resolveAccounts,
@@ -111,10 +110,6 @@ export async function startCLIProxy(
     cfg,
     log,
   });
-
-  const { browserLaunchOverride, parseFailed: browserLaunchParseFailed } =
-    resolveBrowserLaunchFlags(proxyResolution.argsWithoutProxy);
-  if (browserLaunchParseFailed) return;
 
   const { proxyConfig, useRemoteProxy, localBackend, binaryPath } = await resolveExecutorProxy(
     proxyResolution,
@@ -358,12 +353,6 @@ export async function startCLIProxy(
     }
   }
 
-  // Resolve browser attach runtime and sync browser MCP (needs inheritedClaudeConfigDir)
-  const { browserRuntimeEnv } = await resolveBrowserRuntime(
-    browserLaunchOverride,
-    inheritedClaudeConfigDir
-  );
-
   // Build initial env vars to get ANTHROPIC_BASE_URL
   const initialEnvVars = buildClaudeEnvironment({
     provider,
@@ -430,7 +419,6 @@ export async function startCLIProxy(
     compositeTiers: cfg.compositeTiers,
     compositeDefaultTier: cfg.compositeDefaultTier,
     claudeConfigDir: inheritedClaudeConfigDir,
-    browserRuntimeEnv,
   });
 
   if (cfg.isComposite && cfg.compositeTiers && cfg.compositeDefaultTier) {
@@ -445,14 +433,6 @@ export async function startCLIProxy(
     );
   }
 
-  if (process.env.CCS_DEBUG) {
-    console.error(
-      `[cliproxy-browser-debug] keys=${Object.keys(env)
-        .filter((key) => key.startsWith('CCS_BROWSER_'))
-        .sort()
-        .join(',')} ws=${env.CCS_BROWSER_DEVTOOLS_WS_URL || ''}`
-    );
-  }
   logEnvironment(env, verbose);
 
   // Print thinking status feedback (TTY only, non-piped sessions)

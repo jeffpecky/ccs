@@ -19,7 +19,6 @@ import {
   DEFAULT_THINKING_CONFIG,
 } from '../unified-config-types';
 import type {
-  BrowserConfig,
   CLIProxySafetyConfig,
   CursorConfig,
   DashboardAuthConfig,
@@ -28,7 +27,6 @@ import type {
   RelayConfig,
   ThinkingConfig,
 } from '../unified-config-types';
-import { canonicalizeBrowserConfig } from './normalizers';
 
 // ---------------------------------------------------------------------------
 // Circular-import safety: loadOrCreateUnifiedConfig lives in
@@ -160,15 +158,6 @@ export function getDashboardAuthConfig(): DashboardAuthConfig {
     password_hash: envPasswordHash ?? config.dashboard_auth?.password_hash ?? '',
     session_timeout_hours: config.dashboard_auth?.session_timeout_hours ?? 24,
   };
-}
-
-/**
- * Get browser automation configuration.
- * Returns canonicalized defaults if not configured.
- */
-export function getBrowserConfig(): BrowserConfig {
-  const config = getConfig();
-  return canonicalizeBrowserConfig(config.browser);
 }
 
 /**

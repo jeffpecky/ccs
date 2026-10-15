@@ -17,7 +17,7 @@ import {
 import { applyExtendedContextConfig } from '../config/extended-context-config';
 import { CLIProxyProvider } from '../types';
 import { CompositeTierConfig } from '../../config/unified-config-types';
-import { stripBrowserEnv, stripClaudeCodeEnv } from '../../utils/shell-executor';
+import { stripClaudeCodeEnv } from '../../utils/shell-executor';
 import { CodexReasoningProxy } from '../ai-providers/codex-reasoning-proxy';
 import { ToolSanitizationProxy } from '../proxy/tool-sanitization-proxy';
 import { HttpsTunnelProxy } from '../proxy/https-tunnel-proxy';
@@ -61,8 +61,6 @@ export interface ProxyChainConfig {
   compositeDefaultTier?: 'opus' | 'sonnet' | 'haiku';
   /** Optional inherited continuity directory from mapped account profile */
   claudeConfigDir?: string;
-  /** Optional browser runtime env for Claude browser MCP reuse. */
-  browserRuntimeEnv?: Record<string, string>;
 }
 
 const CODEX_EFFORT_SUFFIX_REGEX = /^(.*)-(minimal|low|medium|high|xhigh)$/i;
@@ -118,7 +116,6 @@ export function buildClaudeEnvironment(config: ProxyChainConfig): Record<string,
     compositeTiers,
     compositeDefaultTier,
     claudeConfigDir,
-    browserRuntimeEnv,
   } = config;
 
   // Build base env vars - check remote mode first
@@ -255,24 +252,18 @@ export function buildClaudeEnvironment(config: ProxyChainConfig): Record<string,
   };
 
   // Merge all environment variables (filter undefined values)
-  const baseEnv = stripBrowserEnv(
-    Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) as Record<
-      string,
-      string
-    >
+  const baseEnv = Object.fromEntries(
+    Object.entries(process.env).filter(([, v]) => v !== undefined)
   ) as Record<string, string>;
 
-  const effectiveEnvVarsFiltered = stripBrowserEnv(
-    Object.fromEntries(
-      Object.entries(effectiveEnvVars).filter(([, v]) => v !== undefined)
-    ) as Record<string, string>
+  const effectiveEnvVarsFiltered = Object.fromEntries(
+    Object.entries(effectiveEnvVars).filter(([, v]) => v !== undefined)
   ) as Record<string, string>;
 
   const mergedEnv = {
     ...baseEnv,
     ...effectiveEnvVarsFiltered,
     ...(claudeConfigDir ? { CLAUDE_CONFIG_DIR: claudeConfigDir } : {}),
-    ...(browserRuntimeEnv || {}),
   };
 
   return Object.fromEntries(

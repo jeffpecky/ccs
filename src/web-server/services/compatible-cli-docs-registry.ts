@@ -114,7 +114,6 @@ const COMPATIBLE_CLI_DOCS_REGISTRY: Record<string, CompatibleCliDocsRegistryEntr
         'CLI --profile selects a named [profiles.<name>] overlay on top of base config',
         'CCS-backed Codex launches may apply transient -c overrides and CCS_CODEX_API_KEY',
         'Official docs treat model_providers, mcp_servers, features, and project trust as schema-backed config surfaces',
-        'CCS-managed browser tooling for Codex should be configured from Settings > Browser, not by editing the ccs_browser MCP entry directly',
       ],
       links: [
         {

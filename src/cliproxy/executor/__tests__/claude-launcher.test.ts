@@ -54,10 +54,6 @@ mock.module('../../../utils/websearch-manager', () => ({
   getWebSearchHookEnv: jest.fn().mockReturnValue({}),
 }));
 
-mock.module('../../../utils/browser', () => ({
-  appendBrowserToolArgs: (args: string[]) => [...args, '--browser'],
-}));
-
 mock.module('../../accounts/account-manager', () => ({
   getDefaultAccount: jest.fn().mockReturnValue(null),
 }));
@@ -107,8 +103,6 @@ function baseContext(overrides: object = {}) {
     compositeProviders: [] as string[],
     skipLocalAuth: true,
     sessionId: undefined,
-    imageAnalysisMcpReady: false,
-    browserRuntimeEnv: undefined,
     inheritedClaudeConfigDir: undefined,
     codexReasoningProxy: null,
     toolSanitizationProxy: null,
@@ -149,20 +143,6 @@ describe('launchClaude', () => {
     await launchClaude(baseContext());
     const spawnOpts = mockSpawn.mock.calls[0][2] as { stdio: string };
     expect(spawnOpts.stdio).toBe('inherit');
-  });
-
-  it('does not append image analysis args when imageAnalysisMcpReady=false', async () => {
-    await launchClaude(baseContext({ imageAnalysisMcpReady: false }));
-    const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
-    expect(spawnArgs).not.toContain('--mcp-image-analysis');
-  });
-
-  it('appends browser tool args when browserRuntimeEnv is set', async () => {
-    await launchClaude(
-      baseContext({ browserRuntimeEnv: { CCS_BROWSER: '1' } as NodeJS.ProcessEnv })
-    );
-    const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
-    expect(spawnArgs).toContain('--browser');
   });
 
   it('registers cleanup handlers after spawn', async () => {

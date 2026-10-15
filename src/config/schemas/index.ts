@@ -62,16 +62,6 @@ export type { ThinkingMode, ThinkingTierDefaults, ThinkingConfig } from './think
 export { DEFAULT_RELAY_CONFIG, isRelayConfig } from './relay';
 export type { RelayPlatform, RelayEntry, RelayConfig } from './relay';
 
-// Browser automation types and defaults
-export { DEFAULT_BROWSER_CONFIG } from './browser';
-export type {
-  BrowserToolPolicy,
-  BrowserEvalMode,
-  BrowserClaudeConfig,
-  BrowserCodexConfig,
-  BrowserConfig,
-} from './browser';
-
 // Logging and preferences types and defaults
 export { DEFAULT_LOGGING_CONFIG } from './logging';
 export type { LoggingLevel, LoggingConfig, PreferencesConfig } from './logging';

@@ -11,7 +11,6 @@ import * as os from 'os';
 import { escapeShellArg, getWindowsEscapedCommandShell } from '../../utils/shell-executor';
 import { getProviderSettingsPath } from '../config/config-generator';
 
-import { appendBrowserToolArgs } from '../../utils/browser';
 import { getDefaultAccount } from '../accounts/account-manager';
 import { CLIProxyProvider, ExecutorConfig } from '../types';
 import { CodexReasoningProxy } from '../ai-providers/codex-reasoning-proxy';
@@ -44,8 +43,6 @@ export interface ClaudeLaunchContext {
   /** Session ID for cleanup tracking */
   sessionId: string | undefined;
 
-  /** Browser runtime environment variables (undefined if browser not active) */
-  browserRuntimeEnv: NodeJS.ProcessEnv | undefined;
   /** Inherited Claude config dir for continuity */
   inheritedClaudeConfigDir: string | undefined;
   /** Active Codex reasoning proxy (if any) */
@@ -74,7 +71,6 @@ export async function launchClaude(context: ClaudeLaunchContext): Promise<ChildP
     compositeProviders,
     skipLocalAuth,
     sessionId,
-    browserRuntimeEnv,
     codexReasoningProxy,
     toolSanitizationProxy,
     httpsTunnel,
@@ -97,11 +93,10 @@ export async function launchClaude(context: ClaudeLaunchContext): Promise<ChildP
     ? stripClaudeSubcommandSessionArgs(claudeArgs)
     : claudeArgs;
 
-  // Assemble final args: browser tools → settings
-  const browserArgs = browserRuntimeEnv
-    ? appendBrowserToolArgs(claudeSessionArgs)
-    : claudeSessionArgs;
-  const launchArgs = isSubcommand ? browserArgs : ['--settings', settingsPath, ...browserArgs];
+  // Assemble final args: settings first for non-subcommands
+  const launchArgs = isSubcommand
+    ? claudeSessionArgs
+    : ['--settings', settingsPath, ...claudeSessionArgs];
 
   let tracedEnv = stripClaudeCodeFeatureBlockingEnv({ ...env });
   // Strip telemetry-disable env vars for subcommands; otherwise Claude's

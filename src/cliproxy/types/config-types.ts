@@ -72,7 +72,6 @@ export interface ExecutorConfig {
   compositeDefaultTier?: 'opus' | 'sonnet' | 'haiku';
   profileName?: string;
   claudeConfigDir?: string;
-  browserRuntimeEnv?: Record<string, string>;
 }
 
 /** Resolved proxy configuration after merging CLI > ENV > config.yaml > defaults */

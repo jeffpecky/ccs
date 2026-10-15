@@ -214,41 +214,6 @@ describe('migration-manager legacy kimi compatibility', () => {
     expect(unified?.accounts.restored.bare).toBeUndefined();
   });
 
-  it('applies safe browser defaults when migrating legacy config files', async () => {
-    fs.writeFileSync(
-      path.join(ccsDir, 'config.json'),
-      JSON.stringify(
-        {
-          profiles: {
-            glm: '~/.ccs/glm.settings.json',
-          },
-        },
-        null,
-        2
-      )
-    );
-    fs.writeFileSync(path.join(ccsDir, 'glm.settings.json'), JSON.stringify({ env: {} }));
-
-    const result = await migrate(false);
-    expect(result.success).toBe(true);
-
-    const unified = loadUnifiedConfig();
-    expect(unified?.browser).toEqual({
-      claude: {
-        enabled: false,
-        policy: 'manual',
-        user_data_dir: '',
-        devtools_port: 9222,
-        eval_mode: 'readonly',
-      },
-      codex: {
-        enabled: false,
-        policy: 'manual',
-        eval_mode: 'readonly',
-      },
-    });
-  });
-
   it('normalizes valid legacy shared groups and drops invalid ones during migration', async () => {
     fs.writeFileSync(
       path.join(ccsDir, 'profiles.json'),

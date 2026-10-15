@@ -33,8 +33,6 @@ export interface TargetCredentials {
   runtimeConfigOverrides?: string[];
   /** Additional env vars from profile resolution (websearch, hooks, etc.) */
   envVars?: NodeJS.ProcessEnv;
-  /** Runtime browser reuse env passed through to Claude launches when browser MCP is active. */
-  browserRuntimeEnv?: NodeJS.ProcessEnv;
 }
 
 /**

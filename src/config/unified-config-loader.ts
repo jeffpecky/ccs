@@ -59,17 +59,13 @@ import {
 // ---------------------------------------------------------------------------
 
 export {
-  normalizeBrowserDevtoolsPort,
-  normalizeBrowserPolicy,
-  normalizeBrowserEvalMode,
-  canonicalizeBrowserConfig,
   normalizeSessionAffinityTtl,
   hasPositiveDuration,
   validateCompositeVariants,
   normalizeContinuityInheritanceMap,
   normalizeContinuityConfig,
 } from './loader/normalizers';
-import { canonicalizeBrowserConfig, validateCompositeVariants } from './loader/normalizers';
+import { validateCompositeVariants } from './loader/normalizers';
 
 // ---------------------------------------------------------------------------
 // Phase 3 re-exports: yaml-serializer
@@ -97,7 +93,6 @@ export {
   getRelayConfig,
   isDashboardAuthEnabled,
   getDashboardAuthConfig,
-  getBrowserConfig,
   getLoggingConfig,
   getCursorConfig,
 } from './loader/config-getters';
@@ -217,13 +212,7 @@ export function saveUnifiedConfig(config: UnifiedConfig): void {
 export function mutateUnifiedConfig(mutator: (config: UnifiedConfig) => void): UnifiedConfig {
   return withConfigWriteLock(() => {
     const current = loadUnifiedConfigWithLockHeld(mergeWithDefaults, validateCompositeVariants);
-    const previousBrowser = current.browser
-      ? canonicalizeBrowserConfig(current.browser)
-      : undefined;
     mutator(current);
-    if (current.browser) {
-      current.browser = canonicalizeBrowserConfig(current.browser, previousBrowser);
-    }
     writeUnifiedConfigWithLockHeld(current, generateYamlHeader, generateYamlWithComments);
     return current;
   });

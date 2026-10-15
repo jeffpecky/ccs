@@ -7,7 +7,6 @@ import { wireChildProcessSignals } from '../utils/signal-forwarder';
 import {
   escapeShellArg,
   getWindowsEscapedCommandShell,
-  stripBrowserEnv,
   stripAnthropicEnv,
   stripCodexSessionEnv,
 } from '../utils/shell-executor';
@@ -351,7 +350,7 @@ export class CodexAdapter implements TargetAdapter {
 
   buildEnv(creds: TargetCredentials, profileType: ProfileType): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = {
-      ...stripBrowserEnv(stripCodexSessionEnv(stripAnthropicEnv(process.env))),
+      ...stripCodexSessionEnv(stripAnthropicEnv(process.env)),
     };
     delete env[CCSXP_CLIPROXY_SHORTCUT_ENV];
     delete env[CODEX_RUNTIME_ENV_KEY];

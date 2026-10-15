@@ -4,7 +4,6 @@ import {
   stripClaudeCodeFeatureBlockingEnv,
   stripClaudeSubcommandSessionArgs,
 } from '../../../src/utils/claude-subcommand-detector';
-import { appendBrowserToolArgs } from '../../../src/utils/browser/claude-tool-args';
 // NOTE: the websearch/image-analysis injectors were stripped in a36a1238
 // (src/utils/websearch/claude-tool-args and src/utils/image-analysis/claude-tool-args).
 
@@ -55,7 +54,6 @@ describe('isClaudeSubcommandInvocation', () => {
     // `--name auth` sets the session display name to "auth" — still an interactive launch.
     expect(isClaudeSubcommandInvocation(['--name', 'auth'])).toBe(false);
   });
-
 
   it('treats --print prompt mode as non-subcommand even with subcommand-like prompt text', () => {
     expect(isClaudeSubcommandInvocation(['--print', 'agents'])).toBe(false);
@@ -194,12 +192,5 @@ describe('stripClaudeSubcommandSessionArgs', () => {
         'fix the bug',
       ])
     ).toEqual(['--dangerously-skip-permissions', '--teammate-mode', 'in-process', 'fix the bug']);
-  });
-});
-
-describe('subcommand passthrough — injectors short-circuit', () => {
-  it('appendBrowserToolArgs returns args unchanged for subcommand invocations', () => {
-    expect(appendBrowserToolArgs(['agents'])).toEqual(['agents']);
-    expect(appendBrowserToolArgs(['remote-control'])).toEqual(['remote-control']);
   });
 });

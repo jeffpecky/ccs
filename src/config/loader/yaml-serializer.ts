@@ -270,23 +270,6 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
     lines.push('');
   }
 
-  // Browser automation section
-  if (config.browser) {
-    lines.push('# ----------------------------------------------------------------------------');
-    lines.push('# Browser Automation: Claude browser attach and Codex browser tooling');
-    lines.push('# Claude attach reuses a running Chrome/Chromium session with remote debugging.');
-    lines.push('# Codex tooling controls whether CCS injects Playwright MCP overrides.');
-    lines.push('#');
-    lines.push('# claude.user_data_dir should point at the Chrome user-data directory for the');
-    lines.push('# dedicated attach session. claude.devtools_port is the expected debugging port.');
-    lines.push('# Configure via: Settings > Browser.');
-    lines.push('# ----------------------------------------------------------------------------');
-    lines.push(
-      yaml.dump({ browser: config.browser }, { indent: 2, lineWidth: -1, quotingType: '"' }).trim()
-    );
-    lines.push('');
-  }
-
   // Quota management section (hybrid auto+manual account selection)
   if (config.quota_management) {
     lines.push('# ----------------------------------------------------------------------------');

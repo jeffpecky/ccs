@@ -118,22 +118,6 @@ function syncTmuxNestedSessionEnv(env: NodeJS.ProcessEnv, profileType: string | 
 }
 
 /**
- * Strip inherited browser attach/runtime env vars from a process environment.
- *
- * Browser capability is opt-in and launch-scoped. Stale CCS_BROWSER_* values
- * from the parent process must never bleed into a browser-off child launch.
- */
-export function stripBrowserEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const result: NodeJS.ProcessEnv = {};
-  for (const key of Object.keys(env)) {
-    if (!key.toUpperCase().startsWith('CCS_BROWSER_')) {
-      result[key] = env[key];
-    }
-  }
-  return result;
-}
-
-/**
  * Strip Claude Code nested-session guard env var from a process environment.
  *
  * Note: Windows env keys are case-insensitive, so remove case-insensitively
@@ -278,7 +262,7 @@ export function execClaude(
     : stripInheritedAnthropicRoutingEnv
       ? stripAnthropicRoutingEnv(process.env)
       : process.env;
-  const baseEnv = stripBrowserEnv(inheritedEnv);
+  const baseEnv = inheritedEnv;
 
   // Prepare environment (merge with base env if envVars provided)
   const mergedEnv = envVars
