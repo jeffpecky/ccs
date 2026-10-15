@@ -4,11 +4,7 @@
  */
 
 import { createContext, type Dispatch } from 'react';
-import type {
-  GlobalEnvConfig,
-  CliproxyServerConfig,
-  RemoteProxyStatus,
-} from './types';
+import type { GlobalEnvConfig, CliproxyServerConfig, RemoteProxyStatus } from './types';
 
 // === State ===
 

@@ -109,4 +109,3 @@ export function HealthGroupSection({ group, defaultOpen = true }: HealthGroupSec
     </Collapsible>
   );
 }
-

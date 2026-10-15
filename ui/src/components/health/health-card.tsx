@@ -68,4 +68,3 @@ export function HealthCard({ check }: { check: HealthCheck }) {
     </Card>
   );
 }
-

@@ -563,4 +563,3 @@ export function formatQuotaResetTimestamp(
     return null;
   }
 }
-

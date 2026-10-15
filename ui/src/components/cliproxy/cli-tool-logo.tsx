@@ -51,8 +51,11 @@ export function CLIToolLogo({ toolId, className, size = 'md' }: CLIToolLogoProps
         className
       )}
     >
-      <img src={imageSrc} alt={`${toolId} logo`} className={cn(sizeConfig.icon, 'object-contain')} />
+      <img
+        src={imageSrc}
+        alt={`${toolId} logo`}
+        className={cn(sizeConfig.icon, 'object-contain')}
+      />
     </div>
   );
 }
-

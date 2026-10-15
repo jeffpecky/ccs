@@ -723,9 +723,7 @@ export interface KiroWindowSummary {
  * Break down Kiro windows into a sorted list for display.
  * Sorts by remaining percent (ascending = most critical first).
  */
-export function getKiroQuotaBreakdown(
-  windows: KiroQuotaResult['windows']
-): KiroWindowSummary[] {
+export function getKiroQuotaBreakdown(windows: KiroQuotaResult['windows']): KiroWindowSummary[] {
   if (!windows || windows.length === 0) return [];
   return windows
     .map((w) => ({
@@ -1151,4 +1149,3 @@ export function getProviderResetTime(
       return null;
   }
 }
-

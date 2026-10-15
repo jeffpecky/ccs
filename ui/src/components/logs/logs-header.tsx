@@ -145,4 +145,3 @@ function Stat({ label, value, fallback, tone = 'neutral' }: StatProps) {
     </div>
   );
 }
-

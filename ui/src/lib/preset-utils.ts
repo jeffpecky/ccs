@@ -103,4 +103,3 @@ export async function applyDefaultPreset(
     return { success: false };
   }
 }
-

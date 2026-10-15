@@ -23,4 +23,3 @@ export function LogsPage() {
 
   return <LogsShell workspace={workspace} updateConfig={updateConfig} />;
 }
-

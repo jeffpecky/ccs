@@ -122,4 +122,3 @@ export function summarizeAuthAccountContinuity(accounts: Account[]): AuthAccount
     groupSummaries,
   };
 }
-

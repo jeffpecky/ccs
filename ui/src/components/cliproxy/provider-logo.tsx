@@ -69,4 +69,3 @@ export function ProviderLogoInline({
 }) {
   return <ProviderLogo provider={provider} size="sm" className={className} />;
 }
-

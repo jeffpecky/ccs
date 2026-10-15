@@ -385,4 +385,3 @@ export function LogsFilters({
     </div>
   );
 }
-

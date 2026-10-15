@@ -69,4 +69,3 @@ export const PAID_PRESETS: ModelPreset[] = [
     haiku: 'gemini-3-flash',
   },
 ];
-

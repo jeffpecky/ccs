@@ -57,4 +57,3 @@ export function CopyButton({
     </TooltipProvider>
   );
 }
-

@@ -555,4 +555,3 @@ export function getKiroEffectiveStartEndpoint(method: KiroAuthMethod): KiroStart
 export function isKiroSocialAuthMethod(method: KiroAuthMethod): boolean {
   return method === 'google' || method === 'github';
 }
-

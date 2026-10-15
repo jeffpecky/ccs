@@ -269,4 +269,3 @@ export function useCopilotConfigForm() {
     missingRequiredFields: missingFields,
   };
 }
-

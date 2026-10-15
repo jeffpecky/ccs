@@ -712,7 +712,8 @@ export interface GhcpQuotaSnapshot {
 }
 
 /** GitHub Copilot (ghcp) quota result */
-export interface GhcpQuotaResult {  /** Whether fetch succeeded */
+export interface GhcpQuotaResult {
+  /** Whether fetch succeeded */
   success: boolean;
   /** Copilot plan type */
   planType: string | null;
@@ -1426,4 +1427,3 @@ export const api = {
       request<GeminiCliQuotaResult>(`/cliproxy/quota/gemini/${encodeURIComponent(accountId)}`),
   },
 };
-

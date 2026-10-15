@@ -32,4 +32,3 @@ export function HealthPriorityList({ checks }: HealthPriorityListProps) {
     </div>
   );
 }
-

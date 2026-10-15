@@ -28,4 +28,3 @@ export type {
   SuccessStepProps,
   ProgressIndicatorProps,
 } from './setup/wizard';
-

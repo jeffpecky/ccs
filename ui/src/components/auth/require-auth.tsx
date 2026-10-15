@@ -33,4 +33,3 @@ export function RequireAuth() {
   // Authenticated, render children
   return <Outlet />;
 }
-

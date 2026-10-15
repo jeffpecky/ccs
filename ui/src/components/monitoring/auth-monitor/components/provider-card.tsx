@@ -149,4 +149,3 @@ export function ProviderCard({
     </button>
   );
 }
-

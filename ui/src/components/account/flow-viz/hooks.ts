@@ -181,4 +181,3 @@ export function usePulseAnimation(accounts: AccountLike[]): Set<string> {
 
   return pulsingAccounts;
 }
-

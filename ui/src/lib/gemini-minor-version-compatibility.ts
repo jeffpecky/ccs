@@ -8,4 +8,3 @@ export const GEMINI_MINOR_VERSION_COMPATIBILITY_IDS = Object.freeze({
   'gemini-3-flash-preview': 'gemini-3.1-flash-preview',
   'gemini-3.1-flash-preview': 'gemini-3-flash-preview',
 });
-

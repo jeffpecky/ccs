@@ -536,4 +536,3 @@ export function useCliproxyAuthFlow() {
     [state, startAuth, cancelAuth, submitCallback]
   );
 }
-

@@ -411,4 +411,3 @@ export function CliproxyDialog({ open, onClose }: CliproxyDialogProps) {
     </Dialog>
   );
 }
-

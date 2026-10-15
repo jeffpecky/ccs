@@ -32,14 +32,42 @@ async function fetchTools(): Promise<{ tools: CLITool[] }> {
   return res.json();
 }
 
-function CLIToolSidebarItem({ tool, isSelected, onSelect }: { tool: CLITool; isSelected: boolean; onSelect: () => void }) {
+function CLIToolSidebarItem({
+  tool,
+  isSelected,
+  onSelect,
+}: {
+  tool: CLITool;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
   return (
-    <button className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer text-left', isSelected ? 'bg-primary/10 border border-primary/20' : 'hover:bg-muted border border-transparent')} onClick={onSelect}>
+    <button
+      className={cn(
+        'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer text-left',
+        isSelected
+          ? 'bg-primary/10 border border-primary/20'
+          : 'hover:bg-muted border border-transparent'
+      )}
+      onClick={onSelect}
+    >
       <CLIToolLogo toolId={tool.id} size="md" />
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2"><span className="font-medium text-sm truncate">{tool.name}</span></div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-sm truncate">{tool.name}</span>
+        </div>
         <div className="flex items-center gap-1.5 mt-0.5">
-          {tool.status === 'installed' ? (<><Check className="w-3 h-3 text-green-600" /><span className="text-xs text-green-600">Ready</span></>) : (<><X className="w-3 h-3 text-muted-foreground" /><span className="text-xs text-muted-foreground">Not installed</span></>)}
+          {tool.status === 'installed' ? (
+            <>
+              <Check className="w-3 h-3 text-green-600" />
+              <span className="text-xs text-green-600">Ready</span>
+            </>
+          ) : (
+            <>
+              <X className="w-3 h-3 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Not installed</span>
+            </>
+          )}
         </div>
       </div>
     </button>
@@ -50,9 +78,13 @@ function EmptyCLIToolState() {
   return (
     <div className="flex-1 flex items-center justify-center bg-muted/20">
       <div className="text-center max-w-md px-8">
-        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-6"><Terminal className="w-8 h-8 text-muted-foreground" /></div>
+        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-6">
+          <Terminal className="w-8 h-8 text-muted-foreground" />
+        </div>
         <h2 className="text-xl font-semibold mb-2">Select a CLI Tool</h2>
-        <p className="text-muted-foreground mb-4">Choose a CLI tool from the left panel to configure its settings.</p>
+        <p className="text-muted-foreground mb-4">
+          Choose a CLI tool from the left panel to configure its settings.
+        </p>
       </div>
     </div>
   );
@@ -62,8 +94,14 @@ export function CliToolsPage() {
   const queryClient = useQueryClient();
   const { data: authData } = useCliproxyAuth();
   const { data: catalogData } = useCliproxyCatalog();
-  const [selectedToolId, setSelectedToolId] = useState<string | null>(() => typeof window !== 'undefined' ? localStorage.getItem('cli-tools-selected') : null);
-  const { data: toolsData, isLoading, isFetching } = useQuery({ queryKey: ['cli-tools'], queryFn: fetchTools });
+  const [selectedToolId, setSelectedToolId] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('cli-tools-selected') : null
+  );
+  const {
+    data: toolsData,
+    isLoading,
+    isFetching,
+  } = useQuery({ queryKey: ['cli-tools'], queryFn: fetchTools });
 
   const tools = useMemo(() => toolsData?.tools || [], [toolsData?.tools]);
   const providers = useMemo(() => authData?.authStatus || [], [authData?.authStatus]);
@@ -77,15 +115,44 @@ export function CliToolsPage() {
     return null;
   }, [selectedToolId, tools]);
 
-  const effectiveTool = useMemo(() => tools.find((t) => t.id === effectiveToolId), [tools, effectiveToolId]);
+  const effectiveTool = useMemo(
+    () => tools.find((t) => t.id === effectiveToolId),
+    [tools, effectiveToolId]
+  );
 
-  const handleSelectTool = (toolId: string) => { setSelectedToolId(toolId); localStorage.setItem('cli-tools-selected', toolId); };
-  const handleRefresh = () => { queryClient.invalidateQueries({ queryKey: ['cli-tools'] }); queryClient.invalidateQueries({ queryKey: ['cliproxy-auth'] }); queryClient.invalidateQueries({ queryKey: ['cliproxy-catalog'] }); };
+  const handleSelectTool = (toolId: string) => {
+    setSelectedToolId(toolId);
+    localStorage.setItem('cli-tools-selected', toolId);
+  };
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['cli-tools'] });
+    queryClient.invalidateQueries({ queryKey: ['cliproxy-auth'] });
+    queryClient.invalidateQueries({ queryKey: ['cliproxy-catalog'] });
+  };
 
   const installedCount = tools.filter((t) => t.status === 'installed').length;
 
   const getProviderForTool = (toolId: string) => {
-    const providerMap: Record<string, string> = { 'claude-code': 'claude', opencode: 'opencode', codex: 'codex', 'open-claw': 'open-claw', 'claude-cowork': 'claude', 'hermes-agent': 'hermes-agent', 'factory-droid': 'factory-droid', cursor: 'cursor', cline: 'cline', 'kilo-code': 'kilo-code', roo: 'roo', continue: 'continue', 'amp-cli': 'amp-cli', 'qwen-code': 'qwen-code', 'deepseek-tui': 'deepseek-tui', jcode: 'jcode', 'grok-build': 'grok-build', 'devin-cli': 'devin-cli' };
+    const providerMap: Record<string, string> = {
+      'claude-code': 'claude',
+      opencode: 'opencode',
+      codex: 'codex',
+      'open-claw': 'open-claw',
+      'claude-cowork': 'claude',
+      'hermes-agent': 'hermes-agent',
+      'factory-droid': 'factory-droid',
+      cursor: 'cursor',
+      cline: 'cline',
+      'kilo-code': 'kilo-code',
+      roo: 'roo',
+      continue: 'continue',
+      'amp-cli': 'amp-cli',
+      'qwen-code': 'qwen-code',
+      'deepseek-tui': 'deepseek-tui',
+      jcode: 'jcode',
+      'grok-build': 'grok-build',
+      'devin-cli': 'devin-cli',
+    };
     return providerMap[toolId] || toolId;
   };
 
@@ -94,24 +161,47 @@ export function CliToolsPage() {
     const rawCatalog = catalogs[toolProvider];
     // CLI tool editors use a non-codex provider name to suppress codex effort/tier badges
     const catalog = rawCatalog
-      ? { ...rawCatalog, provider: `cli-${toolProvider}`, models: (rawCatalog.models ?? []).map((m) => ({ ...m, codexMaxEffort: undefined, codexServiceTiers: undefined })) }
+      ? {
+          ...rawCatalog,
+          provider: `cli-${toolProvider}`,
+          models: (rawCatalog.models ?? []).map((m) => ({
+            ...m,
+            codexMaxEffort: undefined,
+            codexServiceTiers: undefined,
+          })),
+        }
       : { provider: `cli-${toolProvider}`, displayName: tool.name, defaultModel: '', models: [] };
     return {
-      provider: toolProvider, toolId: tool.id, displayName: tool.name,
-      authStatus: providers.find((p) => p.provider === toolProvider) || { provider: toolProvider, displayName: tool.name, authenticated: tool.status === 'installed', lastAuth: null, tokenFiles: 0, accounts: [] },
+      provider: toolProvider,
+      toolId: tool.id,
+      displayName: tool.name,
+      authStatus: providers.find((p) => p.provider === toolProvider) || {
+        provider: toolProvider,
+        displayName: tool.name,
+        authenticated: tool.status === 'installed',
+        lastAuth: null,
+        tokenFiles: 0,
+        accounts: [],
+      },
       catalog,
-      routing: routingHints[toolProvider], isRemoteMode,
+      routing: routingHints[toolProvider],
+      isRemoteMode,
     };
   };
 
   const renderEditor = (tool: CLITool) => {
     const props = getEditorProps(tool);
     switch (tool.id) {
-      case 'opencode': return <OpenCodeEditor {...props} />;
-      case 'codex': return <CodexEditor {...props} />;
-      case 'factory-droid': return <DroidEditor {...props} />;
-      case 'grok-build': return <GrokBuildEditor {...props} />;
-      default: return <CLIProviderEditor {...props} />;
+      case 'opencode':
+        return <OpenCodeEditor {...props} />;
+      case 'codex':
+        return <CodexEditor {...props} />;
+      case 'factory-droid':
+        return <DroidEditor {...props} />;
+      case 'grok-build':
+        return <GrokBuildEditor {...props} />;
+      default:
+        return <CLIProviderEditor {...props} />;
     }
   };
 
@@ -120,19 +210,57 @@ export function CliToolsPage() {
       <div className="w-80 border-r flex flex-col bg-muted/30">
         <div className="p-4 border-b bg-background">
           <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2"><Terminal className="w-5 h-5 text-primary" /><h1 className="font-semibold">CLI Tools</h1></div>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRefresh} disabled={isFetching}><RefreshCw className={cn('w-4 h-4', isFetching && 'animate-spin')} /></Button>
+            <div className="flex items-center gap-2">
+              <Terminal className="w-5 h-5 text-primary" />
+              <h1 className="font-semibold">CLI Tools</h1>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleRefresh}
+              disabled={isFetching}
+            >
+              <RefreshCw className={cn('w-4 h-4', isFetching && 'animate-spin')} />
+            </Button>
           </div>
-          <p className="text-xs text-muted-foreground mb-3">Configure CLI tools to connect to the proxy. Apply settings, then run your CLI manually.</p>
+          <p className="text-xs text-muted-foreground mb-3">
+            Configure CLI tools to connect to the proxy. Apply settings, then run your CLI manually.
+          </p>
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2">
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-3 py-2">CLI TOOLS</div>
-            {isLoading ? (<div className="space-y-2 px-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>) : (<div className="space-y-1">{tools.map((tool) => <CLIToolSidebarItem key={tool.id} tool={tool} isSelected={effectiveToolId === tool.id} onSelect={() => handleSelectTool(tool.id)} />)}</div>)}
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-3 py-2">
+              CLI TOOLS
+            </div>
+            {isLoading ? (
+              <div className="space-y-2 px-2">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-14 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {tools.map((tool) => (
+                  <CLIToolSidebarItem
+                    key={tool.id}
+                    tool={tool}
+                    isSelected={effectiveToolId === tool.id}
+                    onSelect={() => handleSelectTool(tool.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </ScrollArea>
         <div className="p-3 border-t bg-background text-xs text-muted-foreground">
-          <div className="flex items-center justify-between"><span>{tools.length} tools</span><span className="flex items-center gap-1"><Check className="w-3 h-3 text-green-600" />{installedCount} installed</span></div>
+          <div className="flex items-center justify-between">
+            <span>{tools.length} tools</span>
+            <span className="flex items-center gap-1">
+              <Check className="w-3 h-3 text-green-600" />
+              {installedCount} installed
+            </span>
+          </div>
         </div>
       </div>
       <div className="flex-1 flex min-w-0 flex-col overflow-hidden bg-background">
@@ -143,4 +271,3 @@ export function CliToolsPage() {
 }
 
 export default CliToolsPage;
-

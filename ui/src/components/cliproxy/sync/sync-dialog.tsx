@@ -129,4 +129,3 @@ export function SyncDialog({ open, onOpenChange }: SyncDialogProps) {
     </Dialog>
   );
 }
-

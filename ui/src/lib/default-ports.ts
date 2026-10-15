@@ -7,4 +7,3 @@
 
 export const CLIPROXY_DEFAULT_PORT = 8317;
 export const DEFAULT_CURSOR_PORT = 20129;
-

@@ -127,4 +127,3 @@ export function isDashboardInternal(entry: LogsEntry): boolean {
   if (!entry.source) return false;
   return DASHBOARD_INTERNALS_PATTERN.test(entry.source);
 }
-

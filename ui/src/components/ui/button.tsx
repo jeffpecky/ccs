@@ -27,4 +27,3 @@ function Button({
 }
 
 export { Button };
-

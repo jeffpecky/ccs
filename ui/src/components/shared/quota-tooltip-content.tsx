@@ -599,4 +599,3 @@ function CodexResetIndicators({
     </div>
   );
 }
-

@@ -66,4 +66,3 @@ export function detectPresetFromUrl(baseUrl: string): ProviderPreset | undefined
     );
   });
 }
-

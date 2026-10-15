@@ -30,4 +30,3 @@ export function CcsLogo({ size = 'md', className, showText = true }: CcsLogoProp
     </div>
   );
 }
-

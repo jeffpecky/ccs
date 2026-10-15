@@ -27,4 +27,3 @@ export function getFormattingLocale(_locale?: string): string {
 export function persistLocale(_locale: string): AppLocale {
   return 'en';
 }
-

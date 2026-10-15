@@ -162,4 +162,3 @@ export function HealthCheckItem({ check }: { check: HealthCheck }) {
     </Collapsible>
   );
 }
-

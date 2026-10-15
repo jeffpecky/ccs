@@ -3,10 +3,7 @@
  * Type definitions for GlobalEnv and Proxy configurations
  */
 
-import type {
-  CliproxyServerConfig,
-  RemoteProxyStatus,
-} from '@/lib/api-client';
+import type { CliproxyServerConfig, RemoteProxyStatus } from '@/lib/api-client';
 
 // === GlobalEnv Types ===
 
@@ -17,12 +14,7 @@ export interface GlobalEnvConfig {
 
 // === Tab Types ===
 
-export type SettingsTab =
-  | 'globalenv'
-  | 'proxy'
-  | 'auth'
-  | 'backups'
-  | 'thinking';
+export type SettingsTab = 'globalenv' | 'proxy' | 'auth' | 'backups' | 'thinking';
 
 // === Thinking Types ===
 

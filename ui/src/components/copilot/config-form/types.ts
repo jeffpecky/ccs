@@ -23,4 +23,3 @@ export interface ModelPreset {
 }
 
 export type { CopilotModel, CopilotPlanTier };
-

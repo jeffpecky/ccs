@@ -33,4 +33,3 @@ const SENSITIVE_LABEL_PATTERN =
 export function isSensitiveLabel(label: string): boolean {
   return SENSITIVE_LABEL_PATTERN.test(label);
 }
-

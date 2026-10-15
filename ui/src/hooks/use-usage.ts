@@ -318,4 +318,3 @@ export function useSessions(options?: UsageQueryOptions) {
     staleTime: 60 * 1000, // 1 minute
   });
 }
-

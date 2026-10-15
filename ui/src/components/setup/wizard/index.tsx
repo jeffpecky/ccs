@@ -281,4 +281,3 @@ export type {
   SuccessStepProps,
   ProgressIndicatorProps,
 } from './types';
-

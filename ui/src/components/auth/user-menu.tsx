@@ -42,4 +42,3 @@ export function UserMenu() {
     </DropdownMenu>
   );
 }
-

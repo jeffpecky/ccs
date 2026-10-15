@@ -123,4 +123,3 @@ export function FileTree({ files, selectedFile, onSelect }: FileTreeProps) {
     </ScrollArea>
   );
 }
-

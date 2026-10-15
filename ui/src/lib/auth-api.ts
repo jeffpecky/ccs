@@ -65,4 +65,3 @@ export function login(username: string, password: string): Promise<LoginResponse
 export function logout(): Promise<{ success: boolean }> {
   return request('/logout', { method: 'POST' });
 }
-

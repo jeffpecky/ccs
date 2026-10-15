@@ -221,4 +221,3 @@ export function VariantStep({
     </div>
   );
 }
-

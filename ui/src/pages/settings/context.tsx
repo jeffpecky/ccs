@@ -17,4 +17,3 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     <SettingsContext.Provider value={{ state, dispatch }}>{children}</SettingsContext.Provider>
   );
 }
-

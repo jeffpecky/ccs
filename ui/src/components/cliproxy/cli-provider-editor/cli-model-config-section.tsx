@@ -120,15 +120,17 @@ export function CLIModelConfigSection({
 
   // Simple model list UI for OpenCode, Codex, etc.
   if (isSimpleModel) {
-    return <SimpleModelConfigUI
-      currentModel={currentModel}
-      subagentModel={sonnetModel}
-      providerModels={providerModels}
-      catalog={catalog}
-      routing={routing}
-      toolId={toolId}
-      onUpdateEnvValue={onUpdateEnvValue}
-    />;
+    return (
+      <SimpleModelConfigUI
+        currentModel={currentModel}
+        subagentModel={sonnetModel}
+        providerModels={providerModels}
+        catalog={catalog}
+        routing={routing}
+        toolId={toolId}
+        onUpdateEnvValue={onUpdateEnvValue}
+      />
+    );
   }
 
   // Claude-style UI (Default, Opus, Sonnet, Haiku)
@@ -334,7 +336,10 @@ function SimpleModelConfigUI({
     'grok-build': { model: 'OPENAI_MODEL', subagent: 'OPENAI_SUB_AGENT_MODEL' },
   };
 
-  const vars = envVarNames[toolId || ''] || { model: 'OPENCODE_MODEL', subagent: 'OPENCODE_SUB_AGENT_MODEL' };
+  const vars = envVarNames[toolId || ''] || {
+    model: 'OPENCODE_MODEL',
+    subagent: 'OPENCODE_SUB_AGENT_MODEL',
+  };
 
   const handleDefaultModelChange = (model: string) => {
     onUpdateEnvValue(vars.model, model);
@@ -377,4 +382,3 @@ function SimpleModelConfigUI({
     </div>
   );
 }
-

@@ -270,4 +270,3 @@ function DetailRow({ label, value, mono }: OverviewRow) {
     </>
   );
 }
-

@@ -4,13 +4,7 @@
  */
 
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Settings2,
-  Server,
-  KeyRound,
-  Archive,
-  Brain,
-} from 'lucide-react';
+import { Settings2, Server, KeyRound, Archive, Brain } from 'lucide-react';
 import type { SettingsTab } from '../types';
 import { useTranslation } from 'react-i18next';
 

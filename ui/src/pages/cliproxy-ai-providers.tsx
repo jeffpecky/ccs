@@ -340,9 +340,7 @@ function getFamilyGuide(family: AiProviderFamilyState): FamilyGuide {
       };
     case 'cloudflare-api-key':
       return {
-        requiredNow: [
-          'Add your Cloudflare API token.',
-        ],
+        requiredNow: ['Add your Cloudflare API token.'],
         optionalLater: [
           'Base URL if using a specific account endpoint or gateway.',
           'Headers for provider-specific routing.',
@@ -373,9 +371,7 @@ function getFamilyGuide(family: AiProviderFamilyState): FamilyGuide {
       };
     case 'nvidia-api-key':
       return {
-        requiredNow: [
-          'Add your NVIDIA API key.',
-        ],
+        requiredNow: ['Add your NVIDIA API key.'],
         optionalLater: [
           'Base URL if using a self-hosted or dedicated NIM endpoint.',
           'Headers for provider-specific routing.',
@@ -406,9 +402,7 @@ function getFamilyGuide(family: AiProviderFamilyState): FamilyGuide {
       };
     case 'openrouter-api-key':
       return {
-        requiredNow: [
-          'Add your OpenRouter API key.',
-        ],
+        requiredNow: ['Add your OpenRouter API key.'],
         optionalLater: [
           'Base URL if using a custom gateway or proxy.',
           'Headers for provider-specific routing.',
@@ -883,15 +877,14 @@ function EntryInspector({
     excludedModelRules.length +
     (draft.proxyUrl.trim() ? 1 : 0) +
     (draft.prefix.trim() ? 1 : 0);
-  const advancedEnabled =
-    isOpenAiCompatFamily(family.id)
-      ? draft.headersText.trim().length > 0
-      : Boolean(
-          draft.proxyUrl.trim() ||
-          draft.prefix.trim() ||
-          draft.headersText.trim() ||
-          draft.excludedModelsText.trim()
-        );
+  const advancedEnabled = isOpenAiCompatFamily(family.id)
+    ? draft.headersText.trim().length > 0
+    : Boolean(
+        draft.proxyUrl.trim() ||
+        draft.prefix.trim() ||
+        draft.headersText.trim() ||
+        draft.excludedModelsText.trim()
+      );
   const hasChanges =
     rawJsonEdits !== null
       ? rawJsonEdits !== initialRawJsonContent
@@ -2042,4 +2035,3 @@ export function CliproxyAiProvidersPage() {
     </div>
   );
 }
-

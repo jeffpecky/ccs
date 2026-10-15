@@ -33,4 +33,3 @@ export const SENSITIVE_KEY_PATTERNS = [
 export function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEY_PATTERNS.some((pattern) => pattern.test(key));
 }
-

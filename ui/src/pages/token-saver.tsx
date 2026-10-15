@@ -347,10 +347,7 @@ export function TokenSaverPage() {
   );
 
   const updateHeadroom = useCallback(
-    (
-      patch: Partial<TokenSaverConfig['headroom']>,
-      options?: { defer?: boolean }
-    ) => {
+    (patch: Partial<TokenSaverConfig['headroom']>, options?: { defer?: boolean }) => {
       updateConfig((prev) => ({ ...prev, headroom: { ...prev.headroom, ...patch } }), options);
     },
     [updateConfig]
@@ -549,8 +546,8 @@ export function TokenSaverPage() {
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">Token Saver</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Choose independent compression stages. Enabled stages run on every
-            provider request after model routing, right before dispatch.
+            Choose independent compression stages. Enabled stages run on every provider request
+            after model routing, right before dispatch.
           </p>
         </div>
         <div className="flex gap-2">
@@ -701,10 +698,7 @@ export function TokenSaverPage() {
                   value={config.headroom.timeout_ms ?? 3000}
                   onChange={(event) => {
                     const val = parseInt(event.target.value, 10);
-                    updateHeadroom(
-                      { timeout_ms: Number.isNaN(val) ? 3000 : val },
-                      { defer: true }
-                    );
+                    updateHeadroom({ timeout_ms: Number.isNaN(val) ? 3000 : val }, { defer: true });
                   }}
                   disabled={mutating}
                 />

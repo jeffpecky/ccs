@@ -263,4 +263,3 @@ export function formatModelAge(created: number): string {
     return i18n.t('openrouterUtils.ageMonthsAgo', { count: Math.floor(diff / 2592000) });
   return i18n.t('openrouterUtils.ageYearsAgo', { count: Math.floor(diff / 31536000) });
 }
-

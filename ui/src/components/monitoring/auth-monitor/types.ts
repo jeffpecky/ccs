@@ -39,4 +39,3 @@ export interface ProviderStats {
   accountCount: number;
   accounts: AccountRow[];
 }
-

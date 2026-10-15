@@ -71,4 +71,3 @@ export interface AccountZones {
   topAccounts: AccountData[];
   bottomAccounts: AccountData[];
 }
-

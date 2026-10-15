@@ -1411,4 +1411,3 @@ export function CursorPage() {
     </>
   );
 }
-

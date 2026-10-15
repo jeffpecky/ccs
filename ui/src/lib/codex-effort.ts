@@ -115,4 +115,3 @@ export function getCodexEffortDisplay(
   }
   return { label: effortLabels?.auto ?? 'Auto effort', explicit: false };
 }
-

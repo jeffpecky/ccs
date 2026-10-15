@@ -169,4 +169,3 @@ export function useCliproxyAuthFile(fileName: string | null) {
     enabled: Boolean(fileName),
   });
 }
-

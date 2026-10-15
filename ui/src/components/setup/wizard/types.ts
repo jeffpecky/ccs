@@ -65,4 +65,3 @@ export interface ProgressIndicatorProps {
   currentProgress: number;
   allSteps: string[];
 }
-

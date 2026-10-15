@@ -159,4 +159,3 @@ export function useAuthMonitorData(): AuthMonitorData {
     timeSinceUpdate,
   };
 }
-

@@ -67,4 +67,3 @@ export function BulkActionBar({
     </div>
   );
 }
-

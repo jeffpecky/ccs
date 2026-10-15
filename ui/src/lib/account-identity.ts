@@ -264,4 +264,3 @@ export function formatAccountDisplayName(
     ? `${presentation.email} (${presentation.inlineLabel})`
     : presentation.email;
 }
-

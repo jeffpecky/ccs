@@ -160,4 +160,3 @@ export function LogsConfigCard({ config, onSave, isPending }: LogsConfigCardProp
     </form>
   );
 }
-

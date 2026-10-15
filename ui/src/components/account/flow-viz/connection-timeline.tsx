@@ -109,4 +109,3 @@ export function ConnectionTimeline({ events, privacyMode }: ConnectionTimelinePr
     </div>
   );
 }
-

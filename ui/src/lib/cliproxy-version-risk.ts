@@ -43,4 +43,3 @@ export function isCliproxyVersionExperimental(version: string, maxStableVersion:
 export function isCliproxyVersionInRange(version: string, min: string, max: string): boolean {
   return compareCliproxyVersions(version, min) >= 0 && compareCliproxyVersions(version, max) <= 0;
 }
-

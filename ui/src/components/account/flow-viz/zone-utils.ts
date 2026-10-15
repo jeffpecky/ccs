@@ -61,4 +61,3 @@ export function getProviderSizeClass(accountCount: number): string {
   if (accountCount >= 3) return 'w-56'; // 2 zones
   return 'w-52'; // 1 zone - default
 }
-

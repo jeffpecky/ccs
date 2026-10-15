@@ -23,4 +23,3 @@ export function getClientPlatformKey(
 
   return normalizeClientPlatform(userAgentDataPlatform || fallbackPlatform || '');
 }
-

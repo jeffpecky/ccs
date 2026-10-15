@@ -31,4 +31,3 @@ export function getMultiplierDisplay(multiplier?: number): string | null {
   if (multiplier === 1) return '1x';
   return `${multiplier}x`;
 }
-

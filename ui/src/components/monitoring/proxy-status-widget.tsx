@@ -169,7 +169,8 @@ export function ProxyStatusWidget() {
   } = useCliproxySessionAffinity();
   const updateSessionAffinity = useUpdateCliproxySessionAffinity();
   const updatePoolRouting = useUpdateCliproxyPoolRouting();
-  const isSavingRoutingConfig = updateRouting.isPending || updateSessionAffinity.isPending || updatePoolRouting.isPending;
+  const isSavingRoutingConfig =
+    updateRouting.isPending || updateSessionAffinity.isPending || updatePoolRouting.isPending;
   const routingConfigError = routingError instanceof Error ? routingError : null;
   const startProxy = useStartProxy();
   const stopProxy = useStopProxy();
@@ -703,4 +704,3 @@ export function ProxyStatusWidget() {
     </TooltipProvider>
   );
 }
-

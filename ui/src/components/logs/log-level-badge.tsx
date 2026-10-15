@@ -20,4 +20,3 @@ export function LogLevelBadge({ level, className }: { level: LogsLevel; classNam
     </span>
   );
 }
-

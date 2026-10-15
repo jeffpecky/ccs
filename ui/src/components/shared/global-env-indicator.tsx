@@ -133,4 +133,3 @@ export function GlobalEnvIndicator({ profileEnv = {} }: GlobalEnvIndicatorProps)
     </div>
   );
 }
-

@@ -55,4 +55,3 @@ export function CliproxyTabs({ activeTab, onTabChange, children }: CliproxyTabsP
     </Tabs>
   );
 }
-

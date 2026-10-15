@@ -24,4 +24,3 @@ export function ProviderStep({ providers, onSelect }: ProviderStepProps) {
     </div>
   );
 }
-

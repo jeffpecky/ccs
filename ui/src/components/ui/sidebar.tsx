@@ -672,4 +672,3 @@ export {
   SidebarSeparator,
   SidebarTrigger,
 };
-

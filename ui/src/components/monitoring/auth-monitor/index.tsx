@@ -263,4 +263,3 @@ export function AuthMonitor() {
 
 // Re-export types for barrel
 export type { AccountRow, ProviderStats } from './types';
-

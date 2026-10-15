@@ -86,4 +86,3 @@ export function AccountCardStats({ success, failure, showDetails }: AccountCardS
     </div>
   );
 }
-

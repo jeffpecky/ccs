@@ -25,4 +25,3 @@ export function LogsError({ error, onRetry }: LogsErrorProps) {
     </div>
   );
 }
-

@@ -186,4 +186,3 @@ export function DeviceCodeDialog({
     </Dialog>
   );
 }
-

@@ -112,4 +112,3 @@ export function useProjectSelection() {
     [state.isOpen, state.prompt, handleSelect, handleClose]
   );
 }
-

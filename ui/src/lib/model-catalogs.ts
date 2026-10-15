@@ -1132,4 +1132,3 @@ export function supportsExtendedContext(
 ): boolean {
   return findCatalogModel(provider, modelId, catalogOverride)?.extendedContext === true;
 }
-

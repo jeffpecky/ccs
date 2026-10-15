@@ -268,37 +268,33 @@ export default function BackupsSection() {
 
           {/* Export/Import */}
           <div className="grid gap-4 sm:grid-cols-2">
-              <Card className="p-4">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">{t('settingsBackups.exportTitle')}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t('settingsBackups.exportDesc')}
-                  </p>
-                  <Button size="sm" onClick={handleExport} disabled={exporting}>
-                    {exporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
-                    {t('settingsBackups.downloadBackup')}
-                  </Button>
-                </div>
-              </Card>
+            <Card className="p-4">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{t('settingsBackups.exportTitle')}</p>
+                <p className="text-xs text-muted-foreground">{t('settingsBackups.exportDesc')}</p>
+                <Button size="sm" onClick={handleExport} disabled={exporting}>
+                  {exporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  {t('settingsBackups.downloadBackup')}
+                </Button>
+              </div>
+            </Card>
 
-              <Card className="p-4">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">{t('settingsBackups.importTitle')}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t('settingsBackups.importDesc')}
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setConfirmImport(true)}
-                    disabled={importing}
-                  >
-                    {importing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
-                    {t('settingsBackups.importBackup')}
-                  </Button>
-                </div>
-              </Card>
-            </div>
+            <Card className="p-4">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{t('settingsBackups.importTitle')}</p>
+                <p className="text-xs text-muted-foreground">{t('settingsBackups.importDesc')}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConfirmImport(true)}
+                  disabled={importing}
+                >
+                  {importing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  {t('settingsBackups.importBackup')}
+                </Button>
+              </div>
+            </Card>
+          </div>
 
           {/* Backups List */}
           {backups.length === 0 ? (

@@ -75,4 +75,3 @@ export function useOpenRouterReady() {
     modelCount: data?.length ?? 0,
   };
 }
-

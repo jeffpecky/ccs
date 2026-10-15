@@ -15,4 +15,3 @@ export const initialState: ThemeProviderState = {
 };
 
 export const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
-

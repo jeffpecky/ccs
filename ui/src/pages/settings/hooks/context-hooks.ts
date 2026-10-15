@@ -5,11 +5,7 @@
 
 import { useCallback, useContext, useMemo } from 'react';
 import { SettingsContext } from '../settings-context';
-import type {
-  GlobalEnvConfig,
-  CliproxyServerConfig,
-  RemoteProxyStatus,
-} from '../types';
+import type { GlobalEnvConfig, CliproxyServerConfig, RemoteProxyStatus } from '../types';
 
 export function useSettingsContext() {
   const context = useContext(SettingsContext);

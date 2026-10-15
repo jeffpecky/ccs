@@ -687,4 +687,3 @@ export function CliproxyPage() {
     </div>
   );
 }
-

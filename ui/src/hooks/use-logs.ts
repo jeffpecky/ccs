@@ -379,4 +379,3 @@ export function getSourceLabelMap(
 export function isLogsEntryListEmpty(entries: LogsEntry[] | undefined) {
   return !entries || entries.length === 0;
 }
-
