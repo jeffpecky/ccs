@@ -272,6 +272,12 @@ export function RelayPage() {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
+                <p className="text-xs text-muted-foreground">
+                  The deployed worker has no authentication — anyone with the relay URL can
+                  forward requests through it. The relay platform can see request headers
+                  (including auth tokens) and URL query strings. Only route traffic you would
+                  trust that platform with.
+                </p>
                 <div className="space-y-2">
                   <Label htmlFor="relay-platform">Platform</Label>
                   <Select
