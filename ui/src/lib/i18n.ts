@@ -334,6 +334,12 @@ const resources = {
         pro: 'Pro',
         workspace: 'Workspace {{id}}',
       },
+      accountSurfaceCard: {
+        business: 'Biz',
+        free: 'Free',
+        personal: 'Pers',
+        variant: 'Variant',
+      },
       accountCardStats: {
         notUsedYet: 'Not used yet',
       },
@@ -466,8 +472,7 @@ const resources = {
         restoreConfirmSuffix: 'This action cannot be undone.',
         cancel: 'Cancel',
         exportTitle: 'Export CCS Configuration',
-        exportDesc:
-          'Download all auth tokens and account data as a single JSON file.',
+        exportDesc: 'Download all auth tokens and account data as a single JSON file.',
         downloadBackup: 'Download Backup',
         exportSuccess: 'Backup downloaded successfully',
         exportFailed: 'Export failed',
@@ -971,14 +976,6 @@ const resources = {
         descDeviceCode:
           'Click Authenticate. A verification code will appear for you to enter on the provider website.',
         descOauth: 'Click Authenticate to get an OAuth URL. Open it in any browser to sign in.',
-        powerUserEnabled: 'Power user mode enabled',
-        powerUserSkipped:
-          'Settings > Proxy power user mode is skipping safety checks. You accept full responsibility for OAuth/account risk.',
-        powerUserLoadFailed:
-          'Failed to load power user mode settings. Check Settings > Proxy and try again.',
-        powerUserLoading: 'Loading power user safety settings. Please wait a moment and retry.',
-        powerUserUnavailableRetry:
-          'Power user mode is unavailable. Complete the required provider safety step and retry.',
         authMethod: 'Auth Method',
         selectKiroAuthMethod: 'Select Kiro auth method',
         gitlabAuthMethod: 'GitLab auth method',

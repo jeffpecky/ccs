@@ -18,11 +18,7 @@
  * cancellable and a route-level timeout cannot stop an in-flight poll.
  */
 
-import {
-  CLOUDFLARE_RELAY_WORKER,
-  DENO_RELAY_WORKER,
-  VERCEL_RELAY_WORKER,
-} from './worker-sources';
+import { CLOUDFLARE_RELAY_WORKER, DENO_RELAY_WORKER, VERCEL_RELAY_WORKER } from './worker-sources';
 import {
   NETLIFY_API,
   NETLIFY_FUNCTION_NAME,
@@ -46,7 +42,10 @@ export interface DeployResult {
 }
 
 export class DeployError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
     super(message);
     this.name = 'DeployError';
   }
@@ -81,7 +80,7 @@ interface VercelErrorBody {
 async function pollVercelDeployment(
   deploymentId: string,
   token: string,
-  maxMs = 120000,
+  maxMs = 120000
 ): Promise<VercelDeploymentState> {
   const start = Date.now();
   while (Date.now() - start < maxMs) {
@@ -141,7 +140,7 @@ export async function deployVercel(input: DeployInput): Promise<DeployResult> {
     const err = (await deployRes.json().catch(() => ({}))) as VercelErrorBody;
     throw new DeployError(
       err.error?.message || 'Failed to create Vercel deployment',
-      deployRes.status,
+      deployRes.status
     );
   }
 
@@ -189,7 +188,7 @@ export async function deployCloudflare(input: DeployInput): Promise<DeployResult
   formData.append(
     'index.js',
     new Blob([CLOUDFLARE_RELAY_WORKER], { type: 'application/javascript+module' }),
-    'index.js',
+    'index.js'
   );
   formData.append(
     'metadata',
@@ -201,9 +200,9 @@ export async function deployCloudflare(input: DeployInput): Promise<DeployResult
           observability: { enabled: true },
         }),
       ],
-      { type: 'application/json' },
+      { type: 'application/json' }
     ),
-    'metadata.json',
+    'metadata.json'
   );
 
   const uploadRes = await fetch(workerScriptUrl, {
@@ -218,7 +217,7 @@ export async function deployCloudflare(input: DeployInput): Promise<DeployResult
     const err = (await uploadRes.json().catch(() => ({}))) as CloudflareErrorBody;
     throw new DeployError(
       err.errors?.[0]?.message || 'Failed to upload Worker to Cloudflare',
-      uploadRes.status,
+      uploadRes.status
     );
   }
 
@@ -237,16 +236,13 @@ export async function deployCloudflare(input: DeployInput): Promise<DeployResult
   }
 
   // 3. Read the account workers.dev subdomain to build the final URL.
-  const subdomainRes = await fetch(
-    `${CLOUDFLARE_API}/accounts/${accountId}/workers/subdomain`,
-    {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+  const subdomainRes = await fetch(`${CLOUDFLARE_API}/accounts/${accountId}/workers/subdomain`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
-  );
+  });
 
   let deployUrl = '';
   if (subdomainRes.ok) {
@@ -259,7 +255,7 @@ export async function deployCloudflare(input: DeployInput): Promise<DeployResult
   if (!deployUrl) {
     throw new DeployError(
       'Worker deployed but failed to retrieve workers.dev subdomain. Make sure you have setup a workers.dev subdomain in Cloudflare Dashboard.',
-      400,
+      400
     );
   }
 
@@ -348,7 +344,7 @@ export async function deployDeno(input: DeployInput): Promise<DeployResult> {
     }
     throw new DeployError(
       `Failed to create app (${createAppRes.status}): ${text}`,
-      createAppRes.status,
+      createAppRes.status
     );
   }
 
@@ -418,7 +414,10 @@ function sanitizeSiteName(raw: string | undefined): string {
   const name = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
   if (!name) return defaultName();
   // Netlify site names become subdomains: lowercase alphanumerics + hyphens.
-  const cleaned = name.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const cleaned = name
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
   return cleaned || defaultName();
 }
 
@@ -451,9 +450,7 @@ export async function deployNetlify(input: DeployInput): Promise<DeployResult> {
     const message = await readError(siteRes, 'Failed to create Netlify site');
     const status = siteRes.status === 422 ? 409 : siteRes.status;
     const hint =
-      siteRes.status === 422
-        ? ` Site name "${siteName}" is taken — choose a different name.`
-        : '';
+      siteRes.status === 422 ? ` Site name "${siteName}" is taken — choose a different name.` : '';
     throw new DeployError(`${message}.${hint}`, status);
   }
 
@@ -480,7 +477,7 @@ export async function deployNetlify(input: DeployInput): Promise<DeployResult> {
   if (!deployRes.ok) {
     throw new DeployError(
       await readError(deployRes, 'Failed to create Netlify deploy'),
-      deployRes.status,
+      deployRes.status
     );
   }
 
@@ -503,7 +500,7 @@ export async function deployNetlify(input: DeployInput): Promise<DeployResult> {
     if (!fileRes.ok) {
       throw new DeployError(
         await readError(fileRes, 'Failed to upload site file to Netlify'),
-        fileRes.status,
+        fileRes.status
       );
     }
   }
@@ -515,12 +512,12 @@ export async function deployNetlify(input: DeployInput): Promise<DeployResult> {
         method: 'PUT',
         headers: { ...netlifyHeaders(token), 'Content-Type': 'application/octet-stream' },
         body: zip,
-      },
+      }
     );
     if (!fnRes.ok) {
       throw new DeployError(
         await readError(fnRes, 'Failed to upload relay function to Netlify'),
-        fnRes.status,
+        fnRes.status
       );
     }
   }

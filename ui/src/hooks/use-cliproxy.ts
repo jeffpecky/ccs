@@ -15,6 +15,7 @@ import {
 } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import type { AiProviderFamilyId } from '../../../src/cliproxy/ai-providers';
 
 function invalidateCliproxyRoutingQueries(queryClient: ReturnType<typeof useQueryClient>): void {
   queryClient.invalidateQueries({ queryKey: ['cliproxy-catalog'] });
@@ -409,10 +410,13 @@ export function useCliproxyModels() {
   });
 }
 
-export function useAiProviderModels(family: string | null) {
+export function useAiProviderModels(family: AiProviderFamilyId | null) {
   return useQuery({
     queryKey: ['ai-provider-models', family],
-    queryFn: () => api.cliproxy.aiProviders.models(family as any),
+    queryFn: () => {
+      if (family === null) throw new Error('AI provider family is required');
+      return api.cliproxy.aiProviders.models(family);
+    },
     enabled: Boolean(family),
     staleTime: 60_000,
   });
@@ -642,4 +646,3 @@ export function useRestartProxy() {
     },
   });
 }
-

@@ -45,7 +45,8 @@ describe('logging path helpers', () => {
     );
   });
 
-  it('creates log directories with restrictive permissions', () => {
+  // NOTE: skipped on win32 - Windows ignores POSIX mode bits, so 0o700 is not applied.
+  it.skipIf(process.platform === 'win32')('creates log directories with restrictive permissions', () => {
     ensureLoggingDirectories();
 
     const logsMode = fs.statSync(getNativeLogsDir()).mode & 0o777;

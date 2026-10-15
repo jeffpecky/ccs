@@ -122,7 +122,9 @@ describe('RoutingGuidanceCard', () => {
     expect(screen.getByText(/On · Max retry 3/i)).toBeInTheDocument();
     // Static override warning is rendered before the user clicks anything.
     expect(
-      screen.getByText(/will not take effect until you disable it: ccs cliproxy pool --disable/i)
+      screen.getByText(
+        /Pool routing is on\. Your strategy and session affinity settings are preserved/i
+      )
     ).toBeInTheDocument();
   });
 

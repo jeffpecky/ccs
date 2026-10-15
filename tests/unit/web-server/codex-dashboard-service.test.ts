@@ -16,6 +16,25 @@ import {
   summarizeCodexProjectTrust,
 } from '../../../src/web-server/services/codex-dashboard-service';
 
+// Probe once whether symlink creation is permitted (Windows without the
+// symlink privilege throws EPERM, including for the fixture below).
+const SYMLINK_SUPPORTED: boolean = (() => {
+  try {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-dashboard-probe-'));
+    try {
+      const target = path.join(dir, 'target.txt');
+      fs.writeFileSync(target, 'x');
+      fs.symlinkSync(target, path.join(dir, 'link.txt'));
+      fs.unlinkSync(path.join(dir, 'link.txt'));
+      return true;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch {
+    return false;
+  }
+})();
+
 const testRoot = path.join(os.tmpdir(), `ccs-codex-dashboard-test-${Date.now()}`);
 const codexHome = path.join(testRoot, '.codex-home');
 const codexStubPath = path.join(testRoot, 'codex');
@@ -198,7 +217,7 @@ describe('codex-dashboard-service', () => {
     expect(raw.config).toBeNull();
   });
 
-  it('returns readError when config.toml is a symlink', async () => {
+  it.skipIf(!SYMLINK_SUPPORTED)('returns readError when config.toml is a symlink', async () => {
     const configPath = path.join(codexHome, 'config.toml');
     const targetPath = path.join(testRoot, 'linked.toml');
     fs.writeFileSync(targetPath, 'model = "gpt-5.4"\n');
@@ -254,7 +273,11 @@ model = "gpt-5.4"
     const diagnostics = await getCodexDashboardDiagnostics();
 
     expect(diagnostics.binary.installed).toBe(true);
-    expect(diagnostics.binary.supportsConfigOverrides).toBe(true);
+    if (process.platform !== 'win32') {
+      // The codex fixture stub is a #!/bin/sh script, which Windows cannot
+      // execute, so the config-override probe result is only asserted on POSIX.
+      expect(diagnostics.binary.supportsConfigOverrides).toBe(true);
+    }
     expect(diagnostics.config.model).toBe('gpt-5.4');
     expect(diagnostics.config.modelContextWindow).toBe(800000);
     expect(diagnostics.config.modelAutoCompactTokenLimit).toBe(700000);
@@ -495,7 +518,10 @@ bearer_token = "secret"
       trustLevel: 'trusted',
     });
 
-    expect(expanded.rawText).toContain(`[projects."${homeWorkspacePath}"]`);
+    // TOML string keys escape backslashes, so assert against the escaped form.
+    expect(expanded.rawText).toContain(
+      `[projects."${homeWorkspacePath.replace(/\\/g, '\\\\')}"]`
+    );
 
     await expect(
       patchCodexConfig({

@@ -153,7 +153,7 @@ describe('Beta Channel Implementation (Phase 3)', function () {
 
       // Should have made request to correct URL
       const latestRequest = httpsRequests.find(req =>
-        req.url === 'https://registry.npmjs.org/@kaitranntt/ccs/latest'
+        req.url === 'https://registry.npmjs.org/@jeffpecky/ccs/latest'
       );
       assert(latestRequest, 'should request latest tag from npm registry');
 
@@ -168,7 +168,7 @@ describe('Beta Channel Implementation (Phase 3)', function () {
 
       // Should have made request to correct URL
       const devRequest = httpsRequests.find(req =>
-        req.url === 'https://registry.npmjs.org/@kaitranntt/ccs/dev'
+        req.url === 'https://registry.npmjs.org/@jeffpecky/ccs/dev'
       );
       assert(devRequest, 'should request dev tag from npm registry');
 

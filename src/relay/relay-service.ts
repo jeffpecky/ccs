@@ -64,11 +64,7 @@ export function getActiveRelayUrl(config: RelayConfig = getRelayConfig()): strin
 }
 
 /** Create a fresh relay entry for a just-completed deployment. */
-export function createRelayEntry(
-  platform: RelayPlatform,
-  name: string,
-  url: string
-): RelayEntry {
+export function createRelayEntry(platform: RelayPlatform, name: string, url: string): RelayEntry {
   return {
     id: randomUUID(),
     name,
@@ -85,10 +81,7 @@ export function createRelayEntry(
  * live relay. Network errors and timeouts resolve to ok: false instead of
  * rejecting so callers can persist the failure.
  */
-export async function testRelay(
-  url: string,
-  timeoutMs = 10000
-): Promise<RelayTestResult> {
+export async function testRelay(url: string, timeoutMs = 10000): Promise<RelayTestResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const startedAt = Date.now();

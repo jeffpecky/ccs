@@ -135,8 +135,9 @@ export function AccountQuotaPanel({
   const minQuotaLabel = minQuota !== null ? formatQuotaPercent(minQuota) : null;
   const minQuotaValue = minQuotaLabel !== null ? Number(minQuotaLabel) : null;
   const failureInfo = getQuotaFailureInfo(quota);
+  // Compare against the i18n label (not a stale literal) so the reauth icon stays reachable.
   const FailureIcon =
-    failureInfo?.label === 'Reauth'
+    failureInfo?.label === t('accountCard.failureLabelReauth')
       ? KeyRound
       : failureInfo?.tone === 'warning'
         ? AlertTriangle
@@ -241,9 +242,7 @@ export function AccountQuotaPanel({
             label: showCountdown
               ? `30d usage limit · resets ${formatCountdown(w.resetAt)}`
               : '30d usage limit',
-            compactLabel: showCountdown
-              ? formatCountdown(w.resetAt)
-              : '30d',
+            compactLabel: showCountdown ? formatCountdown(w.resetAt) : '30d',
             value: w.remainingPercent,
           }))
         : [];
@@ -460,4 +459,3 @@ export function AccountQuotaPanel({
     </TooltipProvider>
   );
 }
-

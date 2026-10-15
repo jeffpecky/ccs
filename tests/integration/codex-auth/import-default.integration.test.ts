@@ -74,6 +74,26 @@ async function makeCtx() {
   return { registry: new CodexProfileRegistry(), version: '0.0.0-test' };
 }
 
+// Probe once whether symlink creation is permitted. Windows without the
+// symlink privilege throws EPERM and src falls back to a plain copy, so the
+// isSymbolicLink assertion below is only valid when this probe succeeds.
+const SYMLINK_SUPPORTED: boolean = (() => {
+  try {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-symlink-probe-'));
+    try {
+      const target = path.join(dir, 'target.txt');
+      fs.writeFileSync(target, 'x');
+      fs.symlinkSync(target, path.join(dir, 'link.txt'));
+      fs.unlinkSync(path.join(dir, 'link.txt'));
+      return true;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch {
+    return false;
+  }
+})();
+
 function silence(): () => void {
   const origLog = console.log;
   const origErr = process.stderr.write.bind(process.stderr);
@@ -116,7 +136,7 @@ describe('import-default integration — end-to-end happy path', () => {
 
     // config.toml is a symlink (or was attempted — skip check on no-symlink platforms)
     const configLink = path.join(profileDir, 'config.toml');
-    if (fs.existsSync(configLink)) {
+    if (SYMLINK_SUPPORTED && fs.existsSync(configLink)) {
       const stat = fs.lstatSync(configLink);
       expect(stat.isSymbolicLink()).toBe(true);
     }

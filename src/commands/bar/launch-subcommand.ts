@@ -384,13 +384,12 @@ function withLatestLaunchLock<T>(pointerPath: string, launchId: string, action: 
         const raw = fs.readFileSync(lockPath, 'utf8');
         const lock = JSON.parse(raw) as Partial<LatestLaunchLock>;
         const age = Date.now() - Date.parse(String(lock.createdAt));
-        const validPid = Number.isSafeInteger(lock.pid) && (lock.pid ?? 0) > 0;
+        const pid = lock.pid;
+        const validPid = pid !== undefined && Number.isSafeInteger(pid) && pid > 0;
         if (
           validPid &&
-          processIsLive(
-            lock.pid!,
-            typeof lock.birthIdentity === 'string' ? lock.birthIdentity : null
-          )
+          pid !== undefined &&
+          processIsLive(pid, typeof lock.birthIdentity === 'string' ? lock.birthIdentity : null)
         ) {
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
           continue;
@@ -688,20 +687,21 @@ export async function handleBarLaunch(
   const rollbackLogPath = getLaunchServeLogPath(ccsDir, `rollback-${launchId}`);
 
   const rollbackPriorServer = async (): Promise<void> => {
-    if (movingFrom === null) return;
+    const rollbackSource = movingFrom;
+    if (rollbackSource === null) return;
     try {
       if (
         !withOwnership(() => {
           fs.mkdirSync(rollbackAttemptDir, { recursive: true });
-          spawnDetachedServer(movingFrom!.port, rollbackLogPath);
+          spawnDetachedServer(rollbackSource.port, rollbackLogPath);
         })
       )
         return;
-      await waitForServerLive(movingFrom.baseUrl);
-      console.log(`[OK] Restored CCS Bar server at ${movingFrom.baseUrl}.`);
+      await waitForServerLive(rollbackSource.baseUrl);
+      console.log(`[OK] Restored CCS Bar server at ${rollbackSource.baseUrl}.`);
     } catch (rollbackErr) {
       const message = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
-      console.error(`[X] Failed to restore CCS Bar at ${movingFrom.baseUrl}: ${message}`);
+      console.error(`[X] Failed to restore CCS Bar at ${rollbackSource.baseUrl}: ${message}`);
       console.error('[i] Existing discovery and launch state was preserved for manual recovery.');
     }
   };

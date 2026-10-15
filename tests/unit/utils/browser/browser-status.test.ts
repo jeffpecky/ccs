@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, normalize } from 'node:path';
+// Shared path note: src expandPath() ends in path.normalize(), so '/'-style config
+// paths become '\' separators on win32 (upstream CI was Linux). Expected paths below
+// are computed with normalize() the same way, keeping the exact subpath pinned.
 import {
   getBrowserConfig,
   mutateUnifiedConfig,
@@ -138,7 +141,7 @@ describe('browser status', () => {
       expect(status.claude).toMatchObject({
         enabled: true,
         policy: 'manual',
-        effectiveUserDataDir: '/tmp/explicit-claude',
+        effectiveUserDataDir: normalize('/tmp/explicit-claude'),
         devtoolsPort: 9333,
       });
       expect(status.codex).toMatchObject({
@@ -186,7 +189,9 @@ describe('browser status', () => {
       expect(status.claude.state).toBe('browser_not_running');
       expect(status.claude.title).toBe('Claude Browser Attach is not ready yet.');
       expect(status.claude.detail).toContain('created the managed browser profile directory');
-      expect(status.claude.nextStep).toContain('ccs browser setup');
+      expect(status.claude.nextStep).toContain(
+        'Set up the browser from the dashboard settings to configure and start the managed browser session.'
+      );
       expect(existsSync(join(tempHome, '.ccs', 'browser', 'chrome-user-data'))).toBe(true);
     } finally {
       runtimeSpy.mockRestore();
@@ -233,7 +238,7 @@ describe('browser status', () => {
         enabled: true,
         state: 'ready',
         source: 'CCS_BROWSER_USER_DATA_DIR',
-        effectiveUserDataDir: '/env-browser',
+        effectiveUserDataDir: normalize('/env-browser'),
         devtoolsPort: 9444,
       });
       expect(status.claude.runtimeEnv?.CCS_BROWSER_DEVTOOLS_PORT).toBe('9444');
@@ -265,8 +270,10 @@ describe('browser status', () => {
 
     expect(resolution.runtimeEnv).toBeUndefined();
     expect(resolution.warning).toContain('Claude Browser Attach is not ready yet.');
-    expect(resolution.warning).toContain('ccs browser setup');
-    expect(resolution.warning).toContain('ccs browser doctor');
+    expect(resolution.warning).toContain(
+      'Set up the browser from the dashboard settings to configure and start the managed browser session.'
+    );
+    expect(resolution.warning).toContain('Diagnose from the dashboard settings.');
   });
 
   it('keeps env override paths from implicitly enabling Claude browser attach when config is disabled', () => {
@@ -293,7 +300,7 @@ describe('browser status', () => {
       enabled: false,
       source: 'CCS_BROWSER_USER_DATA_DIR',
       overrideActive: true,
-      userDataDir: '/env-browser',
+      userDataDir: normalize('/env-browser'),
       devtoolsPort: 9444,
     });
   });
@@ -336,7 +343,9 @@ describe('browser status', () => {
 
     expect(resolution.runtimeEnv).toBeUndefined();
     expect(resolution.warning).toContain('Claude Browser Attach is not ready yet.');
-    expect(resolution.warning).toContain('ccs browser setup');
+    expect(resolution.warning).toContain(
+      'Set up the browser from the dashboard settings to configure and start the managed browser session.'
+    );
   });
 
   it('reports browser_not_running when attach metadata is missing for a custom path', async () => {
@@ -412,7 +421,7 @@ describe('browser status', () => {
       const status = await getBrowserStatus();
 
       expect(runtimeSpy.mock.calls[0]?.[0]).toEqual({
-        profileDir: '/legacy-browser',
+        profileDir: normalize('/legacy-browser'),
         devtoolsPort: undefined,
       });
       expect(status.claude.runtimeEnv?.CCS_BROWSER_DEVTOOLS_PORT).toBe('50123');
@@ -456,7 +465,7 @@ describe('browser status', () => {
       await getBrowserStatus();
 
       expect(runtimeSpy.mock.calls[0]?.[0]).toEqual({
-        profileDir: '/tmp/config-browser',
+        profileDir: normalize('/tmp/config-browser'),
         devtoolsPort: '9222',
       });
     } finally {

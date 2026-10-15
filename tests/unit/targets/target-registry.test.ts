@@ -11,10 +11,10 @@ import {
   getDefaultTarget,
   hasTarget,
   getRegisteredTargets,
-  ClaudeAdapter,
-  DroidAdapter,
-  CodexAdapter,
-} from '../../../src/targets';
+} from '../../../src/targets/target-registry';
+import { ClaudeAdapter } from '../../../src/targets/claude-adapter';
+import { DroidAdapter } from '../../../src/targets/droid-adapter';
+import { CodexAdapter } from '../../../src/targets/codex-adapter';
 
 describe('target-registry', () => {
   beforeEach(() => {

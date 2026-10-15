@@ -278,12 +278,23 @@ function createAnthropicStreamingResponse(response: Response): Response {
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
-          if (!value) continue;
+          if (!done && !value) continue;
 
-          buffer += decoder.decode(value, { stream: true });
+          if (!done) {
+            buffer += decoder.decode(value, { stream: true });
+            // DoS protection: reject buffers beyond the 1MB upstream SSE cap.
+            if (buffer.length > 1024 * 1024) {
+              throw new Error('SSE buffer exceeded 1048576 bytes (DoS protection)');
+            }
+          }
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
+          if (done && buffer.length > 0) {
+            // Flush the trailing unterminated line so a final oversized or
+            // malformed data line surfaces as an error event, not silent success.
+            lines.push(buffer);
+            buffer = '';
+          }
 
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
@@ -336,6 +347,8 @@ function createAnthropicStreamingResponse(response: Response): Response {
               return;
             }
           }
+
+          if (done) break;
         }
 
         if (!hasStarted) {

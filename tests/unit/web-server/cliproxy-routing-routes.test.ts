@@ -47,6 +47,15 @@ describe('cliproxy routing routes', () => {
       applyCliproxyRoutingStrategy: applyStrategyMock,
       readCliproxySessionAffinityState: readAffinityStateMock,
       applyCliproxySessionAffinitySettings: applyAffinityMock,
+      // Pool routing exports added by fork a9ec013f.
+      enablePoolRouting: async () => ({ strategy: 'round-robin', applied: 'config-only' }),
+      disablePoolRouting: async () => ({}),
+      getCliproxyPoolRoutingState: () => ({
+        strategy: 'round-robin',
+        source: 'config',
+        target: 'local',
+        reachable: true,
+      }),
       normalizeCliproxyRoutingStrategy: (value: unknown) => {
         if (value === 'round-robin' || value === 'fill-first') {
           return value;

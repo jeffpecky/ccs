@@ -489,7 +489,9 @@ describe('import-default — torn-write retry', () => {
   });
 });
 
-describe('import-default — Codex running detection', () => {
+// The fixtures below emulate a POSIX process table (`ps` output + uid columns).
+// process.getuid is undefined on Windows, so skip this block there.
+describe.skipIf(process.platform === 'win32')('import-default — Codex running detection', () => {
   it('warns and refuses when process table finds a same-user Codex PID', async () => {
     fs.writeFileSync(path.join(legacyCodexHome, 'auth.json'), VALID_AUTH_JSON);
 

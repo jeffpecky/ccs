@@ -354,20 +354,20 @@ describe('findProjectDirectories', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test('finds all subdirectories', () => {
+  test('finds all subdirectories', async () => {
     fs.mkdirSync(path.join(tempDir, 'project-a'));
     fs.mkdirSync(path.join(tempDir, 'project-b'));
     fs.writeFileSync(path.join(tempDir, 'file.txt'), 'not a dir');
 
-    const dirs = findProjectDirectories(tempDir);
+    const dirs = await findProjectDirectories(tempDir);
 
     expect(dirs.length).toBe(2);
     expect(dirs).toContain(path.join(tempDir, 'project-a'));
     expect(dirs).toContain(path.join(tempDir, 'project-b'));
   });
 
-  test('returns empty array for non-existent directory', () => {
-    const dirs = findProjectDirectories('/nonexistent/path');
+  test('returns empty array for non-existent directory', async () => {
+    const dirs = await findProjectDirectories('/nonexistent/path');
     expect(dirs.length).toBe(0);
   });
 });
@@ -383,7 +383,7 @@ describe('countJsonlFiles', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test('counts JSONL files across multiple project directories', () => {
+  test('counts JSONL files across multiple project directories', async () => {
     const project1 = path.join(tempDir, 'project-a');
     const project2 = path.join(tempDir, 'project-b');
     fs.mkdirSync(project1);
@@ -394,7 +394,7 @@ describe('countJsonlFiles', () => {
     fs.writeFileSync(path.join(project2, 'c.jsonl'), '');
     fs.writeFileSync(path.join(project1, 'not-jsonl.txt'), '');
 
-    const count = countJsonlFiles(tempDir);
+    const count = await countJsonlFiles(tempDir);
     expect(count).toBe(3);
   });
 });
@@ -559,7 +559,8 @@ describe('getDefaultProjectsDir', () => {
   test('uses CLAUDE_CONFIG_DIR env var if set', () => {
     process.env.CLAUDE_CONFIG_DIR = '/custom/claude';
     const dir = getDefaultProjectsDir();
-    expect(dir).toBe('/custom/claude/projects');
+    // Expectation uses resolve() so it matches on Windows (drive-prefixed) and POSIX alike.
+    expect(dir).toBe(path.resolve('/custom/claude', 'projects'));
   });
 
   test('falls back to ~/.claude/projects', () => {

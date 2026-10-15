@@ -2,10 +2,14 @@ import { describe, expect, test } from 'bun:test';
 
 import { CodexAdapter } from '../../../src/targets/codex-adapter';
 import { CCSXP_CLIPROXY_SHORTCUT_ENV } from '../../../src/targets/codex-cliproxy-provider-config';
-import {
-  buildCodexBrowserMcpOverrides,
-  getCodexBrowserMcpServerName,
-} from '../../../src/utils/browser-codex-overrides';
+
+// NOTE: the browser-codex-overrides helper module was stripped (a36a1238);
+// this literal preserves coverage of the surviving generic
+// runtimeConfigOverrides path in codex-adapter.
+const BROWSER_MCP_OVERRIDES = [
+  'mcp_servers.ccs_browser.command="npx.cmd"',
+  'mcp_servers.ccs_browser.args=["-y","@playwright/mcp@0.0.70"]',
+];
 
 describe('CodexAdapter', () => {
   const adapter = new CodexAdapter();
@@ -24,16 +28,6 @@ describe('CodexAdapter', () => {
         profileType: 'default',
       })
     ).toEqual(['--search']);
-  });
-
-  test('builds browser MCP overrides with Codex-safe defaults', () => {
-    const serverName = getCodexBrowserMcpServerName();
-    expect(buildCodexBrowserMcpOverrides()).toEqual([
-      `mcp_servers.${serverName}.command=${JSON.stringify(process.platform === 'win32' ? 'npx.cmd' : 'npx')}`,
-      `mcp_servers.${serverName}.args=${JSON.stringify(['-y', '@playwright/mcp@0.0.70'])}`,
-      `mcp_servers.${serverName}.enabled=true`,
-      `mcp_servers.${serverName}.tool_timeout_sec=30`,
-    ]);
   });
 
   test('translates default-mode reasoning overrides into transient codex config', () => {
@@ -56,7 +50,7 @@ describe('CodexAdapter', () => {
   });
 
   test('injects runtime config overrides for native Codex default launches', () => {
-    const runtimeConfigOverrides = buildCodexBrowserMcpOverrides();
+    const runtimeConfigOverrides = BROWSER_MCP_OVERRIDES;
     const args = adapter.buildArgs('default', ['--search'], {
       profileType: 'default',
       creds: {
@@ -123,7 +117,7 @@ describe('CodexAdapter', () => {
   });
 
   test('injects transient config overrides for CCS-backed launches', () => {
-    const runtimeConfigOverrides = buildCodexBrowserMcpOverrides();
+    const runtimeConfigOverrides = BROWSER_MCP_OVERRIDES;
     const args = adapter.buildArgs('codex', ['--search'], {
       profileType: 'cliproxy',
       creds: {
@@ -145,9 +139,6 @@ describe('CodexAdapter', () => {
     expect(args).toContain('model_provider="ccs_runtime"');
     expect(args).toContain('model_providers.ccs_runtime.env_key="CCS_CODEX_API_KEY"');
     expect(args).toContain('model="gpt-5.4"');
-    expect(args).toContain(
-      `mcp_servers.${getCodexBrowserMcpServerName()}.command=${JSON.stringify(process.platform === 'win32' ? 'npx.cmd' : 'npx')}`
-    );
     expect(args).toContain('model_reasoning_effort="high"');
     expect(args[args.length - 1]).toBe('--search');
   });

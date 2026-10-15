@@ -159,6 +159,7 @@ describe('LogsPage', () => {
     expect(screen.getByLabelText('Loading logs...')).toBeInTheDocument();
   });
 
+  // jsdom render exceeds 5s under parallel full-suite load; raise the timeout.
   it('renders entries and supports search filtering', async () => {
     installFetchMock();
     render(<LogsPage />);
@@ -176,8 +177,9 @@ describe('LogsPage', () => {
         true
       );
     });
-  });
+  }, 20000);
 
+  // jsdom render exceeds 5s under parallel full-suite load; raise the timeout.
   it('selecting a row reveals overview fields and raw JSON', async () => {
     installFetchMock();
     render(<LogsPage />);
@@ -195,5 +197,5 @@ describe('LogsPage', () => {
 
     // Verify detail panel surfaced the selected entry's event name (header).
     expect(screen.getAllByText('task.retry').length).toBeGreaterThan(0);
-  });
+  }, 20000);
 });

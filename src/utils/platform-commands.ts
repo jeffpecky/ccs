@@ -91,7 +91,10 @@ export function killAllCLIProxyProcesses(verbose = false): number {
     if (isWindows) {
       // Windows: taskkill by image name
       // Use /T to kill child processes too
-      execSync('taskkill /F /IM cli-proxy-api-plus.exe /T 2>nul', { stdio: 'pipe', windowsHide: true });
+      execSync('taskkill /F /IM cli-proxy-api-plus.exe /T 2>nul', {
+        stdio: 'pipe',
+        windowsHide: true,
+      });
       killed++;
     } else {
       // Unix: pkill with pattern matching
@@ -146,7 +149,11 @@ export function killProcessOnPort(port: number, verbose = false): boolean {
       return killed;
     } else {
       // Unix: lsof + kill
-      const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8', stdio: 'pipe', windowsHide: true });
+      const result = execSync(`lsof -ti:${port}`, {
+        encoding: 'utf-8',
+        stdio: 'pipe',
+        windowsHide: true,
+      });
       const pids = result
         .trim()
         .split('\n')

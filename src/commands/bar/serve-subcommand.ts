@@ -76,7 +76,11 @@ async function defaultStartServer(opts: { port: number; host: string }): Promise
   // autoStartCliproxy: a bar server is the boot-time entry (Startup .lnk →
   // app → launch descriptor → serve), so bring CLIProxy up with it — agents
   // proxied through CCS work right after boot. Honors cliproxy_server config.
-  const { server } = await startServer({ port: opts.port, host: opts.host, autoStartCliproxy: true });
+  const { server } = await startServer({
+    port: opts.port,
+    host: opts.host,
+    autoStartCliproxy: true,
+  });
   const addr = server.address();
   const resolvedPort = addr && typeof addr === 'object' ? addr.port : opts.port;
   const baseUrl = `http://127.0.0.1:${resolvedPort}`;

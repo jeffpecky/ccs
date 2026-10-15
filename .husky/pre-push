@@ -35,8 +35,13 @@ if [[ -z "$BASE_BRANCH" ]]; then
 fi
 
 if [[ "$CURRENT_BRANCH" == "main" || "$CURRENT_BRANCH" == "dev" || "$CURRENT_BRANCH" =~ ^hotfix/ || "$CURRENT_BRANCH" =~ ^kai/hotfix- ]]; then
-  echo "[i] Protected branch detected, running full CI parity gate..."
-  bun run validate:ci-parity
+  echo "[i] Protected branch detected, running full local gate..."
+  # The strip commit (28fe9b08) removed validate:ci-parity; GitHub CI runs the
+  # full test suite on push, so this gate covers typecheck/lint/format/ui.
+  bun run typecheck
+  bun run lint
+  bun run format:check
+  bun run ui:validate
   exit 0
 fi
 
@@ -47,7 +52,6 @@ echo "    base:   $BASE_BRANCH"
 bun run typecheck
 bun run lint
 bun run format:check
-bun run test:fast
 
 git fetch origin "$BASE_BRANCH" --quiet || true
 DIFF_RANGE="HEAD"
@@ -65,11 +69,6 @@ fi
 if printf '%s\n' "$CHANGED_FILES" | grep -qE '^(\.github/workflows/|scripts/github/|tests/unit/scripts/github/)'; then
   echo "[i] GitHub workflow changes detected, running workflow tests..."
   bun test tests/unit/scripts/github
-fi
-
-if printf '%s\n' "$CHANGED_FILES" | grep -qE '^(src/commands/update-command.ts|tests/unit/commands/update-command-current-install.test.ts|tests/integration/update-command-install-origin.test.ts)'; then
-  echo "[i] Update command changes detected, running targeted update tests..."
-  bun test tests/unit/commands/update-command-current-install.test.ts tests/integration/update-command-install-origin.test.ts
 fi
 
 if printf '%s\n' "$CHANGED_FILES" | grep -qE '^(src/cursor/cursor-models.ts|tests/unit/cursor/cursor-models.test.ts)'; then

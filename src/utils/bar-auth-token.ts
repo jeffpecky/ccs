@@ -71,7 +71,11 @@ export class BarAuthNonceCache {
     for (const [key, expires] of this.nonces) if (expires <= now) this.nonces.delete(key);
     if (this.nonces.has(nonce)) return false;
     this.nonces.set(nonce, now + this.ttlMs);
-    while (this.nonces.size > this.maxSize) this.nonces.delete(this.nonces.keys().next().value!);
+    while (this.nonces.size > this.maxSize) {
+      const oldest = this.nonces.keys().next().value;
+      if (oldest === undefined) break;
+      this.nonces.delete(oldest);
+    }
     return true;
   }
 }

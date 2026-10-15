@@ -37,7 +37,9 @@ describe('account profile diagnostics', () => {
     fs.symlinkSync(path.join(sharedDir, 'settings.json'), path.join(instancePath, 'settings.json'));
   }
 
-  it('reports non-bare account settings as shared with root Claude settings', () => {
+  // Requires OS file-symlink privilege (SeCreateSymbolicLink); upstream CI ran
+  // Linux. Windows without Developer Mode fails setup with EPERM — skip there.
+  it.skipIf(process.platform === 'win32')('reports non-bare account settings as shared with root Claude settings', () => {
     const instancePath = path.join(tempHome, '.ccs', 'instances', 'ck');
     seedSharedSettings(instancePath);
 
@@ -80,12 +82,14 @@ describe('account profile diagnostics', () => {
     fs.mkdirSync(path.join(projectsPath, 'project-b'));
     fs.writeFileSync(path.join(sessionEnvPath, 'session-a.json'), '{}\n');
     fs.mkdirSync(instancePath, { recursive: true });
-    fs.symlinkSync(projectsPath, path.join(instancePath, 'projects'), 'dir');
+    // 'junction' on Windows: dir symlinks need SeCreateSymbolicLink privilege,
+    // junctions do not; lstat reports junctions as symlinks either way.
+    fs.symlinkSync(projectsPath, path.join(instancePath, 'projects'), process.platform === 'win32' ? 'junction' : 'dir');
 
     for (const artifact of ['session-env', 'file-history', 'shell-snapshots', 'todos']) {
       const sharedArtifactPath = path.join(groupRoot, 'continuity', artifact);
       fs.mkdirSync(sharedArtifactPath, { recursive: true });
-      fs.symlinkSync(sharedArtifactPath, path.join(instancePath, artifact), 'dir');
+      fs.symlinkSync(sharedArtifactPath, path.join(instancePath, artifact), process.platform === 'win32' ? 'junction' : 'dir');
     }
 
     const summary = summarizeAccountHistory(instancePath, {

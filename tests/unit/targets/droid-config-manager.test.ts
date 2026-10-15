@@ -249,7 +249,9 @@ describe('droid-config-manager', () => {
       expect(settings.customModels[1].displayName).toBe('CCS gemini');
     });
 
-    it('should write with restricted permissions', async () => {
+    // NOTE: these 4 tests are skipped on win32 - POSIX mode bits are ignored
+    // and symlink creation requires privilege on Windows.
+    it.skipIf(process.platform === 'win32')('should write with restricted permissions', async () => {
       await upsertCcsModel('test', {
         model: 'test-model',
         displayName: 'CCS test',
@@ -265,7 +267,7 @@ describe('droid-config-manager', () => {
       expect(otherPerms).toBe(0);
     });
 
-    it('should reject symlinked temp file path', async () => {
+    it.skipIf(process.platform === 'win32')('should reject symlinked temp file path', async () => {
       const factoryDir = path.join(tmpDir, '.factory');
       fs.mkdirSync(factoryDir, { recursive: true });
       fs.writeFileSync(
@@ -318,7 +320,7 @@ describe('droid-config-manager', () => {
       expect(settings.customModels[0].baseUrl).toBe('http://localhost:8318');
     });
 
-    it('should reject symlinked settings file on write', async () => {
+    it.skipIf(process.platform === 'win32')('should reject symlinked settings file on write', async () => {
       const factoryDir = path.join(tmpDir, '.factory');
       fs.mkdirSync(factoryDir, { recursive: true });
 
@@ -496,7 +498,7 @@ describe('droid-config-manager', () => {
       expect(models.has('ok')).toBe(true);
     });
 
-    it('should reject symlinked settings file on read', async () => {
+    it.skipIf(process.platform === 'win32')('should reject symlinked settings file on read', async () => {
       const factoryDir = path.join(tmpDir, '.factory');
       fs.mkdirSync(factoryDir, { recursive: true });
       const target = path.join(factoryDir, 'real-settings.json');

@@ -292,6 +292,11 @@ describe('CodexProfileRegistry — registry file permissions', () => {
     const reg = new CodexProfileRegistry(registryPath);
     reg.createProfile('work');
     const stat = fs.statSync(registryPath);
+    if (process.platform === 'win32') {
+      // NTFS does not enforce POSIX permission bits; Windows reports 0666.
+      expect(stat.isFile()).toBe(true);
+      return;
+    }
     // On POSIX, check owner read/write only (0o600 = 0b110_000_000 = 384)
     expect(stat.mode & 0o777).toBe(0o600);
   });

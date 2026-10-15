@@ -144,14 +144,15 @@ export default function ProxySection() {
     }
   }, [debugMode, config]);
 
-  // Load data on mount
+  // Load data on mount. The async boundary keeps every setState call off the
+  // synchronous effect body (react-hooks/set-state-in-effect).
   useEffect(() => {
-    fetchConfig();
-    fetchRawConfig();
-
-    void fetchBackend();
-
-    void checkPlusOnlyVariants();
+    void (async () => {
+      await fetchConfig();
+      await fetchRawConfig();
+      await fetchBackend();
+      await checkPlusOnlyVariants();
+    })();
   }, [fetchConfig, fetchRawConfig, fetchBackend, checkPlusOnlyVariants]);
 
   if (loading || !config) {

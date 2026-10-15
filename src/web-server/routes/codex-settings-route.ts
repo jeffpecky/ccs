@@ -139,7 +139,8 @@ router.get('/', async (_req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     // Accept either individual fields or raw env/model object
-    let { model, baseUrl, apiKey, subagentModel, wireApi, env: rawEnv, model: rawModel } = req.body;
+    const { wireApi, env: rawEnv, model: rawModel } = req.body;
+    let { model, baseUrl, apiKey, subagentModel } = req.body;
 
     // If raw env or model object provided, extract values from it
     const raw = rawModel || rawEnv;

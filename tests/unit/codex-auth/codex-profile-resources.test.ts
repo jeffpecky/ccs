@@ -3,6 +3,29 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+// Probe once whether symlink creation is permitted (Windows without the
+// symlink privilege throws EPERM and src falls back to copying, which makes
+// the symlink assertions below impossible to satisfy).
+const SYMLINK_SUPPORTED: boolean = (() => {
+  try {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-resources-probe-'));
+    try {
+      const target = path.join(dir, 'target.txt');
+      fs.writeFileSync(target, 'x');
+      fs.symlinkSync(target, path.join(dir, 'link.txt'));
+      fs.unlinkSync(path.join(dir, 'link.txt'));
+      return true;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch {
+    return false;
+  }
+})();
+
+// Alias so the skip guard stays within the 100-column print width.
+const itSymlink = it.skipIf(!SYMLINK_SUPPORTED);
+
 let tempDir: string;
 let profileDir: string;
 let sharedCodexHome: string;
@@ -26,7 +49,7 @@ afterEach(() => {
 });
 
 describe('ensureCodexProfileResources', () => {
-  it('links shared agents and skills into a fresh Codex profile', async () => {
+  itSymlink('links shared agents and skills into a fresh Codex profile', async () => {
     const { ensureCodexProfileResources } = await import(
       '../../../src/codex-auth/codex-profile-resources'
     );
@@ -40,7 +63,7 @@ describe('ensureCodexProfileResources', () => {
     }
   });
 
-  it('repairs a missing resource link without changing existing shared files', async () => {
+  itSymlink('repairs a missing resource link without changing existing shared files', async () => {
     const { ensureCodexProfileResources } = await import(
       '../../../src/codex-auth/codex-profile-resources'
     );
@@ -55,7 +78,7 @@ describe('ensureCodexProfileResources', () => {
     expect(fs.existsSync(path.join(agentsPath, 'brainstormer.toml'))).toBe(true);
   });
 
-  it('is idempotent for repeated repair calls', async () => {
+  itSymlink('is idempotent for repeated repair calls', async () => {
     const { ensureCodexProfileResources } = await import(
       '../../../src/codex-auth/codex-profile-resources'
     );

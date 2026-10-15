@@ -98,9 +98,7 @@ describe('evaluateTargetRuntimeCompatibility', () => {
       profileType: 'account',
     });
     expect(accountCompatibility.supported).toBe(false);
-    expect(accountCompatibility.suggestion).toContain('ccs --target codex');
-    expect(accountCompatibility.suggestion).toContain('ccs codex --target codex');
-    expect(accountCompatibility.suggestion).toContain('ccs cliproxy routing');
+    expect(accountCompatibility.suggestion).toContain('Use the dashboard');
 
     expect(
       evaluateTargetRuntimeCompatibility({

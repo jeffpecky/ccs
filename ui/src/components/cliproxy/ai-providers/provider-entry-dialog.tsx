@@ -28,17 +28,10 @@ import type {
   AiProviderFamilyId,
   UpsertAiProviderEntryInput,
 } from '../../../../../src/cliproxy/ai-providers';
+import { getProviderTestApiKey, parseDelimitedLines } from './provider-entry-utils';
 
 function isOpenAiCompatFamily(familyId: AiProviderFamilyId): boolean {
   return familyId === 'openai-compatibility';
-}
-
-export function getProviderTestApiKey(
-  supportsOpenAiCompat: boolean,
-  apiKey: string,
-  apiKeys: string
-): string {
-  return supportsOpenAiCompat ? parseDelimitedLines(apiKeys)[0] || '' : apiKey.trim();
 }
 
 interface ProviderEntryDialogProps {
@@ -299,13 +292,6 @@ function getDialogGuide(family: AiProviderFamilyId): DialogGuide {
         headersPlaceholder: 'Authorization: Bearer reverse-proxy-token',
       };
   }
-}
-
-function parseDelimitedLines(value: string): string[] {
-  return value
-    .split('\n')
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
 }
 
 function parseKeyValueLines(value: string): Array<{ key: string; value: string }> {

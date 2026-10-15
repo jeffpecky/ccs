@@ -1741,9 +1741,9 @@ describe('getQuotaFailureInfo', () => {
     };
 
     expect(getQuotaFailureInfo(quota)).toEqual({
-      label: 'Reauth',
+      label: 'Re-auth required',
       summary: 'Codex token expired or invalid',
-      actionHint: 'Refresh this account by running its auth flow again.',
+      actionHint: 'Token expired. Re-authenticate this account.',
       technicalDetail: 'HTTP 401 | reauth_required',
       rawDetail: '{"detail":"session expired"}',
       tone: 'warning',
@@ -1763,9 +1763,9 @@ describe('getQuotaFailureInfo', () => {
     };
 
     expect(getQuotaFailureInfo(quota)).toEqual({
-      label: 'Workspace',
+      label: 'Workspace access denied',
       summary: 'Workspace deactivated (HTTP 402)',
-      actionHint: 'Move this account back to an active workspace, then remove and re-add it.',
+      actionHint: 'Account lacks workspace access.',
       technicalDetail: 'HTTP 402 | deactivated_workspace',
       rawDetail: '{"detail":{"code":"deactivated_workspace"}}',
       tone: 'warning',
@@ -1785,9 +1785,9 @@ describe('getQuotaFailureInfo', () => {
     };
 
     expect(getQuotaFailureInfo(quota)).toEqual({
-      label: 'Temporary',
+      label: 'Temporary issue',
       summary: 'Network timeout while fetching quota',
-      actionHint: 'Retry later. This looks temporary.',
+      actionHint: 'Transient error. Usually resolves quickly.',
       technicalDetail: 'network_timeout',
       rawDetail: 'ETIMEDOUT',
       tone: 'warning',
@@ -1815,9 +1815,9 @@ describe('getQuotaFailureInfo', () => {
     };
 
     expect(getQuotaFailureInfo(quota)).toEqual({
-      label: 'Temporary',
+      label: 'Temporary issue',
       summary: 'Quota fetch failed',
-      actionHint: 'Retry later. This looks temporary.',
+      actionHint: 'Transient error. Usually resolves quickly.',
       technicalDetail: null,
       rawDetail: null,
       tone: 'warning',

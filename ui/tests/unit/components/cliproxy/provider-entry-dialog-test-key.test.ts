@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getProviderTestApiKey } from '@/components/cliproxy/ai-providers/provider-entry-dialog';
+import { getProviderTestApiKey } from '@/components/cliproxy/ai-providers/provider-entry-utils';
 
 describe('provider test key selection', () => {
   it('uses first entered connector key for OpenAI-compatible tests', () => {

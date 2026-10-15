@@ -48,7 +48,7 @@ describe('ClaudeSettingsChecker', () => {
 
           expect(results.warnings).toHaveLength(1);
           expect(results.warnings[0].message).toContain('Codex CLIProxy translator');
-          expect(results.warnings[0].fix).toContain('ccs persist default --yes');
+          expect(results.warnings[0].fix).toContain('Reset configuration from the dashboard settings');
         } finally {
           console.log = originalConsoleLog;
         }

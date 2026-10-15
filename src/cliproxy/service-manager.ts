@@ -303,8 +303,9 @@ export async function ensureCliproxyService(
       proxyProcess.unref();
 
       // Fail fast on spawn error (e.g., binary not found, permission denied)
+      const spawnedProcess = proxyProcess;
       const spawnError = await new Promise<Error | null>((resolve) => {
-        proxyProcess!.once('error', (error) => {
+        spawnedProcess.once('error', (error) => {
           resolve(error);
         });
         // If no error within 1s, assume spawn succeeded
@@ -341,7 +342,7 @@ export async function ensureCliproxyService(
       }
 
       // Check if process exited during startup
-      const exitInfo = await waitForProcessExit(proxyProcess!, 500);
+      const exitInfo = proxyProcess === null ? null : await waitForProcessExit(proxyProcess, 500);
       if (exitInfo) {
         // Process crashed — capture stderr for diagnostics
         lastExitInfo = exitInfo;

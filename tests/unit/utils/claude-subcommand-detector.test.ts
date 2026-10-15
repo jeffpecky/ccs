@@ -4,9 +4,9 @@ import {
   stripClaudeCodeFeatureBlockingEnv,
   stripClaudeSubcommandSessionArgs,
 } from '../../../src/utils/claude-subcommand-detector';
-import { appendThirdPartyWebSearchToolArgs } from '../../../src/utils/websearch/claude-tool-args';
-import { appendThirdPartyImageAnalysisToolArgs } from '../../../src/utils/image-analysis/claude-tool-args';
 import { appendBrowserToolArgs } from '../../../src/utils/browser/claude-tool-args';
+// NOTE: the websearch/image-analysis injectors were stripped in a36a1238
+// (src/utils/websearch/claude-tool-args and src/utils/image-analysis/claude-tool-args).
 
 describe('isClaudeSubcommandInvocation', () => {
   it('returns false for an empty arg list', () => {
@@ -198,39 +198,8 @@ describe('stripClaudeSubcommandSessionArgs', () => {
 });
 
 describe('subcommand passthrough — injectors short-circuit', () => {
-  it('appendThirdPartyWebSearchToolArgs returns args unchanged for subcommand invocations', () => {
-    expect(appendThirdPartyWebSearchToolArgs(['agents'])).toEqual(['agents']);
-    expect(appendThirdPartyWebSearchToolArgs(['doctor'])).toEqual(['doctor']);
-    expect(appendThirdPartyWebSearchToolArgs(['mcp', 'list'])).toEqual(['mcp', 'list']);
-    expect(appendThirdPartyWebSearchToolArgs(['remote-control'])).toEqual(['remote-control']);
-  });
-
-  it('appendThirdPartyImageAnalysisToolArgs returns args unchanged for subcommand invocations', () => {
-    expect(appendThirdPartyImageAnalysisToolArgs(['agents'])).toEqual(['agents']);
-    expect(appendThirdPartyImageAnalysisToolArgs(['remote-control'])).toEqual(['remote-control']);
-  });
-
   it('appendBrowserToolArgs returns args unchanged for subcommand invocations', () => {
     expect(appendBrowserToolArgs(['agents'])).toEqual(['agents']);
     expect(appendBrowserToolArgs(['remote-control'])).toEqual(['remote-control']);
-  });
-
-
-  it('injectors still inject in --print prompt mode with subcommand-like prompt text', () => {
-    const out = appendThirdPartyWebSearchToolArgs(['--print', 'agents']);
-    expect(out).toContain('--append-system-prompt');
-    expect(out).toContain('--disallowedTools');
-  });
-
-  it('injectors still inject in -p prompt mode — regression for #1341', () => {
-    const out = appendThirdPartyWebSearchToolArgs(['-p', 'agents']);
-    expect(out).toContain('--append-system-prompt');
-    expect(out).toContain('--disallowedTools');
-  });
-
-  it('injectors still inject for non-subcommand interactive launches', () => {
-    const out = appendThirdPartyWebSearchToolArgs(['fix the bug']);
-    expect(out).toContain('--append-system-prompt');
-    expect(out).toContain('--disallowedTools');
   });
 });

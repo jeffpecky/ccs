@@ -216,7 +216,7 @@ describe('AccountQuotaPanel failure tooltip', () => {
       />
     );
 
-    await userEvent.hover(screen.getByText('Reauth'));
+    await userEvent.hover(screen.getByText('Re-auth required'));
 
     const summary = (
       await screen.findAllByText('Request had invalid authentication credentials.')

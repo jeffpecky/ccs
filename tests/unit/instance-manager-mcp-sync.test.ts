@@ -224,7 +224,10 @@ describe('InstanceManager MCP sync', () => {
     });
   });
 
-  it('preserves existing instance .claude.json permissions when syncing managed MCP servers', () => {
+  // Needs POSIX chmod semantics (Windows has none) + symlink privilege; upstream CI ran Linux.
+  it.skipIf(process.platform === 'win32')(
+    'preserves existing instance .claude.json permissions when syncing managed MCP servers',
+    () => {
     fs.writeFileSync(
       path.join(tempRoot, '.claude.json'),
       JSON.stringify(
@@ -323,7 +326,8 @@ describe('InstanceManager MCP sync', () => {
     expect(syncMcpSpy).not.toHaveBeenCalled();
   });
 
-  it('detaches existing shared layout when an instance is reopened as bare', async () => {
+  // Needs POSIX chmod semantics + symlink privilege (Developer Mode/admin); upstream CI ran Linux.
+  it.skipIf(process.platform === 'win32')('detaches existing shared layout when an instance is reopened as bare', async () => {
     spyOn(SharedManager.prototype, 'syncProjectContext').mockResolvedValue(undefined);
     spyOn(SharedManager.prototype, 'syncAdvancedContinuityArtifacts').mockResolvedValue(undefined);
     const syncMcpSpy = spyOn(InstanceManager.prototype, 'syncMcpServers').mockImplementation(
@@ -344,7 +348,8 @@ describe('InstanceManager MCP sync', () => {
     expect(syncMcpSpy).not.toHaveBeenCalled();
   });
 
-  it('restores the shared layout when a bare-reopened instance is switched back to non-bare', async () => {
+  // Needs POSIX chmod semantics + symlink privilege (Developer Mode/admin); upstream CI ran Linux.
+  it.skipIf(process.platform === 'win32')('restores the shared layout when a bare-reopened instance is switched back to non-bare', async () => {
     spyOn(SharedManager.prototype, 'syncProjectContext').mockResolvedValue(undefined);
     spyOn(SharedManager.prototype, 'syncAdvancedContinuityArtifacts').mockResolvedValue(undefined);
     const syncMcpSpy = spyOn(InstanceManager.prototype, 'syncMcpServers').mockImplementation(
@@ -521,7 +526,8 @@ describe('InstanceManager MCP sync', () => {
     });
   });
 
-  it('upgrades a legacy shared plugins symlink to an instance-local layout', async () => {
+  // Needs symlink privilege (Developer Mode/admin); upstream CI ran Linux.
+  it.skipIf(process.platform === 'win32')('upgrades a legacy shared plugins symlink to an instance-local layout', async () => {
     spyOn(SharedManager.prototype, 'syncProjectContext').mockResolvedValue(undefined);
     spyOn(SharedManager.prototype, 'syncAdvancedContinuityArtifacts').mockResolvedValue(undefined);
 

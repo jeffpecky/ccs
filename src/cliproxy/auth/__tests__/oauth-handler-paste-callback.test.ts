@@ -152,7 +152,10 @@ describe('Antigravity Plus OAuth credential diagnostics', () => {
     );
 
     expect(
-      getPlusAuthUrlCredentialError('agy', 'https://accounts.google.com/o/oauth2/v2/auth?client_id=&state=abc')
+      getPlusAuthUrlCredentialError(
+        'agy',
+        'https://accounts.google.com/o/oauth2/v2/auth?client_id=&state=abc'
+      )
     ).toBeNull();
   });
 

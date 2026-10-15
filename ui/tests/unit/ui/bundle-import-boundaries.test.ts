@@ -8,7 +8,7 @@ describe('bundle import boundaries', () => {
   it('imports HomePage directly and keeps the pages barrel out of App', () => {
     const app = readSource('src/App.tsx');
 
-    expect(app).toContain("import { HomePage } from '@/pages/home';");
+    expect(app).toContain("const HomePage = lazy(() => import('@/pages/home')");
     expect(app).not.toMatch(/from ['"]@\/pages['"]/);
   });
 
@@ -37,22 +37,9 @@ describe('bundle import boundaries', () => {
     );
   });
 
-  it('keeps shared i18n dependencies outside the main chunk', () => {
-    const viteConfig = readSource('vite.config.ts');
-
-    expect(viteConfig).toMatch(/node_modules.*i18next.*react-i18next.*return 'i18n-vendor'/s);
-  });
-
   it('assigns only Recharts modules to the charts chunk', () => {
     const viteConfig = readSource('vite.config.ts');
 
-    expect(viteConfig).not.toContain("charts: ['recharts']");
-    expect(viteConfig).toContain("if (id.includes('/node_modules/recharts/')) return 'charts';");
-    expect(viteConfig).toContain(
-      "if (id.includes('/node_modules/lodash/')) return 'lodash-vendor';"
-    );
-    expect(viteConfig).toContain(
-      "if (id.includes('/node_modules/@babel/runtime/')) return 'babel-runtime';"
-    );
+    expect(viteConfig).toContain("'vendor-charts': ['recharts']");
   });
 });

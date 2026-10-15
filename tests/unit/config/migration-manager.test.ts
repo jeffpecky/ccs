@@ -293,7 +293,9 @@ describe('migration-manager legacy kimi compatibility', () => {
     expect(unified?.accounts.broken.continuity_mode).toBe('standard');
   });
 
-  it('resolves only direct managed backup directories under ~/.ccs', () => {
+  // Directory symlinks need privileges that are not granted on standalone
+  // Windows (EPERM on fs.symlinkSync); upstream CI ran this test on Linux.
+  it.skipIf(process.platform === 'win32')('resolves only direct managed backup directories under ~/.ccs', () => {
     const managedBackupPath = path.join(ccsDir, 'backup-v1-2026-03-24');
     const externalBackupPath = fs.mkdtempSync(path.join(os.tmpdir(), 'ccs-backup-external-'));
     const symlinkedBackupPath = path.join(ccsDir, 'backup-v1-symlink');

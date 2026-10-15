@@ -20,6 +20,7 @@ vi.mock('@/components/cliproxy/provider-model-selector', () => ({
 }));
 
 describe('OpenCodeModelConfigTab', () => {
+  // jsdom render exceeds 5s under parallel full-suite load; raise the timeout.
   it('renders selected models and exposes active, remove, and add actions', async () => {
     const onAddModel = vi.fn();
     const onRemoveModel = vi.fn();
@@ -52,8 +53,9 @@ describe('OpenCodeModelConfigTab', () => {
     expect(onSetActiveModel).toHaveBeenCalledWith('model-c');
     expect(onRemoveModel).toHaveBeenCalledWith('model-b');
     expect(onAddModel).toHaveBeenCalledWith('model-c');
-  });
+  }, 20000);
 
+  // jsdom render exceeds 5s under parallel full-suite load; raise the timeout.
   it('allows final removal and shows explicit empty state', async () => {
     const onRemoveModel = vi.fn();
     render(
@@ -87,5 +89,5 @@ describe('OpenCodeModelConfigTab', () => {
     expect(remove).toBeEnabled();
     await userEvent.click(remove);
     expect(onRemoveModel).toHaveBeenCalledWith('model-a');
-  });
+  }, 20000);
 });

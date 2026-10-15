@@ -98,16 +98,9 @@ router.get('/', async (_req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     // Accept either individual fields or raw env object
-    let {
-      baseUrl,
-      apiKey,
-      sonnetModel,
-      opusModel,
-      fableModel,
-      haikuModel,
-      contextWindow,
-      env: rawEnv,
-    } = req.body;
+    const { env: rawEnv } = req.body;
+    let { baseUrl, apiKey, sonnetModel, opusModel, fableModel, haikuModel, contextWindow } =
+      req.body;
 
     // If raw env object provided, extract values from it
     if (rawEnv && typeof rawEnv === 'object') {

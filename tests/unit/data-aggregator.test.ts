@@ -8,7 +8,7 @@ import {
   aggregateHourlyUsage,
   aggregateMonthlyUsage,
   aggregateSessionUsage,
-} from '../../src/web-server/data-aggregator';
+} from '../../src/web-server/usage/data-aggregator';
 import { type RawUsageEntry } from '../../src/web-server/jsonl-parser';
 
 // ============================================================================

@@ -655,8 +655,7 @@ describe('Quota Exhaustion Handlers', () => {
         ],
         (_url: string, options?: RequestInit) => {
           const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
-          const usedPercent =
-            accountHeader === 'chatgpt-preflight-fallback@example.com' ? 10 : 100;
+          const usedPercent = accountHeader === 'chatgpt-preflight-fallback@example.com' ? 10 : 100;
           return Promise.resolve(
             Response.json({
               plan_type: 'pro',
@@ -765,8 +764,7 @@ describe('Quota Exhaustion Handlers', () => {
         ],
         (_url: string, options?: RequestInit) => {
           const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
-          const usedPercent =
-            accountHeader === 'chatgpt-rotation-exhausted@example.com' ? 100 : 10;
+          const usedPercent = accountHeader === 'chatgpt-rotation-exhausted@example.com' ? 100 : 10;
           return Promise.resolve(
             Response.json({
               plan_type: 'pro',
@@ -869,8 +867,7 @@ describe('Quota Exhaustion Handlers', () => {
         ],
         (_url: string, options?: RequestInit) => {
           const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
-          const usedPercent =
-            accountHeader === 'chatgpt-cooldown-default@example.com' ? 10 : 100;
+          const usedPercent = accountHeader === 'chatgpt-cooldown-default@example.com' ? 10 : 100;
           return Promise.resolve(
             Response.json({
               plan_type: 'pro',
@@ -976,8 +973,7 @@ describe('Quota Exhaustion Handlers', () => {
         ],
         (_url: string, options?: RequestInit) => {
           const accountHeader = new Headers(options?.headers).get('ChatGPT-Account-Id') ?? '';
-          const usedPercent =
-            accountHeader === 'chatgpt-forced-exhausted@example.com' ? 100 : 10;
+          const usedPercent = accountHeader === 'chatgpt-forced-exhausted@example.com' ? 100 : 10;
           return Promise.resolve(
             Response.json({
               plan_type: 'pro',

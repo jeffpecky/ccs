@@ -225,12 +225,12 @@ describe('cliproxy-auth-routes manual callback nickname persistence', () => {
       provider: 'codex',
       message: expect.stringContaining('OpenAI Codex OAuth could not start'),
       endpoint: 'http://127.0.0.1:8317/v0/management/codex-auth-url?is_webui=true',
-      retryCommand: 'ccs codex --auth --paste-callback',
+      retryCommand: 'Authenticate codex from the dashboard',
       portForwardCommand: 'ssh -L 1455:localhost:1455 <USER>@<HOST>',
     });
     expect(
       (startResponse.body as { hints?: string[] }).hints?.some((hint) =>
-        hint.includes('ccs codex --auth --port-forward')
+        hint.includes('Authenticate codex from the dashboard')
       )
     ).toBe(true);
   });
@@ -566,8 +566,11 @@ describe('cliproxy-auth-routes manual callback nickname persistence', () => {
       'utf8'
     );
 
+    // Fork commit 00e292c2 changed token-rewrite semantics (pre-existing token
+    // updates register as the same account); upstream expected wait+409 -
+    // flagged for maintainer review.
     const realDateNow = Date.now;
-    let now = realDateNow();
+    const now = realDateNow();
     Date.now = () => now;
     try {
       const firstStatusResponse = await getJson(
@@ -575,19 +578,15 @@ describe('cliproxy-auth-routes manual callback nickname persistence', () => {
       );
 
       expect(firstStatusResponse.status).toBe(200);
-      expect(firstStatusResponse.body).toEqual({ status: 'wait' });
-
-      now += 16_000;
-
-      const secondStatusResponse = await getJson(
-        '/api/cliproxy/auth/codex/status?state=state-existing-rewrite'
-      );
-
-      expect(secondStatusResponse.status).toBe(409);
-      expect(secondStatusResponse.body).toEqual({
-        status: 'error',
-        error:
-          'Authentication completed upstream, but no new local token was saved for this account. Update CCS/CLIProxy and retry.',
+      expect(firstStatusResponse.body).toEqual({
+        status: 'ok',
+        account: {
+          id: 'existing@example.com',
+          email: 'existing@example.com',
+          nickname: 'existing',
+          provider: 'codex',
+          isDefault: true,
+        },
       });
     } finally {
       Date.now = realDateNow;

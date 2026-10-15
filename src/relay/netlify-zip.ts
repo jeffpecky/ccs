@@ -144,7 +144,7 @@ export async function pollDeployReady(
   token: string,
   fetchImpl: FetchLike = fetch,
   maxMs = 120000,
-  intervalMs = 3000,
+  intervalMs = 3000
 ): Promise<NetlifyDeployState> {
   const start = Date.now();
   for (;;) {

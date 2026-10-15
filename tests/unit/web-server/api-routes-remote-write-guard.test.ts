@@ -98,53 +98,13 @@ describe('api-routes remote write guard', () => {
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
-      error: 'Codex configuration endpoints require localhost access when dashboard auth is disabled.',
+      error: 'Local configuration endpoints require localhost access when dashboard auth is disabled.',
     });
   });
+  // NOTE: two tests for GET /api/codex/diagnostics were removed: the Codex
+  // routes module was deleted by the fork strip (28fe9b08) and the endpoint
+  // no longer exists (remote requests now 403 via the misc-routes catch-all).
 
-  it('allows remote Codex diagnostics when dashboard auth is disabled', async () => {
-    const response = await fetch(`${baseUrl}/api/codex/diagnostics`);
-
-    expect(response.status).toBe(200);
-  });
-
-  it('redacts sensitive Codex diagnostics data while preserving remote access', async () => {
-    const codexHome = process.env.CODEX_HOME;
-    if (!codexHome) throw new Error('CODEX_HOME was not initialized');
-    fs.mkdirSync(codexHome, { recursive: true });
-    fs.writeFileSync(
-      path.join(codexHome, 'config.toml'),
-      `model_provider = "private"
-
-[model_providers.private]
-base_url = "https://llm.internal.example.test/v1/responses?tenant=alpha"
-env_key = "PRIVATE_PROVIDER_TOKEN"
-wire_api = "responses"
-
-[projects."/Users/someone/CloudPersonal/private-workspace"]
-trust_level = "trusted"
-`
-    );
-
-    const response = await fetch(`${baseUrl}/api/codex/diagnostics`);
-    const body = await response.json();
-    const serialized = JSON.stringify(body);
-
-    expect(response.status).toBe(200);
-    expect(body.config.projectTrust).toEqual([
-      { path: 'private-workspace', trustLevel: 'trusted' },
-    ]);
-    expect(body.config.modelProviders).toEqual([
-      expect.objectContaining({
-        name: 'private',
-        baseUrl: '[redacted:https]',
-        envKey: '[set]',
-      }),
-    ]);
-    expect(serialized).not.toContain('/Users/someone');
-    expect(serialized).not.toContain('llm.internal.example.test');
-    expect(serialized).not.toContain('PRIVATE_PROVIDER_TOKEN');
-  });
 
   it('blocks remote profile creation when dashboard auth is disabled', async () => {
     const response = await fetch(`${baseUrl}/api/profiles`, {

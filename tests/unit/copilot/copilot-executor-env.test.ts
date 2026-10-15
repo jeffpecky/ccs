@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  generateCopilotEnv,
-  resolveCopilotImageAnalysisEnv,
-} from '../../../src/copilot/copilot-executor';
+import { generateCopilotEnv } from '../../../src/copilot/copilot-executor';
 import type { CopilotConfig } from '../../../src/config/unified-config-types';
 
 const baseConfig: CopilotConfig = {
@@ -52,99 +49,5 @@ describe('generateCopilotEnv', () => {
   it('omits CLAUDE_CONFIG_DIR when inheritance is not configured', () => {
     const env = generateCopilotEnv(baseConfig);
     expect(env.CLAUDE_CONFIG_DIR).toBeUndefined();
-  });
-
-  it('falls back to native read when copilot image analysis auth is missing', async () => {
-    const result = await resolveCopilotImageAnalysisEnv(false, {
-      getImageAnalysisHookEnv: () => ({
-        CCS_CURRENT_PROVIDER: 'ghcp',
-        CCS_IMAGE_ANALYSIS_SKIP: '0',
-      }),
-      resolveImageAnalysisRuntimeStatus: async () => ({
-        enabled: true,
-        supported: true,
-        status: 'active',
-        backendId: 'ghcp',
-        backendDisplayName: 'GitHub Copilot (OAuth)',
-        model: 'claude-haiku-4.5',
-        resolutionSource: 'copilot-alias',
-        reason: null,
-        shouldPersistHook: true,
-        persistencePath: 'copilot.settings.json',
-        runtimePath: '/api/provider/ghcp',
-        usesCurrentTarget: true,
-        usesCurrentAuthToken: true,
-        hookInstalled: true,
-        sharedHookInstalled: true,
-        authReadiness: 'missing',
-        authProvider: 'ghcp',
-        authDisplayName: 'GitHub Copilot (OAuth)',
-        authReason:
-          'GitHub Copilot (OAuth) auth is missing. Run "ccs ghcp --auth" to enable image analysis.',
-        proxyReadiness: 'stopped',
-        proxyReason:
-          'Local CLIProxy service is idle. CCS will start it automatically when image analysis is needed.',
-        effectiveRuntimeMode: 'native-read',
-        effectiveRuntimeReason:
-          'GitHub Copilot (OAuth) auth is missing. Run "ccs ghcp --auth" to enable image analysis.',
-      }),
-    });
-
-    expect(result.env.CCS_CURRENT_PROVIDER).toBe('');
-    expect(result.env.CCS_IMAGE_ANALYSIS_SKIP).toBe('1');
-    expect(result.warning).toContain('ccs ghcp --auth');
-  });
-
-  it('starts local CLIProxy on demand when copilot image analysis is launchable', async () => {
-    let ensureCalls = 0;
-    const result = await resolveCopilotImageAnalysisEnv(false, {
-      getImageAnalysisHookEnv: () => ({
-        CCS_CURRENT_PROVIDER: 'ghcp',
-        CCS_IMAGE_ANALYSIS_SKIP: '0',
-      }),
-      resolveImageAnalysisRuntimeStatus: async () => ({
-        enabled: true,
-        supported: true,
-        status: 'active',
-        backendId: 'ghcp',
-        backendDisplayName: 'GitHub Copilot (OAuth)',
-        model: 'claude-haiku-4.5',
-        resolutionSource: 'copilot-alias',
-        reason: null,
-        shouldPersistHook: true,
-        persistencePath: 'copilot.settings.json',
-        runtimePath: '/api/provider/ghcp',
-        usesCurrentTarget: true,
-        usesCurrentAuthToken: true,
-        hookInstalled: true,
-        sharedHookInstalled: true,
-        authReadiness: 'ready',
-        authProvider: 'ghcp',
-        authDisplayName: 'GitHub Copilot (OAuth)',
-        authReason: null,
-        proxyReadiness: 'stopped',
-        proxyReason:
-          'Local CLIProxy service is idle. CCS will start it automatically when image analysis is needed.',
-        effectiveRuntimeMode: 'cliproxy-image-analysis',
-        effectiveRuntimeReason: null,
-      }),
-      ensureCliproxyService: async () => {
-        ensureCalls += 1;
-        return {
-          started: true,
-          alreadyRunning: false,
-          port: 8317,
-        };
-      },
-      getLocalRuntimeApiKey: () => 'local-runtime-token',
-    });
-
-    expect(ensureCalls).toBe(1);
-    expect(result.env.CCS_CURRENT_PROVIDER).toBe('ghcp');
-    expect(result.env.CCS_IMAGE_ANALYSIS_SKIP).toBe('0');
-    expect(result.env.CCS_IMAGE_ANALYSIS_RUNTIME_BASE_URL).toBe('http://127.0.0.1:8317');
-    expect(result.env.CCS_IMAGE_ANALYSIS_RUNTIME_PATH).toBe('/api/provider/ghcp');
-    expect(result.env.CCS_IMAGE_ANALYSIS_RUNTIME_API_KEY).toBe('local-runtime-token');
-    expect(result.warning).toBeNull();
   });
 });

@@ -40,7 +40,8 @@ describe('cross-platform', () => {
     it('handles relative paths without expansion', () => {
       const relativePath = 'relative/path';
       const expanded = expandPath(relativePath);
-      assert.strictEqual(expanded, relativePath);
+      // Windows may normalize the separator; the contract is no ~ expansion.
+      assert.strictEqual(path.normalize(expanded), path.normalize(relativePath));
     });
 
     it('handles empty string', () => {
@@ -118,68 +119,21 @@ describe('cross-platform', () => {
       assert(fs.existsSync(path.join(distDir, 'ccs.js')), 'ccs.js should exist in dist directory');
     });
 
-    it('has required script files', () => {
-      const fs = require('fs');
-      const scriptsDir = path.join(__dirname, '..', '..', 'scripts');
-
-      assert(fs.existsSync(path.join(scriptsDir, 'postinstall.js')), 'postinstall.js should exist');
-    });
-
     it('has package.json with correct fields', () => {
       const fs = require('fs');
       const packagePath = path.join(__dirname, '..', '..', 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 
+      // The dashboard-only strip (28fe9b08) removed scripts/ and the
+      // compatible-CLI bin entries (ccs-droid, ccsd, ccs-codex, ccsx, ccsxp);
+      // only the `ccs` dashboard entrypoint remains.
       assert(packageJson.bin, 'package.json should have bin field');
       assert(packageJson.bin.ccs, 'bin field should specify ccs command');
-      assert(packageJson.bin['ccs-droid'], 'bin field should specify ccs-droid command');
-      assert(packageJson.bin.ccsd, 'bin field should specify ccsd command');
-      assert(packageJson.bin['ccs-codex'], 'bin field should specify ccs-codex command');
-      assert(packageJson.bin.ccsx, 'bin field should specify ccsx command');
-      assert(packageJson.bin.ccsxp, 'bin field should specify ccsxp command');
-      assert.notStrictEqual(
-        packageJson.bin['ccs-droid'],
-        packageJson.bin.ccs,
-        'ccs-droid should use a dedicated runtime entrypoint'
-      );
-      assert.strictEqual(
-        packageJson.bin['ccs-droid'],
-        packageJson.bin.ccsd,
-        'legacy ccsd alias should share the dedicated droid runtime entrypoint'
-      );
-      assert.notStrictEqual(
-        packageJson.bin['ccs-codex'],
-        packageJson.bin.ccs,
-        'ccs-codex should use a dedicated runtime entrypoint'
-      );
-      assert.strictEqual(
-        packageJson.bin['ccs-codex'],
-        packageJson.bin.ccsx,
-        'ccsx should share the dedicated codex runtime entrypoint'
-      );
-      assert.notStrictEqual(
-        packageJson.bin.ccsxp,
-        packageJson.bin.ccsx,
-        'ccsxp should use a dedicated shortcut entrypoint'
-      );
       assert(
-        fs.existsSync(path.join(__dirname, '..', '..', packageJson.bin['ccs-droid'])),
-        'dedicated droid runtime entrypoint should exist'
-      );
-      assert(
-        fs.existsSync(path.join(__dirname, '..', '..', packageJson.bin['ccs-codex'])),
-        'dedicated codex runtime entrypoint should exist'
-      );
-      assert(
-        fs.existsSync(path.join(__dirname, '..', '..', packageJson.bin.ccsxp)),
-        'dedicated ccsxp shortcut entrypoint should exist'
+        fs.existsSync(path.join(__dirname, '..', '..', packageJson.bin.ccs)),
+        'ccs entrypoint should exist'
       );
       assert(packageJson.scripts, 'package.json should have scripts field');
-      assert.strictEqual(
-        packageJson.scripts.prepack,
-        'bun run build:all',
-        'prepack should rebuild packaged assets before npm pack/publish'
-      );
     });
   });
 });

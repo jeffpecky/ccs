@@ -156,7 +156,7 @@ describe('api-routes /api/bar/* local-access guard', () => {
     authApp.use(createSessionMiddleware());
     authApp.use(barAuthMiddleware);
     authApp.use(authMiddleware);
-    authApp.post('/api/accounts/tier-lock', (_req, res) => res.sendStatus(204));
+    authApp.post('/api/accounts/default', (_req, res) => res.sendStatus(204));
     authApp.use('/api', apiRoutes);
 
     const authServer = await new Promise<Server>((resolve, reject) => {
@@ -184,11 +184,11 @@ describe('api-routes /api/bar/* local-access guard', () => {
       expect(Array.isArray(await proofResponse.json())).toBe(true);
 
       const mutationNonce = 'fedcba9876543210fedcba9876543210';
-      const mutationResponse = await fetch(`${authBaseUrl}/api/accounts/tier-lock`, {
+      const mutationResponse = await fetch(`${authBaseUrl}/api/accounts/default`, {
         method: 'POST',
         headers: {
           [BAR_AUTH_NONCE_HEADER]: mutationNonce,
-          [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(getOrCreateBarAuthToken(), 'request', 'POST', '/api/accounts/tier-lock', mutationNonce),
+          [BAR_AUTH_TOKEN_HEADER]: createBarAuthProof(getOrCreateBarAuthToken(), 'request', 'POST', '/api/accounts/default', mutationNonce),
         },
       });
       expect(mutationResponse.status).toBe(204);

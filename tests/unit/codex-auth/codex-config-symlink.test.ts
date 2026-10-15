@@ -5,6 +5,29 @@ import * as path from 'path';
 
 let ensureSharedConfigSymlink: (profileDir: string, sharedConfigPath?: string) => void;
 
+// Probe once whether symlink creation is permitted (Windows without the
+// symlink privilege throws EPERM, including for the fixtures below). Tests
+// that require real symlinks are skipped when the probe fails.
+const SYMLINK_SUPPORTED: boolean = (() => {
+  try {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-symlink-probe-'));
+    try {
+      const target = path.join(dir, 'target.txt');
+      fs.writeFileSync(target, 'x');
+      fs.symlinkSync(target, path.join(dir, 'link.txt'));
+      fs.unlinkSync(path.join(dir, 'link.txt'));
+      return true;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch {
+    return false;
+  }
+})();
+
+// Alias so the skip guard stays within the 100-column print width.
+const itSymlink = it.skipIf(!SYMLINK_SUPPORTED);
+
 let tempDir: string;
 let profileDir: string;
 let sharedConfigPath: string;
@@ -24,7 +47,7 @@ afterEach(() => {
 });
 
 describe('ensureSharedConfigSymlink', () => {
-  it('creates empty shared config and symlink when neither exists', () => {
+  itSymlink('creates empty shared config and symlink when neither exists', () => {
     // Neither profileDir nor sharedConfigPath exist yet
     ensureSharedConfigSymlink(profileDir, sharedConfigPath);
 
@@ -37,7 +60,7 @@ describe('ensureSharedConfigSymlink', () => {
     expect(fs.readlinkSync(linkPath)).toBe(sharedConfigPath);
   });
 
-  it('is idempotent when symlink already points to correct target', () => {
+  itSymlink('is idempotent when symlink already points to correct target', () => {
     ensureSharedConfigSymlink(profileDir, sharedConfigPath);
     // Call again — should not throw
     expect(() => ensureSharedConfigSymlink(profileDir, sharedConfigPath)).not.toThrow();
@@ -53,7 +76,7 @@ describe('ensureSharedConfigSymlink', () => {
     expect(fs.readFileSync(sharedConfigPath, 'utf8')).toBe('[model]\nname = "o4"');
   });
 
-  it('replaces a stale symlink pointing to a wrong target with correct one', () => {
+  itSymlink('replaces a stale symlink pointing to a wrong target with correct one', () => {
     fs.mkdirSync(profileDir, { recursive: true, mode: 0o700 });
     const wrongTarget = path.join(tempDir, 'wrong.toml');
     fs.writeFileSync(wrongTarget, '', { mode: 0o600 });
@@ -92,7 +115,7 @@ describe('ensureSharedConfigSymlink', () => {
     expect(stderrChunks.join('')).toMatch(/preserving existing regular config/i);
   });
 
-  it('replaces a regular file when explicit overwrite repair is requested', () => {
+  itSymlink('replaces a regular file when explicit overwrite repair is requested', () => {
     fs.mkdirSync(profileDir, { recursive: true, mode: 0o700 });
     const linkPath = path.join(profileDir, 'config.toml');
     fs.writeFileSync(linkPath, '[existing]\ndata = true', { mode: 0o600 });
@@ -103,7 +126,7 @@ describe('ensureSharedConfigSymlink', () => {
     expect(fs.readlinkSync(linkPath)).toBe(sharedConfigPath);
   });
 
-  it('replaces a broken symlink (dangling) with correct symlink', () => {
+  itSymlink('replaces a broken symlink (dangling) with correct symlink', () => {
     fs.mkdirSync(profileDir, { recursive: true, mode: 0o700 });
     const linkPath = path.join(profileDir, 'config.toml');
     // Create symlink to non-existent target

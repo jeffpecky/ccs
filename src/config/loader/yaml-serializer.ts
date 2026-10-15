@@ -293,7 +293,6 @@ export function generateYamlWithComments(config: UnifiedConfig): string {
     lines.push('# Quota Management: Hybrid auto+manual account selection for multi-account setups');
     lines.push('# mode: auto | manual | hybrid (default: hybrid)');
     lines.push('# manual.tier_lock: per-provider tier lock map (e.g. { agy: "ultra" })');
-    lines.push('# Configure via: POST /api/accounts/tier-lock');
     lines.push('# ----------------------------------------------------------------------------');
     lines.push(
       yaml

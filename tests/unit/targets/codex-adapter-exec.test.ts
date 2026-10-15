@@ -6,8 +6,16 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { CodexAdapter } from '../../../src/targets/codex-adapter';
-import { buildCodexBrowserMcpOverrides } from '../../../src/utils/browser-codex-overrides';
 import * as signalForwarder from '../../../src/utils/signal-forwarder';
+
+// NOTE: the browser-codex-overrides helper module was stripped (a36a1238);
+// this literal preserves coverage of the surviving generic
+// runtimeConfigOverrides path in codex-adapter (strings derive from the
+// assertions below: server name ccs_browser, pinned @playwright/mcp version).
+const BROWSER_MCP_OVERRIDES = [
+  'mcp_servers.ccs_browser.command="npx.cmd"',
+  'mcp_servers.ccs_browser.args=["-y","@playwright/mcp@0.0.70"]',
+];
 
 function createMockChild(): EventEmitter & {
   stdout: EventEmitter;
@@ -82,7 +90,7 @@ describe('codex-adapter exec', () => {
           profile: 'default',
           baseUrl: '',
           apiKey: '',
-          runtimeConfigOverrides: buildCodexBrowserMcpOverrides(),
+          runtimeConfigOverrides: BROWSER_MCP_OVERRIDES,
         },
         binaryInfo,
       });
@@ -94,7 +102,13 @@ describe('codex-adapter exec', () => {
         string,
         Record<string, unknown> | undefined,
       ];
-      expect(options?.shell).toBe('C:\\Windows\\System32\\cmd.exe');
+      // ComSpec/SystemRoot casing varies per Windows install (e.g.
+      // C:\WINDOWS\system32\cmd.exe), so compare the trusted system cmd.exe
+      // path case-insensitively against the env-derived expectation.
+      const expectedShell = path.win32.normalize(
+        path.win32.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe')
+      );
+      expect(String(options?.shell ?? '').toLowerCase()).toBe(expectedShell.toLowerCase());
       expect(command).toContain(fakeCodex);
       expect(command).toContain('mcp_servers.ccs_browser.args=');
       expect(command).toContain('@playwright/mcp@0.0.70');

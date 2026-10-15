@@ -37,7 +37,11 @@ const SNAPSHOT_MAX_BYTES = 32 * 1024 * 1024;
  * bumps both fields. Concurrent misses share a single in-flight parse.
  * The returned array is shared and MUST be treated as read-only.
  */
-let cachedSnapshot: { mtimeMs: number; size: number; details: CliproxyUsageHistoryDetail[] } | null = null;
+let cachedSnapshot: {
+  mtimeMs: number;
+  size: number;
+  details: CliproxyUsageHistoryDetail[];
+} | null = null;
 let inFlightParse: Promise<CliproxyUsageHistoryDetail[]> | null = null;
 
 function getLatestSnapshotPath(): string {
@@ -70,7 +74,11 @@ export async function loadCliproxySnapshotDetails(): Promise<CliproxyUsageHistor
     if (!stat.isFile() || stat.size > SNAPSHOT_MAX_BYTES) {
       return [];
     }
-    if (cachedSnapshot && cachedSnapshot.mtimeMs === stat.mtimeMs && cachedSnapshot.size === stat.size) {
+    if (
+      cachedSnapshot &&
+      cachedSnapshot.mtimeMs === stat.mtimeMs &&
+      cachedSnapshot.size === stat.size
+    ) {
       return cachedSnapshot.details;
     }
     if (inFlightParse) {

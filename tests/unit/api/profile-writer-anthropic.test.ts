@@ -150,56 +150,7 @@ describe('profile-writer Anthropic direct', () => {
     expect(settings.env.ANTHROPIC_API_KEY).toBe('');
   });
 
-  it('rolls back the created settings file when local WebSearch tool setup fails', () => {
-    const copyFileSpy = spyOn(fs, 'copyFileSync').mockImplementation(() => {
-      throw new Error('copy failed');
-    });
+  // NOTE: two WebSearch-setup rollback tests were removed: the WebSearch hook
+  // feature was stripped from this fork in a36a1238. Re-add if it returns.
 
-    const result = createApiProfile(
-      'hook-failure',
-      'https://api.z.ai/api/anthropic',
-      'ghp_testkey123',
-      { default: 'glm-5', opus: 'glm-5', sonnet: 'glm-5', haiku: 'glm-5' }
-    );
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('could not prepare the local WebSearch tool');
-    expect(copyFileSpy).toHaveBeenCalled();
-    expect(fs.existsSync(path.join(tempHome, '.ccs', 'hook-failure.settings.json'))).toBe(false);
-  });
-
-  it('keeps profile creation non-fatal when WebSearch is disabled', () => {
-    fs.mkdirSync(path.join(tempHome, '.ccs'), { recursive: true });
-    fs.writeFileSync(
-      path.join(tempHome, '.ccs', 'config.yaml'),
-      'version: 12\nwebsearch:\n  enabled: false\n',
-      'utf8'
-    );
-
-    const originalCopyFileSync = fs.copyFileSync.bind(fs);
-    const copyFileSpy = spyOn(fs, 'copyFileSync').mockImplementation((source, destination) => {
-      const sourcePath = String(source);
-      const destinationPath = String(destination);
-      if (sourcePath.includes('websearch') || destinationPath.includes('websearch')) {
-        throw new Error('websearch copy should not run when WebSearch is disabled');
-      }
-      return originalCopyFileSync(source, destination);
-    });
-
-    const result = createApiProfile(
-      'disabled-websearch',
-      'https://api.z.ai/api/anthropic',
-      'ghp_testkey123',
-      { default: 'glm-5', opus: 'glm-5', sonnet: 'glm-5', haiku: 'glm-5' }
-    );
-
-    expect(result.success).toBe(true);
-    expect(copyFileSpy).toHaveBeenCalled();
-    expect(fs.existsSync(path.join(tempHome, '.ccs', 'disabled-websearch.settings.json'))).toBe(
-      true
-    );
-    expect(fs.existsSync(path.join(tempHome, '.ccs', 'hooks', 'websearch-transformer.cjs'))).toBe(
-      false
-    );
-  });
 });

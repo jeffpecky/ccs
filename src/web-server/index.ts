@@ -448,7 +448,10 @@ async function defaultStartCliproxyService(): Promise<void> {
   const config = loadOrCreateUnifiedConfig();
   const serverConfig = config.cliproxy_server;
   if (serverConfig?.remote?.enabled) {
-    logger.info('server.cliproxy_autostart_skipped', 'CLIProxy auto-start skipped (remote proxy configured)');
+    logger.info(
+      'server.cliproxy_autostart_skipped',
+      'CLIProxy auto-start skipped (remote proxy configured)'
+    );
     return;
   }
   if (serverConfig?.local?.auto_start === false) {

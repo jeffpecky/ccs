@@ -177,8 +177,10 @@ function atomicWriteFile(dest: string, content: string): void {
   const tmpPath = `${dest}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
   try {
     fs.writeFileSync(tmpPath, content, { mode: 0o600 });
-    // fsync via close-and-reopen pattern (Bun/Node doesn't expose fd fsync easily)
-    const fd = fs.openSync(tmpPath, 'r');
+    // fsync via close-and-reopen pattern (Bun/Node doesn't expose fd fsync easily).
+    // Reopen read+write: on Windows fsync maps to FlushFileBuffers, which requires
+    // write access on the handle -- a read-only fd fails with EPERM/EACCES.
+    const fd = fs.openSync(tmpPath, 'r+');
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fs.renameSync(tmpPath, dest);

@@ -43,7 +43,9 @@ describe('Config Directory Override', function () {
     it('should use CCS_HOME with .ccs appended (legacy behavior)', function () {
       process.env.CCS_HOME = '/tmp/test-home';
       const { getCcsDir } = require('../../dist/utils/config-manager');
-      assert.strictEqual(getCcsDir(), '/tmp/test-home/.ccs');
+      // Mirror the implementation (path.join(path.resolve(home), '.ccs')) so
+      // the assertion holds on win32, where resolve() adds the drive letter.
+      assert.strictEqual(getCcsDir(), path.join(path.resolve('/tmp/test-home'), '.ccs'));
     });
 
     it('should use CCS_DIR directly (no .ccs append)', function () {

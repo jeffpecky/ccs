@@ -163,10 +163,7 @@ export function createHeadroomRouter(deps: HeadroomRouterDeps = defaultDeps) {
       const { data } = await proxy('GET', '/v0/management/headroom/status');
       const status = data as { running?: boolean; managed?: boolean } | null;
       if (status?.running !== true || status?.managed !== true) return false;
-      const { status: restartStatus } = await proxy(
-        'POST',
-        '/v0/management/headroom/restart'
-      );
+      const { status: restartStatus } = await proxy('POST', '/v0/management/headroom/restart');
       return restartStatus >= 200 && restartStatus < 300;
     } catch {
       return false;
@@ -325,10 +322,7 @@ export function createHeadroomRouter(deps: HeadroomRouterDeps = defaultDeps) {
   router.get('/extras', async (req: Request, res: Response) => {
     try {
       const logParam = req.query.log === '1' ? '?log=1' : '';
-      const { status, data } = await proxy(
-        'GET',
-        `/v0/management/headroom/extras${logParam}`
-      );
+      const { status, data } = await proxy('GET', `/v0/management/headroom/extras${logParam}`);
       res.status(status).json(data);
     } catch {
       // CLIProxyAPIPlus not reachable — return default status

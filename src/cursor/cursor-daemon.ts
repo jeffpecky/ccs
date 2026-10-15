@@ -156,9 +156,11 @@ export async function startDaemon(
 
   const daemonEntry = await resolveDaemonEntrypoint();
   if (!daemonEntry) {
+    // The cursor daemon entry module was removed by the dashboard-only fork
+    // (a36a1238); no build can produce it, so report the runtime as absent.
     return {
       success: false,
-      error: 'Cursor daemon entrypoint not found. Run `bun run build` and retry.',
+      error: 'Cursor daemon runtime is not available in this build.',
     };
   }
 

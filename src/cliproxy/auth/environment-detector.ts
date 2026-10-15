@@ -80,7 +80,11 @@ export function killProcessOnPort(port: number, verbose: boolean): boolean {
       return true;
     } else {
       // Unix: use lsof + kill
-      const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8', stdio: 'pipe', windowsHide: true });
+      const result = execSync(`lsof -ti:${port}`, {
+        encoding: 'utf-8',
+        stdio: 'pipe',
+        windowsHide: true,
+      });
       const pids = result
         .trim()
         .split('\n')

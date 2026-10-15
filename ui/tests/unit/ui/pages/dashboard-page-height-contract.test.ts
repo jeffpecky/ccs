@@ -26,7 +26,9 @@ function readSource(relativePath: string): string {
 
 describe('dashboard route height contract', () => {
   it('routes home through the direct page import', () => {
-    expect(readSource('src/App.tsx')).toContain("import { HomePage } from '@/pages/home';");
+    expect(readSource('src/App.tsx')).toContain(
+      "const HomePage = lazy(() => import('@/pages/home')"
+    );
   });
 
   it.each(layoutManagedRouteFiles)(

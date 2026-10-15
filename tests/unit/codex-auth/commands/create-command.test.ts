@@ -8,6 +8,25 @@ import * as os from 'os';
 import * as path from 'path';
 import * as childProcess from 'child_process';
 
+// Probe once whether symlink creation is permitted (Windows without the
+// symlink privilege throws EPERM and src falls back to copying resources).
+const SYMLINK_SUPPORTED: boolean = (() => {
+  try {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-create-probe-'));
+    try {
+      const target = path.join(dir, 'target.txt');
+      fs.writeFileSync(target, 'x');
+      fs.symlinkSync(target, path.join(dir, 'link.txt'));
+      fs.unlinkSync(path.join(dir, 'link.txt'));
+      return true;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch {
+    return false;
+  }
+})();
+
 let tempDir: string;
 let ccsHome: string;
 let homeDir: string;
@@ -94,8 +113,15 @@ describe('handleCreateCodex — happy path', () => {
     expect(ctx.registry.hasProfile('myprofile')).toBe(true);
     const instancesDir = path.join(ccsHome, '.ccs', 'codex-instances', 'myprofile');
     expect(fs.existsSync(instancesDir)).toBe(true);
-    expect(fs.lstatSync(path.join(instancesDir, 'agents')).isSymbolicLink()).toBe(true);
-    expect(fs.lstatSync(path.join(instancesDir, 'skills')).isSymbolicLink()).toBe(true);
+    if (SYMLINK_SUPPORTED) {
+      expect(fs.lstatSync(path.join(instancesDir, 'agents')).isSymbolicLink()).toBe(true);
+      expect(fs.lstatSync(path.join(instancesDir, 'skills')).isSymbolicLink()).toBe(true);
+    } else {
+      // Without symlink privilege (EPERM on Windows) src intentionally falls
+      // back to copying, so only assert the resources exist.
+      expect(fs.existsSync(path.join(instancesDir, 'agents'))).toBe(true);
+      expect(fs.existsSync(path.join(instancesDir, 'skills'))).toBe(true);
+    }
   });
 });
 

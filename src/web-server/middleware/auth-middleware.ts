@@ -43,7 +43,6 @@ const BAR_MUTATION_PATHS = new Set([
   '/api/accounts/bulk-resume',
   '/api/accounts/default',
   '/api/accounts/solo',
-  '/api/accounts/tier-lock',
 ]);
 const barAuthenticatedRequests = new WeakSet<Request>();
 

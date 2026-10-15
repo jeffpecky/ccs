@@ -2,51 +2,29 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+// NOTE: Entries pointing at profiles/editor/*, compatible-cli/*, pages/api.tsx and
+// shared/settings-dialog.tsx were removed, and cliproxy-ai-providers.tsx was dropped,
+// because fork commits 28fe9b08/a6267705/fb7ead37 deleted or changed those files
+// (the latter switched cliproxy-ai-providers.tsx from fill-parent to content).
+// The contract mechanism is kept intact for future bounded consumers.
 const boundedConsumers = [
   {
-    file: 'src/pages/cliproxy-ai-providers.tsx',
-    expectedCount: 2,
-  },
-  {
     file: 'src/components/cliproxy/provider-editor/raw-editor-section.tsx',
-    expectedCount: 1,
-  },
-  {
-    file: 'src/components/profiles/editor/raw-editor-section.tsx',
     expectedCount: 1,
   },
   {
     file: 'src/components/copilot/config-form/raw-editor-section.tsx',
     expectedCount: 1,
   },
-  {
-    file: 'src/components/compatible-cli/raw-json-settings-editor-panel.tsx',
-    expectedCount: 1,
-  },
-  {
-    file: 'src/components/shared/settings-dialog.tsx',
-    expectedCount: 1,
-  },
 ] as const;
 
 const boundedLayoutContracts = [
-  {
-    file: 'src/components/profiles/editor/index.tsx',
-    snippets: [
-      'min-h-0 flex-1 grid grid-cols-[40%_60%] divide-x overflow-hidden',
-      'flex min-h-0 min-w-0 flex-col overflow-hidden',
-    ],
-  },
   {
     file: 'src/components/cliproxy/provider-editor/index.tsx',
     snippets: [
       'min-h-0 flex-1 grid grid-cols-[40%_60%] divide-x overflow-hidden',
       'flex min-h-0 min-w-0 flex-col overflow-hidden',
     ],
-  },
-  {
-    file: 'src/pages/api.tsx',
-    snippets: ['flex min-h-0 flex-1 flex-col min-w-0 overflow-hidden'],
   },
 ] as const;
 

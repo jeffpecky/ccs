@@ -181,8 +181,8 @@ router.get('/', async (_req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { env: rawEnv } = req.body;
-    let { model, models, activeModel, baseUrl, apiKey, subagentModel } = req.body;
+    const { env: rawEnv, activeModel } = req.body;
+    let { model, models, baseUrl, apiKey, subagentModel } = req.body;
 
     // Handle env object format (from some integrations)
     if (rawEnv && typeof rawEnv === 'object') {

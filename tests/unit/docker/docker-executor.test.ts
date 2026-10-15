@@ -115,8 +115,8 @@ describe('docker executor', () => {
     expect(calls[0].command).toBe('docker');
     expect(calls[0].args[0]).toBe('exec');
     expect(calls[0].args[1]).toBe('ccs-cliproxy');
-    expect(calls[0].args[4]).toContain('npm install -g @kaitranntt/ccs@latest --force');
-    expect(calls[0].args[4]).toContain('ccs cliproxy --latest');
+    expect(calls[0].args[4]).toContain('npm install -g @jeffpecky/ccs@latest --force');
+    expect(calls[0].args[4]).toContain('Update CLIProxy from the dashboard control panel');
     expect(calls[0].args[4]).toContain(
       'supervisorctl -c /etc/supervisord.conf restart ccs-dashboard cliproxy'
     );

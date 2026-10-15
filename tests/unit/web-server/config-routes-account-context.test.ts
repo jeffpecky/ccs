@@ -642,7 +642,9 @@ describe('web-server config-routes account context validation', () => {
     const symlinkBackup = path.join(ccsDir, 'backup-v1-symlink');
 
     fs.mkdirSync(managedBackup, { recursive: true });
-    fs.symlinkSync(externalBackup, symlinkBackup, 'dir');
+    // 'junction' on Windows (no symlink privilege needed); lstat still reports
+    // it as a symlink, which is what the exclusion check tests.
+    fs.symlinkSync(externalBackup, symlinkBackup, process.platform === 'win32' ? 'junction' : 'dir');
 
     const response = await fetch(`${baseUrl}/api/config/format`);
     expect(response.status).toBe(200);

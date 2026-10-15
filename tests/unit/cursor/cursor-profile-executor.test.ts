@@ -6,7 +6,6 @@ import * as path from 'path';
 import {
   executeCursorProfile,
   generateCursorEnv,
-  resolveCursorImageAnalysisEnv,
 } from '../../../src/cursor/cursor-profile-executor';
 import { saveCredentials } from '../../../src/cursor/cursor-auth';
 import type { CursorConfig } from '../../../src/config/unified-config-types';
@@ -57,65 +56,6 @@ describe('cursor-profile-executor', () => {
     expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('cursor-sonnet');
     expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('cursor-haiku');
     expect(env.CLAUDE_CONFIG_DIR).toBe('/tmp/claude-config');
-  });
-
-  it('skips image-analysis provider routing for cursor unless explicitly mapped', async () => {
-    const { env, warning } = await resolveCursorImageAnalysisEnv();
-
-    expect(env.CCS_CURRENT_PROVIDER).toBe('');
-    expect(env.CCS_IMAGE_ANALYSIS_SKIP).toBe('1');
-    expect(warning).toBeNull();
-  });
-
-  it('starts local CLIProxy on the configured lifecycle port for cursor image analysis', async () => {
-    let ensuredPort: number | undefined;
-
-    const { env, warning } = await resolveCursorImageAnalysisEnv(false, {
-      getImageAnalysisHookEnv: () => ({
-        CCS_CURRENT_PROVIDER: 'ghcp',
-        CCS_IMAGE_ANALYSIS_SKIP: '0',
-      }),
-      resolveImageAnalysisRuntimeStatus: async () => ({
-        enabled: true,
-        supported: true,
-        status: 'active',
-        backendId: 'ghcp',
-        backendDisplayName: 'GitHub Copilot (OAuth)',
-        model: 'claude-haiku-4.5',
-        resolutionSource: 'cursor-alias',
-        reason: null,
-        shouldPersistHook: true,
-        persistencePath: 'cursor.settings.json',
-        runtimePath: '/api/provider/ghcp',
-        usesCurrentTarget: true,
-        usesCurrentAuthToken: true,
-        hookInstalled: true,
-        sharedHookInstalled: true,
-        authReadiness: 'ready',
-        authProvider: 'ghcp',
-        authDisplayName: 'GitHub Copilot (OAuth)',
-        authReason: null,
-        proxyReadiness: 'stopped',
-        proxyReason:
-          'Local CLIProxy service is idle. CCS will start it automatically when image analysis is needed.',
-        effectiveRuntimeMode: 'cliproxy-image-analysis',
-        effectiveRuntimeReason: null,
-      }),
-      ensureCliproxyService: async (port: number) => {
-        ensuredPort = port;
-        return {
-          started: true,
-          alreadyRunning: false,
-          port,
-        };
-      },
-      resolveLifecyclePort: () => 9321,
-    });
-
-    expect(ensuredPort).toBe(9321);
-    expect(env.CCS_CURRENT_PROVIDER).toBe('ghcp');
-    expect(env.CCS_IMAGE_ANALYSIS_SKIP).toBe('0');
-    expect(warning).toBeNull();
   });
 
   it('fails fast when Cursor integration is disabled', async () => {

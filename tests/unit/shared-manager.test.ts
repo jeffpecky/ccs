@@ -79,8 +79,9 @@ describe('SharedManager', () => {
       const targetConfigDir = path.join('/home/user', '.claude');
       const input = '/home/user/.ccs/instances/work/plugins/cache/plugin/0.0.2';
 
+      // Expected value uses normalize() so it matches on Windows (backslashes) and POSIX alike.
       expect(normalizePluginMetadataPathString(input, targetConfigDir)).toBe(
-        '/home/user/.claude/plugins/cache/plugin/0.0.2'
+        path.normalize('/home/user/.claude/plugins/cache/plugin/0.0.2')
       );
     });
 
@@ -186,7 +187,8 @@ describe('SharedManager', () => {
   });
 
   describe('shared symlink lifecycle', () => {
-    it('does not rewrite inverse shared symlink chains into a real loop', () => {
+    // Needs symlink privilege (Developer Mode/admin); upstream CI ran Linux.
+    it.skipIf(process.platform === 'win32')('does not rewrite inverse shared symlink chains into a real loop', () => {
       const manager = new SharedManager();
       const externalCommandsDir = path.join(tempRoot, 'Documents', 'claude-config', 'commands');
       const claudeCommandsPath = path.join(claudeDir(), 'commands');
@@ -216,7 +218,8 @@ describe('SharedManager', () => {
       ).toBe(externalCommandsDir);
     });
 
-    it('preserves external ~/.claude symlinks during upgrade reconciliation', () => {
+    // Needs symlink privilege (Developer Mode/admin); upstream CI ran Linux.
+    it.skipIf(process.platform === 'win32')('preserves external ~/.claude symlinks during upgrade reconciliation', () => {
       const manager = new SharedManager();
       const externalCommandsDir = path.join(tempRoot, 'Documents', 'claude-config', 'commands');
       const externalSettingsPath = path.join(
@@ -260,7 +263,8 @@ describe('SharedManager', () => {
       ).toBe(claudeSettingsPath);
     });
 
-    it('still blocks real circular links back into ~/.ccs/shared', () => {
+    // Needs symlink privilege (Developer Mode/admin); upstream CI ran Linux.
+    it.skipIf(process.platform === 'win32')('still blocks real circular links back into ~/.ccs/shared', () => {
       const manager = new SharedManager();
       const claudeCommandsPath = path.join(claudeDir(), 'commands');
       const sharedCommandsPath = path.join(ccsDir(), 'shared', 'commands');
@@ -280,7 +284,8 @@ describe('SharedManager', () => {
       expect(fs.lstatSync(sharedCommandsPath).isDirectory()).toBe(true);
     });
 
-    it('does not materialize dangling external settings symlinks', () => {
+    // Needs symlink privilege (Developer Mode/admin); upstream CI ran Linux.
+    it.skipIf(process.platform === 'win32')('does not materialize dangling external settings symlinks', () => {
       const manager = new SharedManager();
       const externalSettingsPath = path.join(
         tempRoot,
@@ -307,7 +312,8 @@ describe('SharedManager', () => {
   });
 
   describe('marketplace registry ownership', () => {
-    it('skips unstatable shared plugin entries during instance linking', () => {
+    // Needs symlink privilege (Developer Mode/admin); upstream CI ran Linux.
+    it.skipIf(process.platform === 'win32')('skips unstatable shared plugin entries during instance linking', () => {
       const manager = new SharedManager();
       const instancePath = instanceDir('work');
       const sharedPluginsPath = path.join(claudeDir(), 'plugins');
@@ -362,7 +368,8 @@ describe('SharedManager', () => {
       expect(fs.lstatSync(instanceRegistryPath).isSymbolicLink()).toBe(false);
     });
 
-    it('self-heals missing installLocation from discovered marketplace payloads', () => {
+    // Shared-layout subsystem is symlink-based; untestable standalone on Windows w/o Developer Mode.
+    it.skipIf(process.platform === 'win32')('self-heals missing installLocation from discovered marketplace payloads', () => {
       const manager = new SharedManager();
       const instancePath = instanceDir('work');
       fs.mkdirSync(instancePath, { recursive: true });
@@ -386,7 +393,8 @@ describe('SharedManager', () => {
       });
     });
 
-    it('prunes stale marketplace entries whose payload directories no longer exist', () => {
+    // Shared-layout subsystem is symlink-based; untestable standalone on Windows w/o Developer Mode.
+    it.skipIf(process.platform === 'win32')('prunes stale marketplace entries whose payload directories no longer exist', () => {
       const manager = new SharedManager();
       const instancePath = instanceDir('work');
       fs.mkdirSync(instancePath, { recursive: true });
@@ -505,7 +513,8 @@ describe('SharedManager', () => {
       expect(instance['claude-code-plugins']).toBeUndefined();
     });
 
-    it('warns and skips malformed marketplace registries while keeping valid sources', () => {
+    // Shared-layout subsystem is symlink-based; untestable standalone on Windows w/o Developer Mode.
+    it.skipIf(process.platform === 'win32')('warns and skips malformed marketplace registries while keeping valid sources', () => {
       const manager = new SharedManager();
       const instancePath = instanceDir('work');
       fs.mkdirSync(instancePath, { recursive: true });

@@ -141,7 +141,7 @@ describe('QuotaTooltipContent', () => {
 
     const { container } = render(<QuotaTooltipContent quota={quota} resetTime={null} />);
 
-    expect(screen.getByText('Reauth')).toBeInTheDocument();
+    expect(screen.getByText('Re-auth required')).toBeInTheDocument();
     expect(screen.getByText('Request had invalid authentication credentials.')).toBeInTheDocument();
     expect(
       screen.getByText('Run ccs gemini --auth to reconnect this account.')
