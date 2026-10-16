@@ -82,5 +82,8 @@ describe('relay local e2e', () => {
     expect(seenHeaders['x-relay-target']).toBeUndefined();
     expect(seenHeaders['x-relay-path']).toBeUndefined();
     expect(seenHeaders.authorization).toBe('Bearer secret');
+    // The breaker stamp survives the round trip so the proxy can tell an
+    // upstream answer from a platform failure.
+    expect(res.headers.get('x-relay-proxied')).toBe('1');
   }, HOOK_TIMEOUT);
 });

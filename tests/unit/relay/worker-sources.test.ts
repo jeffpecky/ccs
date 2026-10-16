@@ -83,6 +83,9 @@ describe('vercel relay worker', () => {
     expect(forwardedHeader(init.headers, 'x-relay-path')).toBeFalsy();
     expect(forwardedHeader(init.headers, 'host')).toBeFalsy();
     expect(forwardedHeader(init.headers, 'authorization')).toBe('Bearer abc');
+    // The stamp tells the proxy's relay breaker this failure (if any) came
+    // from the upstream, not from the worker's own platform.
+    expect(forwardedHeader(res.headers, 'x-relay-proxied')).toBe('1');
   });
 
   it('forwards POST bodies and returns 502 when upstream throws (CCS deviation)', async () => {
@@ -139,6 +142,8 @@ describe('cloudflare relay worker', () => {
     expect(init.method).toBe('POST');
     expect(init.body).toBeTruthy();
     expect(await new Response(init.body).text()).toBe('{"hello":"world"}');
+    // Stamped so the proxy's breaker can tell upstream answers from platform failures.
+    expect(forwardedHeader(res.headers, 'x-relay-proxied')).toBe('1');
   });
 
   it('returns 502 JSON when upstream throws', async () => {
@@ -187,6 +192,8 @@ describe('deno relay worker', () => {
     expect(forwardedHeader(init.headers, 'x-relay-target')).toBeFalsy();
     expect(forwardedHeader(init.headers, 'x-relay-path')).toBeFalsy();
     expect(forwardedHeader(init.headers, 'host')).toBeFalsy();
+    // Stamped so the proxy's breaker can tell upstream answers from platform failures.
+    expect(forwardedHeader(res.headers, 'x-relay-proxied')).toBe('1');
   });
 
   it('returns 502 JSON when upstream throws', async () => {
@@ -200,7 +207,7 @@ describe('deno relay worker', () => {
 });
 
 describe('netlify relay function (Lambda runtime)', () => {
-  type LambdaResult = { statusCode: number; body: string; isBase64Encoded?: boolean };
+  type LambdaResult = { statusCode: number; body: string; isBase64Encoded?: boolean; headers?: Record<string, string> };
   let handler: (event: unknown) => Promise<LambdaResult>;
 
   beforeAll(() => {
@@ -226,6 +233,8 @@ describe('netlify relay function (Lambda runtime)', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.isBase64Encoded).toBeFalsy();
+    // Stamped so the proxy's breaker can tell upstream answers from platform failures.
+    expect(res.headers?.['x-relay-proxied']).toBe('1');
     const [url, init] = fetchSpy.mock.calls[0];
     expect(url).toBe('https://api.anthropic.com/v1/messages');
     expect(forwardedHeader(init.headers, 'x-relay-target')).toBeFalsy();

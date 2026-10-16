@@ -29,6 +29,15 @@
  *      Vercel original lacks this and surfaces a platform 500 instead.
  *   2. NETLIFY_INDEX_HTML rebrands "9Router Relay" -> "CCS Relay" (same HTML
  *      structure, same `/.netlify/functions/relay` code path).
+ *   3. All four workers stamp each response they proxy with `x-relay-proxied: 1`
+ *      (the response side of the two-header protocol), so the proxy's relay
+ *      breaker can tell an answer the upstream really gave — a rate-limited
+ *      provider is not a broken relay — from a 429/5xx produced by the worker's
+ *      own hosting platform, which parks that relay for 30s. Relays deployed
+ *      before this change lack the stamp; the breaker then falls back to the
+ *      response shape (JSON/SSE payload = upstream answer, anything else =
+ *      platform error page). The stamp is stripped before a response reaches
+ *      the API client.
  *
  * Escaping note: the `\\/` sequences inside these template literals are
  * intentional and must stay as-is — the deployed worker source must contain the
@@ -66,9 +75,11 @@ export default async function handler(req) {
       duplex: "half",
     });
 
+    const proxiedHeaders = new Headers(response.headers);
+    proxiedHeaders.set("x-relay-proxied", "1");
     return new Response(response.body, {
       status: response.status,
-      headers: response.headers,
+      headers: proxiedHeaders,
     });
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -110,9 +121,11 @@ export default {
 
     try {
       const response = await fetch(targetUrl, newRequestInit);
+      const proxiedHeaders = new Headers(response.headers);
+      proxiedHeaders.set("x-relay-proxied", "1");
       return new Response(response.body, {
         status: response.status,
-        headers: response.headers,
+        headers: proxiedHeaders,
       });
     } catch (error) {
       return new Response(JSON.stringify({ error: error.message }), {
@@ -154,9 +167,11 @@ export const DENO_RELAY_WORKER = `Deno.serve(async (request) => {
 
   try {
     const response = await fetch(targetUrl, init);
+    const proxiedHeaders = new Headers(response.headers);
+    proxiedHeaders.set("x-relay-proxied", "1");
     return new Response(response.body, {
       status: response.status,
-      headers: response.headers,
+      headers: proxiedHeaders,
     });
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -211,6 +226,7 @@ export const NETLIFY_RELAY_FUNCTION = `exports.handler = async (event) => {
     upstream.headers.forEach((value, key) => {
       responseHeaders[key] = value;
     });
+    responseHeaders["x-relay-proxied"] = "1";
     const contentType = upstream.headers.get("content-type") || "";
     const isText = new RegExp("^(text/|[^;]*json|[^;]*event-stream|[^;]*javascript|[^;]*xml|[^;]*urlencoded)", "i").test(contentType);
     const rawBody = await upstream.arrayBuffer();
