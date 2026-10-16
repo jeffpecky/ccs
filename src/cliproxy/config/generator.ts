@@ -312,9 +312,6 @@ function generateRelayBlock(): string {
   // so relay-url stays as the single-candidate fallback for older binaries and
   // for configs whose rotation pool is empty.
   const config = getRelayConfig();
-  const activeId = config.activeId ?? null;
-  const activeUrl =
-    (activeId ? (config.relays.find((relay) => relay.id === activeId)?.url ?? null) : null) ?? '';
   const candidates = resolveRelayCandidates(config);
   // Same normalization as resolveRelayCandidates: an absent or empty strategy
   // means the rotation default, and the Go side must be told explicitly because
@@ -326,7 +323,11 @@ function generateRelayBlock(): string {
 
   const lines = [
     '# Edge relay egress (managed by the CCS dashboard; empty = direct).',
-    `relay-url: ${quoteYamlString(activeUrl || candidates[0] || '')}`,
+    // The legacy single-candidate key mirrors the pool's first entry: writing
+    // the active relay's URL directly would resurrect a paused (or probe-failed)
+    // active relay in configs where relay-urls is empty and the Go side falls
+    // back to relay-url.
+    `relay-url: ${quoteYamlString(candidates[0] ?? '')}`,
   ];
   if (candidates.length > 0) {
     lines.push(`relay-urls: [${candidates.map(quoteYamlString).join(', ')}]`);

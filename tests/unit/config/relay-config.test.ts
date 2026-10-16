@@ -56,6 +56,34 @@ describe('relay config schema', () => {
     ).toBe(false);
   });
 
+  it('accepts a boolean pause flag and rejects a non-boolean one', () => {
+    // Absent and false both mean active; a malformed value must not silently
+    // read as active (or blow away the whole relay list in disguise).
+    expect(isRelayConfig({ relays: [{ ...RELAY_ENTRY }], activeId: null })).toBe(true);
+    expect(isRelayConfig({ relays: [{ ...RELAY_ENTRY, paused: true }], activeId: null })).toBe(
+      true
+    );
+    expect(isRelayConfig({ relays: [{ ...RELAY_ENTRY, paused: false }], activeId: null })).toBe(
+      true
+    );
+    expect(isRelayConfig({ relays: [{ ...RELAY_ENTRY, paused: 'yes' }], activeId: null })).toBe(
+      false
+    );
+    expect(isRelayConfig({ relays: [{ ...RELAY_ENTRY, paused: 1 }], activeId: null })).toBe(false);
+  });
+
+  it('round-trips a paused flag through mergeWithDefaults', () => {
+    const relay: RelayConfig = {
+      relays: [{ ...RELAY_ENTRY, paused: true }],
+      activeId: null,
+      strategy: 'round-robin',
+      strict: false,
+      providerRelayIds: {},
+    };
+    const merged = mergeWithDefaults({ version: UNIFIED_CONFIG_VERSION, relay });
+    expect(merged.relay.relays[0].paused).toBe(true);
+  });
+
   it('getRelayConfig returns defaults on a pristine config', () => {
     // On the fresh temp-CCS_HOME test environment there is no relay section,
     // so the getter must fall back to defaults.

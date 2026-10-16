@@ -65,6 +65,15 @@ describe('getActiveRelayUrl', () => {
     });
     expect(getActiveRelayUrl(config)).toBe('https://r2.example.test');
   });
+  it('returns null when the active relay is paused', () => {
+    // Pause beats the active pointer: CCS-originated fetches fall back to
+    // plain direct requests instead of using a relay pulled from service.
+    const config = makeConfig({
+      relays: [{ ...makeRelay('r1', 'https://r1.example.test'), paused: true }],
+      activeId: 'r1',
+    });
+    expect(getActiveRelayUrl(config)).toBeNull();
+  });
 });
 
 describe('resolveRelayCandidates', () => {
@@ -98,6 +107,50 @@ describe('resolveRelayCandidates', () => {
       strategy: 'none',
     });
     expect(resolveRelayCandidates(config)).toEqual(['https://r1.example.test']);
+  });
+
+  it('excludes paused relays from the rotation pool, including a paused active', () => {
+    const config = makeConfig({
+      relays: [
+        { ...makeRelay('r1', 'https://r1.example.test'), paused: true },
+        { ...makeRelay('r2', 'https://r2.example.test'), testStatus: 'ok' },
+        { ...makeRelay('r3', 'https://r3.example.test'), paused: true },
+      ],
+      activeId: 'r1',
+    });
+    // The paused active relay must not lead the pool; only r2 stays in service.
+    expect(resolveRelayCandidates(config)).toEqual(['https://r2.example.test']);
+  });
+
+  it('resolves nothing when every relay is paused', () => {
+    const config = makeConfig({
+      relays: [{ ...makeRelay('r1', 'https://r1.example.test'), paused: true }],
+      activeId: 'r1',
+    });
+    expect(resolveRelayCandidates(config)).toEqual([]);
+  });
+
+  it('falls back to the first unpaused relay when the active one is paused in none mode', () => {
+    // Pause must not empty the pool into direct egress (which would expose
+    // this machine's IP): the vacated slot goes to the next unpaused relay.
+    const config = makeConfig({
+      relays: [
+        { ...makeRelay('r1', 'https://r1.example.test'), paused: true },
+        makeRelay('r2', 'https://r2.example.test'),
+      ],
+      activeId: 'r1',
+      strategy: 'none',
+    });
+    expect(resolveRelayCandidates(config)).toEqual(['https://r2.example.test']);
+  });
+
+  it('resolves nothing with strategy none when the active relay is paused alone', () => {
+    const config = makeConfig({
+      relays: [{ ...makeRelay('r1', 'https://r1.example.test'), paused: true }],
+      activeId: 'r1',
+      strategy: 'none',
+    });
+    expect(resolveRelayCandidates(config)).toEqual([]);
   });
 
   it('rotates across every healthy relay with the active one first', () => {
@@ -177,6 +230,18 @@ describe('resolveProviderRelayUrls', () => {
     const config = makeConfig({
       relays: [makeRelay('r1', 'https://r1.example.test')],
       providerRelayIds: { claude: 'r1', codex: 'ghost' },
+    });
+    expect(resolveProviderRelayUrls(config)).toEqual({ claude: 'https://r1.example.test' });
+  });
+  it('drops pins whose relay is paused until it is resumed', () => {
+    // Pause means "send no traffic there", pins included — the provider falls
+    // back to the rotation pool rather than to a relay the operator parked.
+    const config = makeConfig({
+      relays: [
+        makeRelay('r1', 'https://r1.example.test'),
+        { ...makeRelay('r2', 'https://r2.example.test'), paused: true },
+      ],
+      providerRelayIds: { claude: 'r1', gemini: 'r2' },
     });
     expect(resolveProviderRelayUrls(config)).toEqual({ claude: 'https://r1.example.test' });
   });

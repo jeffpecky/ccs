@@ -13,9 +13,10 @@
  *
  * PATCH / carries the outbound rotation settings (strategy, strict, the
  * preferred relay, per-provider pins) and POST /test-all probes the whole
- * pool; both land in config.yaml, so both regenerate it. Probe results also
- * regenerate whenever they move a relay in or out of the health-gated
- * rotation pool.
+ * pool; both land in config.yaml, so both regenerate it. PATCH /:id pauses or
+ * resumes one relay — pool membership again, so it regenerates whenever the
+ * resolved pool moves. Probe results also regenerate whenever they move a
+ * relay in or out of the health-gated rotation pool.
  *
  * Deploy activation and active-relay deletion also regenerate the runtime
  * config.yaml. Within THIS router those save+regenerate transactions are
@@ -452,6 +453,71 @@ export function createRelayRouter(deps: RelayRouterDeps = defaultDeps): Router {
     } catch (error) {
       logRouteError('Relay test failed', error);
       res.status(500).json({ error: 'Failed to test relay' });
+    }
+  });
+
+  /**
+   * Pause or resume a single relay. A paused relay stays on the dashboard but
+   * leaves the rotation pool — and any per-provider pin — until resumed, so a
+   * misbehaving relay can be pulled from service without deleting it. Pool
+   * membership lands in config.yaml, so the write regenerates it whenever the
+   * resolved pool actually changes (pausing a relay that is already probe-failed
+   * changes nothing and skips the rewrite).
+   */
+  router.patch('/:id', async (req: Request, res: Response) => {
+    const id = req.params.id;
+    const body = (req.body ?? {}) as { paused?: unknown };
+    if (typeof body.paused !== 'boolean') {
+      res.status(400).json({ error: 'paused must be a boolean' });
+      return;
+    }
+    const paused = body.paused;
+    try {
+      const next = await serializeConfigTransaction(async (): Promise<RelayConfig | null> => {
+        const previous = deps.getRelayConfig();
+        const entry = previous.relays.find((candidate) => candidate.id === id);
+        if (!entry) return null;
+        // Idempotent no-op: a toggle into the state it already has writes nothing.
+        if ((entry.paused ?? false) === paused) return previous;
+        const updated: RelayConfig = {
+          ...previous,
+          relays: previous.relays.map((candidate) =>
+            candidate.id === id ? { ...candidate, paused } : candidate
+          ),
+        };
+        await deps.saveRelayConfig(updated);
+        // Same rule as deletion: regenerate only when the resolved pool moved,
+        // so pausing an already-probed-failed relay costs no proxy rewrite.
+        const poolChanged =
+          resolveRelayCandidates(previous).join('\n') !==
+          resolveRelayCandidates(updated).join('\n');
+        if (poolChanged) {
+          try {
+            await deps.regenerateConfig();
+          } catch (error) {
+            try {
+              await deps.saveRelayConfig(previous);
+            } catch (revertError) {
+              logRouteError(
+                'Relay config revert after regenerate failure also failed',
+                revertError
+              );
+            }
+            throw error;
+          }
+        }
+        return updated;
+      });
+      if (!next) {
+        res.status(404).json({ error: 'Relay not found' });
+        return;
+      }
+      res.json({ success: true, config: next });
+    } catch (error) {
+      logRouteError(paused ? 'Relay pause failed' : 'Relay resume failed', error);
+      res.status(500).json({
+        error: `Failed to ${paused ? 'pause' : 'resume'} relay: ${errorMessage(error)}`,
+      });
     }
   });
 

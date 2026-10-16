@@ -56,27 +56,47 @@ export function updateRelayConfig(update: (current: RelayConfig) => RelayConfig)
  *
  * Accepts an optional config snapshot so callers (and tests) can resolve
  * against an already-loaded config; no-arg calls read the live config.
+ * A paused relay resolves to null: pause wins over the active pointer, so
+ * CCS-originated fetches fall back to plain direct requests instead of
+ * forwarding through a relay the operator pulled from service.
  */
 export function getActiveRelayUrl(config: RelayConfig = getRelayConfig()): string | null {
   const { relays, activeId } = config;
   if (!activeId) return null;
-  return relays.find((relay) => relay.id === activeId)?.url ?? null;
+  const active = relays.find((relay) => relay.id === activeId);
+  return active && !active.paused ? active.url : null;
+}
+
+/**
+ * In service unless paused or last probed failed: the manual gate and the
+ * automatic one. Both only remove a relay — `untested` and `ok` count alike,
+ * so a freshly deployed worker joins the pool before it has any probe history.
+ */
+function isInService(relay: RelayEntry): boolean {
+  return !relay.paused && relay.testStatus !== 'fail';
 }
 
 /**
  * Ordered relay URL candidates for the proxy's outbound egress.
  *
  * Rotation (`round-robin`, the default, and `random`) is the normal mode: every
- * relay that is not known-failed becomes a candidate, with the active relay
- * first so it stays the preferred starting point. `none` is the opt-out that
- * keeps the legacy single-relay behavior, so flipping the dashboard toggle is
- * still a hard on/off.
+ * relay that is in service becomes a candidate, with the active relay first so
+ * it stays the preferred starting point. `none` is the opt-out that keeps the
+ * legacy single-relay behavior, so flipping the dashboard toggle is still a
+ * hard on/off.
  *
  * Health gating is deliberately one-directional: a relay last probed `fail` is
  * excluded (retrying it on every request would just add latency), while an
  * untested relay stays eligible because a freshly deployed worker has no probe
  * history yet. When every relay has failed the list is empty — the caller then
  * egresses direct, or fails closed when `strict` is set.
+ *
+ * Pausing gates both modes: a paused relay is never a candidate, not even when
+ * it is the active relay. In `none` mode the vacated slot falls back to the
+ * first unpaused relay rather than to nothing, because an empty candidate list
+ * egresses direct from this machine's IP — pause must not become an accidental
+ * leak (relaying to a probed-dead relay instead fails loudly, and `strict`
+ * still fails closed when nothing is unpaused).
  */
 export function resolveRelayCandidates(config: RelayConfig = getRelayConfig()): string[] {
   const active = config.activeId
@@ -88,23 +108,30 @@ export function resolveRelayCandidates(config: RelayConfig = getRelayConfig()): 
   // so relaying never silently collapses onto one relay.
   const strategy = normalizeRelayStrategy(config.strategy);
   if (strategy === 'none') {
-    return active ? [active.url] : [];
+    // No active pointer is still the hard off switch: `none` with nothing
+    // active means direct egress, pause or not.
+    if (!active) return [];
+    if (!active.paused) return [active.url];
+    const fallback = config.relays.find((relay) => !relay.paused);
+    return fallback ? [fallback.url] : [];
   }
 
-  const healthy = config.relays.filter((relay) => relay.testStatus !== 'fail');
+  const inService = config.relays.filter(isInService);
   const ordered =
-    active && healthy.includes(active)
-      ? [active, ...healthy.filter((relay) => relay !== active)]
-      : healthy;
+    active && inService.includes(active)
+      ? [active, ...inService.filter((relay) => relay !== active)]
+      : inService;
   return ordered.map((relay) => relay.url);
 }
 
 /**
  * Per-provider relay URL overrides for the proxy config.
  *
- * Only pins that still resolve to a deployed relay are emitted; a pin left
+ * Only pins that still resolve to an in-service relay are emitted; a pin left
  * behind by a relay deletion is dropped rather than forwarded as a dangling
- * id (the Go side reads URLs, not ids).
+ * id (the Go side reads URLs, not ids). A pin pointing at a paused relay is
+ * dropped the same way until it is resumed: pause means "send no traffic
+ * there", pins included.
  */
 export function resolveProviderRelayUrls(
   config: RelayConfig = getRelayConfig()
@@ -112,7 +139,7 @@ export function resolveProviderRelayUrls(
   const urls: Record<string, string> = {};
   for (const [provider, relayId] of Object.entries(config.providerRelayIds ?? {})) {
     const relay = config.relays.find((entry) => entry.id === relayId);
-    if (relay) urls[provider] = relay.url;
+    if (relay && !relay.paused) urls[provider] = relay.url;
   }
   return urls;
 }

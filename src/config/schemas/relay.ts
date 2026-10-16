@@ -34,6 +34,11 @@ export interface RelayEntry {
   lastTestedAt?: string;
   /** Last connectivity test error message */
   lastError?: string | null;
+  /**
+   * Manually paused: kept on the dashboard but excluded from the rotation
+   * pool (and from per-provider pins) until resumed. Absent means active.
+   */
+  paused?: boolean;
 }
 
 /**
@@ -65,7 +70,7 @@ export interface RelayConfig {
   /**
    * Per-provider relay pins: provider name -> relay id. A pinned provider
    * always uses that relay, bypassing the rotation pool. Pins pointing at a
-   * deleted relay are dropped at generation time.
+   * deleted relay — or a paused one — are dropped at generation time.
    */
   providerRelayIds: Record<string, string>;
 }
@@ -123,7 +128,10 @@ function isRelayEntry(value: unknown): value is RelayEntry {
     typeof entry.id === 'string' &&
     typeof entry.url === 'string' &&
     typeof entry.platform === 'string' &&
-    RELAY_PLATFORMS.includes(entry.platform as RelayPlatform)
+    RELAY_PLATFORMS.includes(entry.platform as RelayPlatform) &&
+    // A non-boolean pause flag (hand-edited `paused: "yes"`) fails like any
+    // other malformed entry instead of silently reading as active.
+    (entry.paused === undefined || typeof entry.paused === 'boolean')
   );
 }
 

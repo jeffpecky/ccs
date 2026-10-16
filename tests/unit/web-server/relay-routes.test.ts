@@ -508,6 +508,91 @@ describe('Relay routes', () => {
     });
   });
 
+  describe('pause and resume', () => {
+    it('pauses a relay, saves it, and regenerates the shrunken pool', async () => {
+      const app = await setup({ config: { relays: [makeRelay('r1')], activeId: 'r1' } });
+      const response = await patch(app.baseUrl, '/r1', { paused: true });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { success: boolean; config: RelayConfig };
+      expect(body.success).toBe(true);
+      expect(body.config.relays[0].paused).toBe(true);
+      // An untested relay was in the rotation pool; parking it removes a
+      // candidate from config.yaml, so the write regenerates.
+      expect(app.order).toEqual(['save', 'regenerate']);
+      expect(app.regenerations()).toBe(1);
+      expect(app.currentConfig().relays[0].paused).toBe(true);
+    });
+
+    it('resumes a paused relay and regenerates the restored pool', async () => {
+      const app = await setup({
+        config: { relays: [{ ...makeRelay('r1'), paused: true }], activeId: 'r1' },
+      });
+      const response = await patch(app.baseUrl, '/r1', { paused: false });
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as { config: RelayConfig }).config.relays[0].paused).toBe(
+        false
+      );
+      expect(app.order).toEqual(['save', 'regenerate']);
+      expect(app.currentConfig().relays[0].paused).toBe(false);
+    });
+
+    it('skips the rewrite when the toggle is already in that state', async () => {
+      const app = await setup({
+        config: { relays: [{ ...makeRelay('r1'), paused: true }], activeId: 'r1' },
+      });
+      const response = await patch(app.baseUrl, '/r1', { paused: true });
+      expect(response.status).toBe(200);
+      // Idempotent: nothing reached config.yaml, so nothing to regenerate.
+      expect(app.order).toEqual([]);
+      expect(app.saved).toEqual([]);
+    });
+
+    it('does not regenerate when pausing an already probe-failed relay', async () => {
+      // A failed relay is already out of the pool, so parking it changes no
+      // candidate — the proxy config would be byte-identical.
+      const app = await setup({
+        config: {
+          relays: [{ ...makeRelay('r1'), testStatus: 'fail' }],
+          activeId: 'r1',
+        },
+      });
+      const response = await patch(app.baseUrl, '/r1', { paused: true });
+      expect(response.status).toBe(200);
+      expect(app.order).toEqual(['save']);
+      expect(app.regenerations()).toBe(0);
+      expect(app.currentConfig().relays[0].paused).toBe(true);
+    });
+
+    it('404s when the relay does not exist', async () => {
+      const app = await setup({ config: { relays: [makeRelay('r1')], activeId: 'r1' } });
+      const response = await patch(app.baseUrl, '/ghost', { paused: true });
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: 'Relay not found' });
+      expect(app.order).toEqual([]);
+    });
+
+    it('400s when paused is not a boolean', async () => {
+      const app = await setup({ config: { relays: [makeRelay('r1')], activeId: 'r1' } });
+      const response = await patch(app.baseUrl, '/r1', { paused: 'yes' });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: 'paused must be a boolean' });
+      expect(app.order).toEqual([]);
+    });
+
+    it('rolls back the saved flag when regeneration fails', async () => {
+      const app = await setup({
+        config: { relays: [makeRelay('r1')], activeId: 'r1' },
+        regenerate: () => {
+          throw new Error('generation failed');
+        },
+      });
+      const response = await patch(app.baseUrl, '/r1', { paused: true });
+      expect(response.status).toBe(500);
+      // The dashboard must not show a pause the proxy never received.
+      expect(app.currentConfig().relays[0].paused).toBeUndefined();
+    });
+  });
+
   describe('health sweep', () => {
     it('probes every relay, records the results, and pushes the new pool', async () => {
       const app = await setup({

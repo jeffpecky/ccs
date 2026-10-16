@@ -133,6 +133,46 @@ describe('relay config generation', () => {
     expect(parsed['relay-url']).toBe('https://active.example.workers.dev');
   });
 
+  it('drops paused relays from the pool and keeps them out of relay-url', () => {
+    const parsed = generate({
+      relays: [relay({ id: 'r1', paused: true }), relay({ id: 'r2', testStatus: 'ok' })],
+      activeId: 'r1',
+      strategy: 'round-robin',
+      strict: false,
+      providerRelayIds: {},
+    });
+
+    // The active pointer must not resurrect a paused relay through the legacy
+    // single-candidate key; only the in-service relay reaches the proxy.
+    expect(parsed['relay-url']).toBe('https://r2.example.workers.dev');
+    expect(parsed['relay-urls']).toEqual(['https://r2.example.workers.dev']);
+  });
+
+  it('emits an empty relay-url and no candidate list when every relay is paused', () => {
+    const parsed = generate({
+      relays: [relay({ id: 'r1', paused: true })],
+      activeId: 'r1',
+      strategy: 'round-robin',
+      strict: false,
+      providerRelayIds: {},
+    });
+
+    expect(parsed['relay-url']).toBe('');
+    expect(parsed['relay-urls']).toBeUndefined();
+  });
+
+  it('drops a provider pin whose relay is paused', () => {
+    const parsed = generate({
+      relays: [relay({ id: 'r1', paused: true }), relay({ id: 'r2' })],
+      activeId: 'r2',
+      strategy: 'round-robin',
+      strict: false,
+      providerRelayIds: { claude: 'r1' },
+    });
+
+    expect(parsed['relay-provider-urls']).toBeUndefined();
+  });
+
   it('keeps relay-strict when the pool resolves empty so egress fails closed', () => {
     const parsed = generate({
       relays: [relay({ id: 'dead', testStatus: 'fail' })],

@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { ExternalLink, Loader2, Network, Plus, RefreshCw, Shuffle, Trash2 } from 'lucide-react';
+import {
+  ExternalLink,
+  Loader2,
+  Network,
+  Pause,
+  Play,
+  Plus,
+  RefreshCw,
+  Shuffle,
+  Trash2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +44,8 @@ interface RelayEntry {
   testStatus?: 'ok' | 'fail' | 'untested';
   lastTestedAt?: string;
   lastError?: string | null;
+  /** Manually paused: kept on the dashboard but out of the rotation pool. */
+  paused?: boolean;
 }
 
 type RelayStrategy = 'none' | 'round-robin' | 'random';
@@ -247,6 +259,9 @@ export function RelayPage() {
   const [deploying, setDeploying] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Which action holds busyId: without it the Test button's spinner would
+  // light up for a Pause/Delete in flight on the same card.
+  const [busyAction, setBusyAction] = useState<'test' | 'pause' | 'delete'>('test');
   const [strategyDraft, setStrategyDraft] = useState<RelayStrategy>(DEFAULT_RELAY_STRATEGY);
   const [strictDraft, setStrictDraft] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -326,6 +341,7 @@ export function RelayPage() {
 
   const testRelay = async (id: string) => {
     setBusyId(id);
+    setBusyAction('test');
     try {
       const result = await request<{
         ok: boolean;
@@ -348,9 +364,32 @@ export function RelayPage() {
 
   const remove = async (id: string) => {
     setBusyId(id);
+    setBusyAction('delete');
     try {
       await request(`/${id}`, { method: 'DELETE' });
       toast.success('Relay removed');
+      await reload();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const togglePause = async (relay: RelayEntry) => {
+    const next = !relay.paused;
+    setBusyId(relay.id);
+    setBusyAction('pause');
+    try {
+      await request<{ config: RelayConfig }>(`/${relay.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ paused: next }),
+      });
+      toast.success(
+        next
+          ? `${relay.name} paused — it is out of rotation until resumed`
+          : `${relay.name} resumed — back in rotation`
+      );
       await reload();
     } catch (error) {
       toast.error((error as Error).message);
@@ -443,11 +482,22 @@ export function RelayPage() {
   const activeRelay = config.activeId
     ? config.relays.find((relay) => relay.id === config.activeId)
     : undefined;
-  const healthyRelays = config.relays.filter((relay) => relay.testStatus !== 'fail');
-  // Mirrors resolveRelayCandidates: 'none' pins to the active relay whether or
-  // not it was probed, rotation pools admit every relay not known-failed.
-  const poolSize = strategyDraft === 'none' ? (activeRelay ? 1 : 0) : healthyRelays.length;
+  // Mirrors resolveRelayCandidates: rotation pools admit every relay that is
+  // in service (not paused, not probe-failed), while 'none' resolves to a
+  // single relay — the active relay unless it is paused, then the first
+  // unpaused fallback; no active pointer at all means direct egress (pool 0).
+  const unpausedRelays = config.relays.filter((relay) => !relay.paused);
+  const inServiceRelays = unpausedRelays.filter((relay) => relay.testStatus !== 'fail');
+  const nonePool = !activeRelay ? 0 : activeRelay.paused ? (unpausedRelays.length > 0 ? 1 : 0) : 1;
+  const poolSize = strategyDraft === 'none' ? nonePool : inServiceRelays.length;
   const failClosed = strictDraft && poolSize === 0;
+  // The badge on a card reflects the saved strategy: under rotation every
+  // in-service relay carries traffic and activeId is only the start slot, so
+  // calling one relay 'Active' would imply the others are idle.
+  const savedStrategy: RelayStrategy =
+    config.strategy && RELAY_STRATEGIES.includes(config.strategy)
+      ? config.strategy
+      : DEFAULT_RELAY_STRATEGY;
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-4 md:p-6">
@@ -465,8 +515,8 @@ export function RelayPage() {
             </span>
             <span className="mt-1 block">
               Deploying a relay makes it the preferred relay — provider traffic routes through it
-              right away. Deleting a relay drops it from the rotation pool and regenerates the proxy
-              config.
+              right away. Pause a relay to pull it out of rotation without deleting it; deleting
+              removes it entirely. Both regenerate the proxy config when the pool changes.
             </span>
           </CardDescription>
         </CardHeader>
@@ -622,7 +672,8 @@ export function RelayPage() {
           <h2 className="text-xl font-semibold tracking-tight">Rotation &amp; health</h2>
           <CardDescription className="max-w-2xl text-sm">
             A rotation strategy cycles outbound traffic across every healthy relay instead of
-            pinning to one. Relays that fail a probe drop out of the pool until they pass again.
+            pinning to one. Relays that fail a probe drop out of the pool until they pass again, and
+            paused relays stay out until you resume them.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -670,8 +721,12 @@ export function RelayPage() {
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>
-              Pool: {poolSize} relay{poolSize === 1 ? '' : 's'} ({healthyRelays.length} of{' '}
-              {config.relays.length} healthy)
+              Pool: {poolSize} relay{poolSize === 1 ? '' : 's'} ({inServiceRelays.length} of{' '}
+              {config.relays.length} in service
+              {unpausedRelays.length !== config.relays.length
+                ? `, ${config.relays.length - unpausedRelays.length} paused`
+                : ''}
+              )
             </span>
             {Object.keys(config.providerRelayIds ?? {}).length > 0 && (
               <span>
@@ -723,6 +778,9 @@ export function RelayPage() {
         <div className="space-y-4">
           {config.relays.map((relay) => {
             const isActive = relay.id === config.activeId;
+            const isPaused = relay.paused === true;
+            // Visually separate pool members from relays that are out of it.
+            const inRotation = !isPaused && relay.testStatus !== 'fail';
             const testedAt = formatTestedAt(relay.lastTestedAt);
             const statusVariant =
               relay.testStatus === 'ok'
@@ -737,12 +795,18 @@ export function RelayPage() {
                   ? 'Failed'
                   : 'Untested';
             return (
-              <Card key={relay.id} className="gap-4">
+              <Card key={relay.id} className={cn('gap-4', !inRotation && 'opacity-70')}>
                 <CardContent className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-sm font-semibold">{relay.name}</h2>
                     <Badge variant="outline">{PLATFORM_LABELS[relay.platform]}</Badge>
-                    {isActive && <Badge>Active</Badge>}
+                    {isPaused ? (
+                      <Badge variant="secondary">Paused</Badge>
+                    ) : isActive ? (
+                      // Under rotation every in-service relay carries traffic;
+                      // activeId only picks where the round starts.
+                      <Badge>{savedStrategy === 'none' ? 'Active' : 'Starts first'}</Badge>
+                    ) : null}
                     <Badge variant={statusVariant} className="ml-auto">
                       {statusLabel}
                     </Badge>
@@ -778,11 +842,32 @@ export function RelayPage() {
                       size="sm"
                       disabled={busy}
                       onClick={() => void testRelay(relay.id)}
+                      title="Probe this relay's connectivity"
                     >
-                      {busyId === relay.id ? (
+                      {busyId === relay.id && busyAction === 'test' ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : null}
                       Test
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void togglePause(relay)}
+                      title={
+                        isPaused
+                          ? 'Resume: put this relay back into rotation'
+                          : 'Pause: pull this relay out of rotation without deleting it'
+                      }
+                    >
+                      {busyId === relay.id && busyAction === 'pause' ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : isPaused ? (
+                        <Play className="mr-2 h-4 w-4" />
+                      ) : (
+                        <Pause className="mr-2 h-4 w-4" />
+                      )}
+                      {isPaused ? 'Resume' : 'Pause'}
                     </Button>
                     <Button
                       variant="destructive"
