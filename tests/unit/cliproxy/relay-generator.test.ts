@@ -62,6 +62,24 @@ describe('relay config generation', () => {
     expect(CLIPROXY_CONFIG_VERSION).toBe(24);
   });
 
+  it('defaults a blank strategy to rotation so the pool never collapses', () => {
+    const parsed = generate({
+      relays: [relay({ id: 'r1', testStatus: 'ok' }), relay({ id: 'r2', testStatus: 'ok' })],
+      activeId: 'r1',
+      strategy: '' as RelayConfig['strategy'],
+      strict: false,
+      providerRelayIds: {},
+    });
+
+    // The Go side defaults to the single candidate when relay-strategy is
+    // absent, so an unspecified strategy must still be written out explicitly.
+    expect(parsed['relay-strategy']).toBe('round-robin');
+    expect(parsed['relay-urls']).toEqual([
+      'https://r1.example.workers.dev',
+      'https://r2.example.workers.dev',
+    ]);
+  });
+
   it('emits an empty relay-url and no candidate list when nothing is deployed', () => {
     const parsed = generate({
       relays: [],

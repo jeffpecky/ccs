@@ -138,6 +138,26 @@ describe('resolveRelayCandidates', () => {
     });
     expect(resolveRelayCandidates(config)).toEqual([]);
   });
+
+  it('treats a missing or empty strategy as the rotation default', () => {
+    // The Go side only rotates when relay-strategy is written explicitly, so a
+    // blank strategy must not collapse the pool back to the active relay alone.
+    const base = {
+      relays: [
+        makeRelay('r1', 'https://r1.example.test'),
+        { ...makeRelay('r2', 'https://r2.example.test'), testStatus: 'ok' as const },
+        { ...makeRelay('dead', 'https://dead.example.test'), testStatus: 'fail' as const },
+      ],
+      activeId: 'r1',
+    };
+    expect(resolveRelayCandidates({ ...base, strategy: '' as RelayConfig['strategy'] })).toEqual([
+      'https://r1.example.test',
+      'https://r2.example.test',
+    ]);
+    expect(
+      resolveRelayCandidates({ ...base, strategy: undefined as unknown as RelayConfig['strategy'] })
+    ).toEqual(['https://r1.example.test', 'https://r2.example.test']);
+  });
 });
 
 describe('resolveProviderRelayUrls', () => {

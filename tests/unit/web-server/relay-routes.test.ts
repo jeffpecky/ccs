@@ -383,7 +383,7 @@ describe('Relay routes', () => {
     expect(app.currentConfig()).toEqual(previous);
   });
 
-  it('removes inactive relays without touching the runtime config', async () => {
+  it('regenerates when the deleted relay was part of the rotation pool', async () => {
     const app = await setup({
       config: { relays: [makeRelay('r1'), makeRelay('r2')], activeId: 'r1' },
     });
@@ -393,13 +393,38 @@ describe('Relay routes', () => {
       success: true,
       config: { relays: [makeRelay('r1')], activeId: 'r1', providerRelayIds: {} },
     });
-    expect(app.regenerations()).toBe(0);
-    expect(app.order).toEqual(['save']);
+    // Rotation is the default, so even an inactive relay carries traffic and
+    // removing it changes the candidate pool in config.yaml.
+    expect(app.regenerations()).toBe(1);
+    expect(app.order).toEqual(['save', 'regenerate']);
     expect(app.currentConfig()).toEqual({
       relays: [makeRelay('r1')],
       activeId: 'r1',
       providerRelayIds: {},
     });
+  });
+
+  it('skips regeneration when rotation is off and the relay is inactive', async () => {
+    const app = await setup({
+      config: {
+        relays: [makeRelay('r1'), makeRelay('r2')],
+        activeId: 'r1',
+        strategy: 'none',
+      },
+    });
+    const response = await fetch(`${app.baseUrl}/r2`, { method: 'DELETE' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      config: {
+        relays: [makeRelay('r1')],
+        activeId: 'r1',
+        strategy: 'none',
+        providerRelayIds: {},
+      },
+    });
+    expect(app.regenerations()).toBe(0);
+    expect(app.order).toEqual(['save']);
   });
 
   it('responds 500 instead of hanging when the config read fails during deletion', async () => {

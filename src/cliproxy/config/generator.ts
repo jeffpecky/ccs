@@ -15,6 +15,7 @@ import { getDeniedModelIdReasonForProvider } from '../ai-providers/model-id-norm
 import { getAuthDir, getProviderAuthDir, getConfigPathForPort } from './path-resolver';
 import { CLIPROXY_DEFAULT_PORT } from './port-manager';
 import { loadOrCreateUnifiedConfig } from '../../config/config-loader-facade';
+import { normalizeRelayStrategy } from '../../config/schemas/relay';
 import {
   getRelayConfig,
   resolveProviderRelayUrls,
@@ -315,6 +316,10 @@ function generateRelayBlock(): string {
   const activeUrl =
     (activeId ? (config.relays.find((relay) => relay.id === activeId)?.url ?? null) : null) ?? '';
   const candidates = resolveRelayCandidates(config);
+  // Same normalization as resolveRelayCandidates: an absent or empty strategy
+  // means the rotation default, and the Go side must be told explicitly because
+  // *its* no-key default is the single-candidate mode.
+  const strategy = normalizeRelayStrategy(config.strategy);
   const providerUrls = Object.entries(resolveProviderRelayUrls(config)).sort(([a], [b]) =>
     a.localeCompare(b)
   );
@@ -326,8 +331,8 @@ function generateRelayBlock(): string {
   if (candidates.length > 0) {
     lines.push(`relay-urls: [${candidates.map(quoteYamlString).join(', ')}]`);
   }
-  if (config.strategy && config.strategy !== 'none') {
-    lines.push(`relay-strategy: ${quoteYamlString(config.strategy)}`);
+  if (strategy !== 'none') {
+    lines.push(`relay-strategy: ${quoteYamlString(strategy)}`);
   }
   if (config.strict) {
     // Written even with no candidates: fail-closed is exactly the case where

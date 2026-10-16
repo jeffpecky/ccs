@@ -38,12 +38,15 @@ interface RelayEntry {
 
 type RelayStrategy = 'none' | 'round-robin' | 'random';
 
-const RELAY_STRATEGIES: readonly RelayStrategy[] = ['none', 'round-robin', 'random'];
+/** Mirrors DEFAULT_RELAY_STRATEGY in src/config/schemas/relay.ts. */
+const DEFAULT_RELAY_STRATEGY: RelayStrategy = 'round-robin';
+
+const RELAY_STRATEGIES: readonly RelayStrategy[] = ['round-robin', 'random', 'none'];
 
 const RELAY_STRATEGY_HINTS: Record<RelayStrategy, string> = {
-  none: 'Only the active relay is used — the legacy single-relay behavior.',
+  none: 'Opt out of rotation — only the active relay is used (the legacy single-relay behavior).',
   'round-robin':
-    'Every healthy relay is used, starting at the next one for each request (failover tail follows).',
+    'Default. Every healthy relay is used, starting at the next one for each request (failover tail follows).',
   random: 'Every healthy relay is used, starting at a random one for each request.',
 };
 
@@ -244,7 +247,7 @@ export function RelayPage() {
   const [deploying, setDeploying] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [strategyDraft, setStrategyDraft] = useState<RelayStrategy>('none');
+  const [strategyDraft, setStrategyDraft] = useState<RelayStrategy>(DEFAULT_RELAY_STRATEGY);
   const [strictDraft, setStrictDraft] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [testingAll, setTestingAll] = useState(false);
@@ -271,7 +274,9 @@ export function RelayPage() {
   useEffect(() => {
     if (!config) return;
     setStrategyDraft(
-      config.strategy && RELAY_STRATEGIES.includes(config.strategy) ? config.strategy : 'none'
+      config.strategy && RELAY_STRATEGIES.includes(config.strategy)
+        ? config.strategy
+        : DEFAULT_RELAY_STRATEGY
     );
     setStrictDraft(config.strict ?? false);
   }, [config]);
@@ -636,9 +641,11 @@ export function RelayPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None — active relay only</SelectItem>
-                  <SelectItem value="round-robin">Round robin — rotate per request</SelectItem>
+                  <SelectItem value="round-robin">
+                    Round robin — rotate per request (default)
+                  </SelectItem>
                   <SelectItem value="random">Random — pick per request</SelectItem>
+                  <SelectItem value="none">None — active relay only</SelectItem>
                 </SelectContent>
               </Select>
               <p id="relay-strategy-hint" className="text-xs text-muted-foreground">

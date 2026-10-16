@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { getRelayConfig, mutateConfig } from '../config/config-loader-facade';
-import { DEFAULT_RELAY_CONFIG } from '../config/schemas/relay';
+import { DEFAULT_RELAY_CONFIG, normalizeRelayStrategy } from '../config/schemas/relay';
 import type { RelayConfig, RelayEntry, RelayPlatform } from '../config/schemas/relay';
 
 // Reuse the facade's getter (config-getters semantics: defaults when the
@@ -66,10 +66,11 @@ export function getActiveRelayUrl(config: RelayConfig = getRelayConfig()): strin
 /**
  * Ordered relay URL candidates for the proxy's outbound egress.
  *
- * `none` keeps the legacy single-relay behavior: only the active relay
- * participates, so flipping the dashboard toggle is still a hard on/off. With a
- * rotation strategy every relay that is not known-failed becomes a candidate,
- * with the active relay first so it stays the preferred starting point.
+ * Rotation (`round-robin`, the default, and `random`) is the normal mode: every
+ * relay that is not known-failed becomes a candidate, with the active relay
+ * first so it stays the preferred starting point. `none` is the opt-out that
+ * keeps the legacy single-relay behavior, so flipping the dashboard toggle is
+ * still a hard on/off.
  *
  * Health gating is deliberately one-directional: a relay last probed `fail` is
  * excluded (retrying it on every request would just add latency), while an
@@ -82,10 +83,11 @@ export function resolveRelayCandidates(config: RelayConfig = getRelayConfig()): 
     ? config.relays.find((relay) => relay.id === config.activeId)
     : undefined;
 
-  // A section written before rotation existed (or by a hand-edit the merger
-  // has not seen yet) has no strategy; treat it as the legacy single-relay mode
-  // rather than quietly rotating.
-  if ((config.strategy ?? 'none') === 'none') {
+  // A missing or empty strategy (older saved config, hand-edit the merger has
+  // not seen) normalizes to the default rather than to the single-relay mode,
+  // so relaying never silently collapses onto one relay.
+  const strategy = normalizeRelayStrategy(config.strategy);
+  if (strategy === 'none') {
     return active ? [active.url] : [];
   }
 

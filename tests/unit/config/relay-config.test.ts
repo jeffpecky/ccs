@@ -21,7 +21,7 @@ describe('relay config schema', () => {
     expect(DEFAULT_RELAY_CONFIG).toEqual({
       relays: [],
       activeId: null,
-      strategy: 'none',
+      strategy: 'round-robin',
       strict: false,
       providerRelayIds: {},
     });
@@ -35,6 +35,9 @@ describe('relay config schema', () => {
   it('rejects malformed rotation settings', () => {
     const base = { relays: [], activeId: null };
     expect(isRelayConfig({ ...base, strategy: 'fastest' })).toBe(false);
+    // A blank strategy is "unset" (the merger fills in the default); only an
+    // unrecognized value is a typo worth surfacing.
+    expect(isRelayConfig({ ...base, strategy: '' })).toBe(true);
     expect(isRelayConfig({ ...base, strategy: 'round-robin' })).toBe(true);
     expect(isRelayConfig({ ...base, strict: 'yes' })).toBe(false);
     expect(isRelayConfig({ ...base, strict: true })).toBe(true);
@@ -85,10 +88,23 @@ describe('relay config schema', () => {
     expect(merged.relay).toEqual({
       relays: [{ ...RELAY_ENTRY }],
       activeId: null,
-      strategy: 'none',
+      strategy: 'round-robin',
       strict: false,
       providerRelayIds: {},
     });
+  });
+
+  it('keeps the relay list when a hand-edited section has a blank strategy', () => {
+    // Blank must read as "unset", not as a malformed section: rejecting it
+    // would make the merger drop the deployed relays along with the value.
+    const handEdited = {
+      relays: [{ ...RELAY_ENTRY }],
+      activeId: 'r1',
+      strategy: '',
+    } as unknown as RelayConfig;
+    const merged = mergeWithDefaults({ version: UNIFIED_CONFIG_VERSION, relay: handEdited });
+    expect(merged.relay.strategy).toBe('round-robin');
+    expect(merged.relay.relays).toEqual([{ ...RELAY_ENTRY }]);
   });
 
   it('round-trips a relay entry through yaml serialization', () => {

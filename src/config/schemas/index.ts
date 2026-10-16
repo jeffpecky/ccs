@@ -59,7 +59,13 @@ export { DEFAULT_THINKING_TIER_DEFAULTS, DEFAULT_THINKING_CONFIG } from './think
 export type { ThinkingMode, ThinkingTierDefaults, ThinkingConfig } from './thinking';
 
 // Edge relay types, defaults, and guard
-export { DEFAULT_RELAY_CONFIG, isRelayConfig, RELAY_STRATEGIES } from './relay';
+export {
+  DEFAULT_RELAY_CONFIG,
+  DEFAULT_RELAY_STRATEGY,
+  isRelayConfig,
+  normalizeRelayStrategy,
+  RELAY_STRATEGIES,
+} from './relay';
 export type { RelayPlatform, RelayEntry, RelayConfig, RelayStrategy } from './relay';
 
 // Logging and preferences types and defaults

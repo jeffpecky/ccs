@@ -39,9 +39,10 @@ export interface RelayEntry {
 /**
  * How the proxy picks among the relays it may use.
  *
- * - `none`: only the active relay (single `relay-url`, the legacy behavior).
- * - `round-robin`: rotate the starting relay per request across the healthy pool.
+ * - `round-robin` (default): rotate the starting relay per request across the
+ *   healthy pool.
  * - `random`: pick a uniformly random starting relay per request.
+ * - `none`: only the active relay (single `relay-url`, the legacy behavior).
  */
 export type RelayStrategy = 'none' | 'round-robin' | 'random';
 
@@ -54,7 +55,7 @@ export interface RelayConfig {
   relays: RelayEntry[];
   /** ID of the active relay, or null when none is active */
   activeId: string | null;
-  /** Rotation strategy across the healthy relay pool (default: 'none') */
+  /** Rotation strategy across the healthy relay pool (default: 'round-robin') */
   strategy: RelayStrategy;
   /**
    * Fail closed when no healthy relay resolves: outbound HTTPS requests error
@@ -70,18 +71,38 @@ export interface RelayConfig {
 }
 
 /**
+ * Default rotation strategy: every healthy relay carries traffic. A missing
+ * or empty `strategy` anywhere in the pipeline (hand-edited section, older
+ * saved config) is normalized to this value, so relaying never silently
+ * collapses back to a single relay.
+ */
+export const DEFAULT_RELAY_STRATEGY: RelayStrategy = 'round-robin';
+
+/**
  * Default relay configuration.
  */
 export const DEFAULT_RELAY_CONFIG: RelayConfig = {
   relays: [],
   activeId: null,
-  strategy: 'none',
+  strategy: DEFAULT_RELAY_STRATEGY,
   strict: false,
   providerRelayIds: {},
 };
 
 /** Relay strategies accepted by the API and the generator. */
 export const RELAY_STRATEGIES: readonly RelayStrategy[] = ['none', 'round-robin', 'random'];
+
+/**
+ * Normalize a stored strategy value. Absent, null, blank, or unrecognized
+ * values fall back to the default so a hand-edited section can never leave
+ * the pool in an ambiguous state.
+ */
+export function normalizeRelayStrategy(value: string | null | undefined): RelayStrategy {
+  const trimmed = value?.trim();
+  return trimmed && RELAY_STRATEGIES.includes(trimmed as RelayStrategy)
+    ? (trimmed as RelayStrategy)
+    : DEFAULT_RELAY_STRATEGY;
+}
 
 /** Deployment platforms accepted by the relay API routes. */
 export const RELAY_PLATFORMS: readonly RelayPlatform[] = [
@@ -109,7 +130,10 @@ function isRelayEntry(value: unknown): value is RelayEntry {
 /**
  * Type guard for RelayConfig.
  * activeId / strategy / strict / providerRelayIds may be omitted in
- * hand-edited sections (the merger fills in the defaults).
+ * hand-edited sections (the merger fills in the defaults). A blank or null
+ * strategy counts as omitted — it must not reject the section, or the merger
+ * would drop the deployed relay list along with it. An unrecognized non-blank
+ * value still fails so a typo is surfaced instead of silently rotating.
  */
 export function isRelayConfig(value: unknown): value is RelayConfig {
   if (typeof value !== 'object' || value === null) return false;
@@ -121,8 +145,10 @@ export function isRelayConfig(value: unknown): value is RelayConfig {
       candidate.activeId === undefined ||
       typeof candidate.activeId === 'string') &&
     (candidate.strategy === undefined ||
+      candidate.strategy === null ||
       (typeof candidate.strategy === 'string' &&
-        RELAY_STRATEGIES.includes(candidate.strategy as RelayStrategy))) &&
+        (candidate.strategy.trim() === '' ||
+          RELAY_STRATEGIES.includes(candidate.strategy as RelayStrategy)))) &&
     (candidate.strict === undefined || typeof candidate.strict === 'boolean') &&
     (candidate.providerRelayIds === undefined || isRelayProviderPins(candidate.providerRelayIds))
   );

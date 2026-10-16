@@ -28,6 +28,7 @@ import {
   DEFAULT_CLIPROXY_TOKEN_SAVER_CONFIG,
   DEFAULT_RELAY_CONFIG,
   isRelayConfig,
+  normalizeRelayStrategy,
 } from '../unified-config-types';
 import type { UnifiedConfig } from '../unified-config-types';
 import { normalizeSessionAffinityTtl } from './normalizers';
@@ -333,7 +334,7 @@ export function mergeWithDefaults(partial: Partial<UnifiedConfig>): UnifiedConfi
     merged.relay = {
       relays: partial.relay.relays,
       activeId: partial.relay.activeId ?? null,
-      strategy: partial.relay.strategy ?? DEFAULT_RELAY_CONFIG.strategy,
+      strategy: normalizeRelayStrategy(partial.relay.strategy),
       strict: partial.relay.strict ?? DEFAULT_RELAY_CONFIG.strict,
       providerRelayIds: partial.relay.providerRelayIds ?? {},
     };
